@@ -3,6 +3,7 @@
 #include "multiboot2.h"
 #include "serial.h"
 #include "dede.h"
+#include "ses.h"
 #include "fat16_ic.h"
 #include "idt.h"
 #include "fb.h"
@@ -801,6 +802,13 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     /* --- Stage 15: Storage (AHCI / NVMe hazirligi) --- */
     ahci_init();
     nvme_init();
+    /* AC'97 SES DENETLEYICISI
+     * ses_var() yalniz ses_init() basarili olduktan sonra 1 doner ve
+     * ses_cal() ilk satirinda !d.var ise -1 ile cikar. Bu cagri
+     * eksikti: DEDE, OZAN ve EZGI ornek uretiyor, ses yolu onlari
+     * SESSIZCE atiyordu. Formant sentezinin butun olcumleri cikti
+     * hic calinmayan bir zincir uzerinde yapilmisti. */
+    ses_init();
     usb_init();     /* Asama 28: USB denetleyicileri */
     uhci_init();    /* USB aktarim katmani + klavye numaralandirma */
 

@@ -76,8 +76,13 @@ typedef struct {
 } sys_stat_t;
 
 #define SYS_DEDE_KONUS   35  /* a1=metin -> 0/-1 (formant sentezi) */
+/* SES YOLU GERCEKTEN ACIK MI -> 1 var, 0 yok.
+ * Bu cagri eksikti ve UMAY'in portu "ses var" diye SABIT 1 donuyordu:
+ * ses aygiti hic acilmamisken bile Dede Korkut surucusu takiliyor,
+ * konustugunu bildiriyor, kullanici sessizlik duyuyordu. */
+#define SYS_SES_VAR      36  /* -> 1/0 */
 
-#define SYS_MAX          36
+#define SYS_MAX          37
 
 /* SYS_SISTEM_BIL alanlari */
 #define SYSBIL_BOS_CERCEVE   0

@@ -701,6 +701,12 @@ static uint64_t sys_dede_konus_impl(uint64_t metin, uint64_t a2, uint64_t a3, ui
     return (uint64_t)(int64_t)dede_konus((const char *)(uintptr_t)metin);
 }
 
+static uint64_t sys_ses_var_impl(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4)
+{
+    (void)a1; (void)a2; (void)a3; (void)a4;
+    return (uint64_t)(ses_var() ? 1 : 0);
+}
+
 static uint64_t sys_tema_impl(uint64_t ad, uint64_t a2, uint64_t a3, uint64_t a4)
 {
     (void)a2; (void)a3; (void)a4;
@@ -746,6 +752,7 @@ void syscall_init(void) {
     syscall_table[SYS_OZAN_SOYLE]  = sys_ozan_soyle_impl;
     syscall_table[SYS_TEMA]        = sys_tema_impl;
     syscall_table[SYS_DEDE_KONUS]  = sys_dede_konus_impl;
+    syscall_table[SYS_SES_VAR]     = sys_ses_var_impl;
     syscall_table[SYS_PENCERE_AC]  = sys_pencere_ac_impl;
     syscall_table[SYS_PEN_DOLDUR]  = sys_pen_doldur_impl;
     syscall_table[SYS_PEN_YAZI]    = sys_pen_yazi_impl;

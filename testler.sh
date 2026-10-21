@@ -245,6 +245,25 @@ else
   hata "ses_sinama/sina.sh yok"
 fi
 
+# --- SES YOLU GERCEKTEN BAGLI MI ---
+# NEDEN BU SINAMA VAR: ses_init() cekirdekte TANIMLIYDI ama HIC
+# CAGRILMIYORDU. ses_var() sifir donuyor, ses_cal() ilk satirinda -1
+# ile cikiyordu; DEDE'nin urettigi her ornek sessizce atiliyordu.
+# Formant sentezinin butun olcumleri (8 gecit) hic calinmayan bir
+# zincir uzerinde yapilmisti. Olcumler yesilken kullanici sessizlik
+# duyuyordu ve sebebi buydu.
+mavi "SES YOLUNUN BAGLANTISI"
+if grep -qE '^[[:space:]]*ses_init\(\);' src/kernel.c; then
+  ok "cekirdek ses_init() cagiriyor"
+else
+  hata "ses_init() cagrilmiyor: ses_var()=0, ses_cal() -1 doner, DEDE sessiz kalir"
+fi
+if grep -qE 'syscall_table\[SYS_SES_VAR\]' src/syscall.c; then
+  ok "SYS_SES_VAR cagrisi bagli (UMAY ses yolunu SORABILIR)"
+else
+  hata "SYS_SES_VAR bagli degil: UMAY portu 'ses var' diye varsaymak zorunda kalir"
+fi
+
 mavi "SONUC"
 printf "  GECEN: %s   KALAN: %s\n\n" "$GECEN" "$KALAN"
 [ "$KALAN" -eq 0 ] && exit 0 || exit 1
