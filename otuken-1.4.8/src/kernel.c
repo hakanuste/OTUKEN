@@ -4,6 +4,7 @@
 #include "serial.h"
 #include "smp.h"
 #include "dede.h"
+#include "ses.h"
 #include "fat16_ic.h"
 #include "cpu.h"
 #include "idt.h"
@@ -1313,6 +1314,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     /* --- Stage 15: Storage (AHCI / NVMe hazirligi) --- */
     ahci_init();
     nvme_init();
+    ses_init();     /* AC'97: ses_var() buna bagli; cagrilmazsa OZAN/DEDE/EZGI sessiz kalir */
     usb_init();     /* Asama 28: USB denetleyicileri */
     uhci_init();    /* USB aktarim katmani + klavye numaralandirma */
 
