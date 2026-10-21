@@ -110,6 +110,36 @@ typedef struct {
     int16_t    perde_ek;     /* Hz; vurgulu hecede perde yükselir */
 } birim_t;
 
+/* ÖLÇÜLEN KUSUR: HECE BAŞINA İKİ DARBE  (ÇÖZÜLMEDİ)
+ * Olgun bir formant sentezleyicisiyle (espeak-ng, Türkçe) aynı cümle
+ * karşılaştırıldı:
+ *     metinde 27 hece, 62 harf
+ *     espeak : 31 enerji tepesi -> hece başına 1.15
+ *     DEDE   : 56 enerji tepesi -> hece başına 2.07
+ * DEDE hece başına değil, HARF başına bir darbe üretiyor. Kulak
+ * konuşmayı hece yaylarından çözer; 27 hecenin yerinde 56 ayrı darbe
+ * görünce sözcük oluşmaz. Bütün tayf ölçütleri geçerken anlaşılırlığın
+ * neden gelmediği buradadır.
+ *
+ * ELENEN NEDENLER (hepsi ölçümle, varsayımla değil):
+ *   1. Birim başına genlik zarfı. Yalnız gerçek sınırlarda kesen
+ *      "kesiklik bayrakları" eklendi: tepe 56'dan 60'a ÇIKTI, üstelik
+ *      çıkış taşmaya başladı (kaynak sözcük boyunca tam düzeyde
+ *      kalıyor, çıkış kazancı ise rampalar varmış gibi ayarlı).
+ *      Değişiklik tümüyle geri alındı.
+ *   2. Vurgu. VURGU_GENLIK=ZAYIF_GENLIK=1000, süreler eşit, perde eki
+ *      sıfır: çukurlar yerinde kaldı.
+ *   3. Süzgeç durumunun sıfırlanması. birim_sesle içindeki her yerel
+ *      değişken sayıldı; süzgeç durumu ses_yolu_t'de ve birimler
+ *      arasında taşınıyor. Sıfırlanma yok.
+ *   4. Formant kayması. GECIS_MS 40 ile 1 karşılaştırıldı: "aaa"
+ *      üzerinde zarflar BİRE BİR AYNI çıktı.
+ *
+ * Üç özdeş ünlüde ("aaa") her birim sınırında 5-6 dB çukur duruyor.
+ * Nedeni henüz bulunamadı. Sıradaki adım varsayım kurmak değil,
+ * kaynak sinyali ile zincir çıkışını bir sınırın iki yanında AYRI AYRI
+ * dökmek: çukuru hangi katın doğurduğunu ölçüyle görmek. */
+
 /* NEDEN İKİ AYRI FORMANT TAKIMI
  * Önce tek takım vardı ve ünsüzlerde gürültü bandı (örneğin "s" için
  * 4000/6500/8200 Hz) oraya yazılıyordu. Ama o sayılar SES YOLU değil,
@@ -145,6 +175,42 @@ typedef struct {
 #define DEDE_F1_OLCEK   98
 #define DEDE_F2_OLCEK   97
 #define DEDE_F3_OLCEK   97
+
+/* NEDEN SÜRE ÖLÇEĞİ
+ * ÖLÇÜLDÜ (kiplenim tayfı — zarfın kendi tayfı; konuşmada hece hızı
+ * 3-8 Hz'de tepe yapar):
+ *       espeak-ng (Türkçe) : hece hızı 3.6 Hz, 3-8 Hz payı %20.8
+ *       DEDE               : hece hızı 2.1 Hz, 3-8 Hz payı %13.2
+ * Aynı metin espeak'te 8.13 sn, DEDE'de 9.51 sn sürüyor; 27 hece için
+ * saniyede 2.8 hece demektir. Türkçe konuşmada bu sayı 5-6'dır. DEDE
+ * iki kat yavaş konuşuyor ve hece yayları olağan aralığın ALTINDA
+ * kalıyor: kulak hece sınırını bulamaz.
+ *
+ * Bütün birim süreleri tek bir ölçekten geçer ki hız deneyle
+ * ayarlanabilsin ve ölçüme bağlanabilsin. */
+#ifndef SURE_OLCEK
+#define SURE_OLCEK  65          /* yüzde; 100 = eski, iki kat yavaş hal */
+#endif
+#ifndef DURAK_SOZ
+#define DURAK_SOZ     50        /* ms; sözcük arası */
+#endif
+#ifndef DURAK_VIRGUL
+#define DURAK_VIRGUL 240
+#endif
+#ifndef DURAK_NOKTA
+#define DURAK_NOKTA  400
+#endif
+#ifndef DURAK_IKI
+#define DURAK_IKI    300
+#endif
+
+/* Formant kayma süresi. Deneyle değiştirilebilsin diye dışarıdan
+ * tanımlanabilir; birim_sesle içinde kullanıldığı için TANIM ORADAN
+ * ÖNCE olmak zorunda. Önce sözcük vurgusu bölümüne konmuştu, yani
+ * kullanımdan 190 satır SONRA: derleme kırılıyordu. */
+#ifndef GECIS_MS
+#define GECIS_MS 40
+#endif
 
 /* Üst formantlar sabittir: ünlü kimliğini taşımazlar ama tayfın
  * 3-5 kHz bandını doldururlar. Eski sürümde yoktular; o bant 19 dB
@@ -221,6 +287,17 @@ extern unsigned long dede_ornek;    /* üretilen toplam örnek */
 #define KIRP_SAY() ((void)0)
 #define TAS_SAY()  ((void)0)
 #define ORN_SAY()  ((void)0)
+#endif
+
+/* İZ DÖKÜMÜ: zincirin her katı ayrı ayrı yazılır. Hece başına iki
+ * darbe kusurunun hangi katta doğduğunu VARSAYIMLA değil ölçümle
+ * bulmak için. Yalnız DEDE_IZ tanımlıyken kod üretir. */
+#ifdef DEDE_IZ
+extern void dede_iz_dok(int32_t kaynak, int32_t egim, int32_t yol,
+                        int32_t turev, int32_t cikis);
+#define IZ_DOK(a, b, c, d, e) dede_iz_dok((a), (int32_t)(b), (c), (d), (e))
+#else
+#define IZ_DOK(a, b, c, d, e) ((void)0)
 #endif
 
 /* --- İki kutuplu çınlayıcı (formant) ---
@@ -345,7 +422,18 @@ static int32_t cinlayici_isle(cinlayici_t *c, int32_t x)
 #endif
 
 /* --- Harf -> ses birimi eşlemesi --- */
+static void birim_coz_ham(uint32_t kod, birim_t *b, const birim_t *onceki_sesli);
+
 static void birim_coz(uint32_t kod, birim_t *b, const birim_t *onceki_sesli)
+{
+    birim_coz_ham(kod, b, onceki_sesli);
+#if SURE_OLCEK != 100
+    uint32_t s = (uint32_t)b->sure_ms * SURE_OLCEK / 100;
+    b->sure_ms = (uint16_t)(s < 12 ? 12 : s);   /* 12 ms'nin altı duyulmaz */
+#endif
+}
+
+static void birim_coz_ham(uint32_t kod, birim_t *b, const birim_t *onceki_sesli)
 {
     b->genlik = 1000;
     b->perde_ek = 0;
@@ -712,7 +800,7 @@ static void birim_sesle(const birim_t *b, ses_yolu_t *v)
      * hedefe KAYAR. Anlaşılırlığın büyük kısmı bu geçiştedir;
      * ünsüzün kimliği, bitişik ünlünün formantını nasıl büktüğünden
      * okunur. Eski sürümde geçiş yoktu, her birim keskin başlıyordu. */
-    uint32_t gecis = HZ * 40 / 1000;              /* 40 ms */
+    uint32_t gecis = HZ * GECIS_MS / 1000;
     if (gecis > toplam) gecis = toplam;
 
     uint32_t bas_f1 = v->sf1, bas_f2 = v->sf2, bas_f3 = v->sf3;
@@ -878,6 +966,7 @@ static void birim_sesle(const birim_t *b, ses_yolu_t *v)
                 cik  = kaydir((int64_t)cik * CIKIS_KAZANC);
             }
 
+            IZ_DOK(kaynak, v->egim_y, y, turev, cik);
             ORN_SAY();
             if (cik >  30000) { cik =  30000; TAS_SAY(); }
             if (cik < -30000) { cik = -30000; TAS_SAY(); }
@@ -990,10 +1079,17 @@ int dede_konus(const char *metin)
         if (kod == 0) break;
 
         /* --- duraklama --- */
-        uint16_t bekle = 120;                       /* boşluk    */
-        if (kod == ',' || kod == ';') bekle = 300;  /* virgül    */
-        else if (kod == '.' || kod == '!' || kod == '?') bekle = 500;
-        else if (kod == ':') bekle = 380;
+        /* DURAK SÜRELERİ
+         * Ölçüldü: susma payı DEDE'de %35.8, espeak'te %30.7; süre
+         * ölçeği 60'a çekildiğinde %44'e çıkıyordu. Sözcük arası 120
+         * ms, özenli okumanın bile üstünde — bağlı konuşmada sözcükler
+         * birbirine girer, arada 0-50 ms kalır. Durak süreleri birim
+         * sürelerinden AYRI tutulur: SURE_OLCEK ikisini birlikte
+         * kısaltsa duraklar duyulmaz olurdu. */
+        uint16_t bekle = DURAK_SOZ;                       /* boşluk */
+        if (kod == ',' || kod == ';') bekle = DURAK_VIRGUL;
+        else if (kod == '.' || kod == '!' || kod == '?') bekle = DURAK_NOKTA;
+        else if (kod == ':') bekle = DURAK_IKI;
         /* ADLANDIRILMIŞ ilklendirme: birim_t'ye alan eklendiğinde
          * konumsal liste sessizce kayar. Bir kez kaydı ve bütün
          * duraklar yok oldu; derleyici uyarmamıştı. */

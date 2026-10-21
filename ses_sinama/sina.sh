@@ -52,7 +52,14 @@ else
   kal "duraklar susmuyor"; sed -n '1,3p' /tmp/dede_sessiz.txt
 fi
 
-# 6) TASMA: cikis sinirlayiciya dayaniyor mu
+# 6) HIZ: hece yaylari olagan araliginda mi (kiplenim tayfi)
+if python3 -I "$KOK/olcum/hiz.py" "$KOK/cik/r_sina" >/tmp/dede_hiz.txt 2>&1; then
+  gec "hece hizi dogal ($(grep -o 'hece hizi *: *[0-9.]* Hz' /tmp/dede_hiz.txt), $(grep -o 'saniyede [0-9.]* hece' /tmp/dede_hiz.txt))"
+else
+  kal "hece yaylari olagan araligin disinda"; sed -n '1,3p' /tmp/dede_hiz.txt
+fi
+
+# 7) TASMA: cikis sinirlayiciya dayaniyor mu
 TAS=0
 for T in "Ötüken'in yurdunda ocak tütüyor." \
          "Su akar, taş kalır; söz uçar, yazı kalır." \

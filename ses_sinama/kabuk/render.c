@@ -61,14 +61,31 @@ static void wav_yaz(const char *yol, const int16_t *k, size_t n, int hz)
     fclose(f);
 }
 
+#ifdef DEDE_IZ
+/* Zincirin katlarini metin olarak doker: her satir bir ornek. */
+static FILE *g_iz;
+void dede_iz_dok(int32_t kaynak, int32_t egim, int32_t yol,
+                 int32_t turev, int32_t cikis)
+{
+    if (!g_iz) return;
+    fprintf(g_iz, "%d %d %d %d %d\n", kaynak, egim, yol, turev, cikis);
+}
+#endif
+
 int main(int argc, char **argv)
 {
     const char *metin = (argc > 1) ? argv[1]
                       : "Ötüken'in yurdunda ocak tütüyor.";
     const char *yol   = (argc > 2) ? argv[2] : "cik/dede.wav";
 
+#ifdef DEDE_IZ
+    g_iz = fopen(getenv("DEDE_IZ_DOSYA") ? getenv("DEDE_IZ_DOSYA") : "iz.txt", "w");
+#endif
     if (dede_konus(metin) != 0) { fprintf(stderr, "dede_konus basarisiz\n"); return 1; }
 
+#ifdef DEDE_IZ
+    if (g_iz) { fclose(g_iz); g_iz = 0; }
+#endif
     wav_yaz(yol, g_kare, g_boy, 48000);
     printf("%s  %.2f sn  %zu kare  kirpma=%lu tasma=%lu oran=%.5f\n",
            yol, (double)g_boy / 48000.0, g_boy, dede_kirpma, dede_tasma,
