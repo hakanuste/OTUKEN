@@ -1,0 +1,94 @@
+
+[1m== 1) x86_64 derleme ==[0m
+  [GECTI] x86_64 derlendi
+  [GECTI] derleyici uyarisi yok
+
+[1m== 2) x86_64 uretim modu ==[0m
+  [GECTI] panik yok
+  [GECTI] sayfa hatasi yok
+  [GECTI] uyari/hata kaydi yok
+  [GECTI] cekirdek acildi
+  [GECTI] surucular aktif
+  [GECTI] BITIG dosya sistemi
+  [GECTI] DHCP yapilandirmasi
+  [GECTI] DNS cozumlemesi
+  [GECTI] servis yoneticisi
+  [GECTI] ULGEN compositor
+  [GECTI] KERVAN paket sistemi
+  [GECTI] kabuk baslatildi
+  [GECTI] surum kimligi
+  [GECTI] UMAY calisma zamani
+  [GECTI] UMAY DISKTEN yuklendi
+  [GECTI] UMAY Ring3'te calisiyor
+  [GECTI] UMAY IPC portu acti
+  [GECTI] kararlilik izleme
+
+[1m== 3) x86_64 tani modu (tum oz-sinamalar) ==[0m
+  sinama sonucu: 26 BASARILI, 0 HATA
+  [GECTI] en az 20 sinama gecti
+  [GECTI] basarisiz sinama yok
+  [GECTI] tani modunda panik yok
+  [GECTI] baski sinamasi temiz
+  [GECTI] harf duyarsiz dosya
+  [GECTI] iskence: syscall
+  [GECTI] iskence: bellek
+  [GECTI] iskence: dosya
+  [GECTI] iskence: ag
+  [GECTI] iskence: ipc
+  [GECTI] iskence: gorev
+  [GECTI] iskence: isaretci saldirisi
+  [GECTI] iskence: CR3 degisimi guvenligi
+  [GECTI] iskence toplam temiz
+  [GECTI] GUVENLIK: tum korumalar
+  [GECTI] GUVENLIK: kernel ELF redi
+  [GECTI] GUVENLIK: tasma redi
+  [GECTI] GUVENLIK: kernel ptr redi
+  [GECTI] GUVENLIK: PML4[511] kapali
+  [GECTI] surec adres alani atandi
+  [GECTI] surec basina heap
+  [GECTI] UMAY sozlesme uygulandi
+  (bilgi) TCP durum makinesi sentetik testi gecti - ag kaniti DEGIL
+  [GECTI] bellek sizintisi yok
+
+[1m== 4) USB denetleyici tespiti ==[0m
+  [GECTI] XHCI bulundu
+  [GECTI] bagli cihaz algilandi
+
+[1m== 5) ARM64 TEMEL port (tam ozellik degil - kapsam sinirli) ==[0m
+  [GECTI] ARM64 (temel port) derlendi
+  [GECTI] ARM64 cekirdegi acildi
+  [GECTI] ARM64 kapsam durust bildiriliyor
+  [GECTI] ARM64 EL1 seviyesi
+  [GECTI] ARM64 PMM sinamasi
+  [GECTI] ARM64 heap sinamasi
+  [GECTI] ARM64 64-bit sinamasi
+
+[1m== 7) AHCI gercek veri okuma (DMA) ==[0m
+  [GECTI] AHCI port hazirlandi
+  [GECTI] AHCI sektor okundu
+  [GECTI] AHCI okuma panik yok
+
+[1m== 8) USB aktarim katmani (UHCI + HID klavye) ==[0m
+  [GECTI] UHCI denetleyici hazir
+  [GECTI] USB cihaz algilandi
+  [GECTI] USB klavye numaralandi
+  [GECTI] USB panik yok
+
+[1m== 9) TCP: GERCEK ag el sikismasi (dinleyen sunucuya karsi) ==[0m
+  [GECTI] TCP gercek ag el sikismasi (SYN/SYN-ACK/ACK)
+./testler.sh: line 28:  2380 Killed                  python3 -m http.server 18099 --bind 127.0.0.1 > /dev/null 2>&1 < /dev/null
+  [GECTI] TCP testinde panik yok
+
+[1m== 11) ELF guvenlik oznitelikleri (GNU_STACK calistirilamaz olmali) ==[0m
+  [GECTI] cekirdek (GNU_STACK calistirilamaz)
+  [GECTI] kabuk (GNU_STACK calistirilamaz)
+  [GECTI] UMAY (GNU_STACK calistirilamaz)
+  [GECTI] ARM64 (GNU_STACK calistirilamaz)
+
+[1m== 10) Yol haritasi asama kaniti (TCP icin GERCEK ag logu kullanilir) ==[0m
+  [GECTI] tum asamalarin kaniti bulundu
+  (27 asama kaniti dogrulandi)
+
+[1m== SONUC ==[0m
+  GECEN: 66   KALAN: 0
+

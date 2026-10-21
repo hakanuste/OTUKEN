@@ -1,0 +1,48 @@
+
+[1m== 12) Islemci uyumlulugu (1GB sayfa VAR/YOK yollari) ==[0m
+  [GECTI] CPU qemu64 onyukleme
+  [GECTI] CPU qemu64 panik yok
+  [GECTI] CPU max onyukleme
+  [GECTI] CPU max panik yok
+  [GECTI] CPU EPYC onyukleme
+  [GECTI] CPU EPYC panik yok
+
+[1m== 13) Bellek olceklenmesi ==[0m
+  [GECTI] bellek 128
+  [GECTI] bellek 3G
+
+[1m== 14) Disksiz makine (FAT birimi YOK) ==[0m
+  [GECTI] disksiz: panik yok
+  [GECTI] disksiz: sistem acildi
+
+[1m== 15) Buyuk disk (LBA48 / 8 TB) ==[0m
+  [GECTI] 8 TB surucu LBA48 ile tanindi
+  [GECTI] 6 TB konumundan dogru okuma (LBA28/uint32 tavani asildi)
+  [GECTI] buyuk disk: panik yok
+  [GECTI] buyuk disk: heap bozulmasi yok
+
+[1m== 16) 1GB sayfa + ince haritalama birlikte (regresyon) ==[0m
+  [GECTI] 1GB sayfa: heap saglam
+  [GECTI] 1GB sayfa: haritalama OK
+
+[1m== 17) UEFI onyukleme (multiboot2 + OVMF) ==[0m
+  [GECTI] UEFI: multiboot2 protokolu
+  [GECTI] UEFI: sistem acildi
+  [GECTI] UEFI: GOP framebuffer alindi
+  [GECTI] UEFI: bellek haritasi cevrildi
+  [GECTI] UEFI: panik yok
+  [GECTI] UEFI: sayfa hatasi yok
+
+[1m== 18) CR0.WP (cekirdek yazma korumasi) ==[0m
+  [GECTI] CR0.WP etkinlestirildi
+  [GECTI] WP acikken sayfa hatasi yok
+
+[1m== 19) GPT bolum tablosu (4 TB disk) ==[0m
+  [GECTI] GPT tablosu okundu
+  [GECTI] bolum adlari cozuldu
+  [GECTI] 2 TB otesindeki bolum goruldu
+  [GECTI] GPT: panik yok
+
+[1m== SONUC ==[0m
+  GECEN: 28   KALAN: 0
+

@@ -1,0 +1,7 @@
+TORE YETKI DUZENI
+kaynak: tore-belgesi
+alan: yargu
+
+Yetkiler bit maskesidir. Denetim uc kapida yapilir: syscall katmani,
+gorev motoru ve ajanin kendi denetimi. Reddedilen her erisim gunluge
+yazilir; sessiz basarisizlik yasaktir.

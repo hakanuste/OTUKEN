@@ -1,0 +1,453 @@
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI QEMU DVD-ROM QM00003 " from PciRoot(0x0)/Pci(0x1,0x1)/Ata(Secondary,Master,0x0)
+BdsDxe: starting Boot0001 "UEFI QEMU DVD-ROM QM00003 " from PciRoot(0x0)/Pci(0x1,0x1)/Ata(Secondary,Master,0x0)
+ABCDE
+===============================================
+  OTUKEN 1.0  (x86_64 / AArch64)
+===============================================
+otukenOS-mini: kernel_main basladi
+onyukleme: MULTIBOOT2 (UEFI uyumlu)
+multiboot2: cevrildi - mmap girisi=0x00000014 framebuffer=VAR
+onyukleme bilgisi dogrulandi
+guvenlik: CR0.WP etkin (cekirdek salt-okunur sayfalara yazamaz)
+framebuffer adres: 0x80000000 genislik: 0x00000400 yukseklik: 0x00000300 bpp: 0x00000020
+64-bit long mode'dayiz (boot.asm GDT'yi zaten kurdu)
+log: cekirdek gunlukleyici baslatildi (seviye=BILGI, halka tampon=64 kayit)
+IDT + PIC kuruldu
+framebuffer baslatildi
+pmm: multiboot bellek haritasi kullaniliyor
+pmm: toplam cerceve=0x000000000001FEF4 kullanilan=0x0000000000000672 bos=0x000000000001F882
+pmm: toplam bellek(bayt)=0x000000001FEF4000
+pmm-test: ayrilan cerceveler: 0x001A6000 0x001A7000 0x001A8000
+pmm-test: bos cerceve (alloc oncesi/sonrasi): 0x0001F882 / 0x0001F87F
+pmm-test: bos cerceve (free sonrasi, basa esit olmali): 0x0001F882
+pmm-test: BASARILI (free_after_free == free_before)
+vmm: hazir (mevcut CR3 uzerinden calisiyor)
+vmm-test: sanal=0x000000050x00000000 fiziksel=0x001A6000 yazilan=0xDEADBEEF okunan=0xDEADBEEF
+vmm-test: vmm_get_physical dogrulamasi=0x001A6000 (DOGRU)
+vmm-test: BASARILI
+vmm-test: unmap edildi, cerceve PMM'e iade edildi
+vmm-split-test: scratch_virt=0x00700000 (eskiden 2MB kimlik haritaliydi) simdi fiziksel=0x001A6000 degerine yonlendirildi
+vmm-split-test: virt uzerinden yazilan=0xCAFEF00D; yeni fiziksel adresten DOGRUDAN okunan=0xCAFEF00D (DOGRU - bolme calisti)
+heap: baslatildi, baslangic=1MB, adres=0x0000000400000000
+heap-test: veri butunlugu BASARILI
+heap-test: [orta] kullanilan=0x000001C0 blok_sayisi=0x00000004
+heap-test: b free edildi, yeniden 100 bayt istendi -> AYNI ADRES (parcalanma yonetimi calisiyor)
+heap-test: krealloc (256->512) veri korundu BASARILI
+heap-test: kmalloc_aligned(64) hizalama BASARILI
+heap-test: [tumu free sonrasi] kullanilan=0x00000000 (0 olmali) blok_sayisi=0x00000001 (dusuk olmali - coalesce calisiyorsa)
+driver: yonetici baslatildi
+driver: kaydedildi 'ps2-klavye' sinif=GIRIS
+driver: kaydedildi 'ps2-fare' sinif=GIRIS
+driver: kaydedildi 'pit-timer' sinif=ZAMANLAYICI
+driver: kaydedildi 'ata-disk1' sinif=DEPOLAMA
+driver: kaydedildi 'ata-disk2' sinif=DEPOLAMA
+driver: 'ps2-klavye' AKTIF
+driver: 'ps2-fare' AKTIF
+driver: 'pit-timer' AKTIF
+disk: ATA birincil master hazir, status=0x00000000
+driver: 'ata-disk1' AKTIF
+disk2: okuma hatasi
+driver: 'ata-disk2' donanimi bulunamadi (probe basarisiz)
+driver: toplam AKTIF surucu sayisi=0x00000004 / kayitli=0x00000005
+driver:   - ps2-klavye [GIRIS] AKTIF
+driver:   - ps2-fare [GIRIS] AKTIF
+driver:   - pit-timer [ZAMANLAYICI] AKTIF
+driver:   - ata-disk1 [DEPOLAMA] AKTIF
+driver:   - ata-disk2 [DEPOLAMA] BASARISIZ
+pci: tarama tamam, bulunan cihaz sayisi=0x00000006
+pci:   0x00000000:0x00000000.0x00000000 vendor=0x00008086 device=0x00001237 [Host kopru (bridge)]
+pci:   0x00000000:0x00000001.0x00000000 vendor=0x00008086 device=0x00007000 [ISA kopru]
+pci:   0x00000000:0x00000001.0x00000001 vendor=0x00008086 device=0x00007010 [IDE denetleyici]
+pci:   0x00000000:0x00000001.0x00000003 vendor=0x00008086 device=0x00007113 [Kopru (bridge)]
+pci:   0x00000000:0x00000002.0x00000000 vendor=0x00001234 device=0x00001111 [Ekran/VGA denetleyici]
+pci:   0x00000000:0x00000003.0x00000000 vendor=0x00008086 device=0x0000100E [Ag denetleyici]
+pci: IDE denetleyici bulundu -> ata-disk surucumuz bunu kullaniyor
+pci: AHCI denetleyici yok (bu makinede IDE kullaniliyor)
+pci: NVMe denetleyici yok
+ahci: PCI'de AHCI denetleyici yok
+nvme: PCI'de NVMe denetleyici yok
+[BILGI][USB] USB denetleyici bulunamadi
+[BILGI][UHCI] UHCI denetleyici yok
+TIMUR: NX destegi VAR, EFER.NXE etkinlestirildi
+TORE: guvenlik politikasi motoru baslatildi
+TIMUR: veri sayfasi (W^X: W tarafi) -> YAZILABILIR CALISTIRILAMAZ(NX) sadece-cekirdek
+TIMUR: kod sayfasi (W^X: X tarafi) -> salt-okunur calistirilabilir sadece-cekirdek
+TIMUR: veri sayfasina yazma BASARILI (beklenen)
+TIMUR: okunan deger=0x5AFE5AFE
+[BILGI][KUT] kimlik ve yetki katmani baslatildi
+KUT: kullanici tanimlandi 'otuken' rol=YONETICI uid=0x00000001
+KUT: kullanici tanimlandi 'ulakd' rol=HIZMET uid=0x00000002
+KUT: kullanici tanimlandi 'konuk' rol=KONUK uid=0x00000003
+TORE: pid=0x0000000A yetkileri ayarlandi=0x000000FF
+KUT: pid=0x0000000A -> kullanici 'otuken' (YONETICI) olarak baglandi
+TORE: pid=0x0000000B yetkileri ayarlandi=0x0000001D
+KUT: pid=0x0000000B -> kullanici 'ulakd' (HIZMET) olarak baglandi
+TORE: pid=0x0000000C yetkileri ayarlandi=0x00000010
+KUT: pid=0x0000000C -> kullanici 'konuk' (KONUK) olarak baglandi
+IZINLI
+IZINLI
+TORE: ERISIM REDDEDILDI pid=0x0000000C istenen_yetki=AG_GONDER islem='ag'
+RED (beklenen)
+TORE: ERISIM REDDEDILDI pid=0x0000000C istenen_yetki=DISK_YAZ islem='disk'
+RED (beklenen)
+ulakd rol=HIZMET -> BASARILI
+TORE: pid=0x00000001 yetkileri ayarlandi=0x000000FF
+TORE: pid=0x00000002 yetkileri ayarlandi=0x0000001D
+TORE: pid=0x00000003 yetkileri ayarlandi=0x00000010
+IZINLI
+IZINLI
+TORE: ERISIM REDDEDILDI pid=0x00000002 istenen_yetki=DISK_YAZ islem='diske yaz'
+RED (beklenen)
+TORE: ERISIM REDDEDILDI pid=0x00000003 istenen_yetki=AG_GONDER islem='paket gonder'
+RED (beklenen)
+TORE: ERISIM REDDEDILDI pid=0x00000003 istenen_yetki=SUREC_SONLANDIR islem='sureci oldur'
+RED (beklenen)
+
+vmm: yeni adres alani olusturuldu PML4=0x002AB000
+vmm: yeni adres alani olusturuldu PML4=0x002AC000
+AS-TEST: iki adres alani, AYNI sanal adres 0x8000000000, FARKLI fiziksel cerceveler (0x002AF000 ve 0x002B0000)
+ | alan2 yazdi=0x22222222 okudu=
+ alan2=
+BASARILI (her alan KENDI bellegini goruyor)
+ f2= -> DOGRULANDI
+vmm: adres alani yok edildi PML4=0x002AB000
+vmm: adres alani yok edildi PML4=0x002AC000
+[BILGI][CEKIRDEK] otukenOS baslatma tamamlandi
+[BILGI][PMM] toplam fiziksel bellek=0x1FEF4000
+[BILGI][PMM] bos cerceve sayisi=0x1F77B
+[BILGI][BITIG] FAT16 ve FAT32 birimleri bagli
+[BILGI][ULAK] TCP/UDP/DHCP/DNS katmanlari hazir
+DOGRU FILTRELENDI
+log: gunlukleme seviyesi degistirildi -> AYIKLA
+[AYIKLA][TEST] bu AYIKLA kaydi artik GORUNMELI
+KAYIT GECTI (dogru)
+log: gunlukleme seviyesi degistirildi -> BILGI
+ hata= uyari= bilgi=
+AYIKLA][TEST] bu AYIKLA kaydi artik GORUNMELI
+ULAK: PCI Bus Master + Memory Space etkinlestirildi, CMD=0x00000007
+ULAK: e1000 bulundu vendor=0x00008086 device=0x0000100E MMIO=0x81080000
+ULAK: MAC adresi=0x00000052:0x00000054:0x00000000:0x00000012:0x00000034:0x00000056
+ULAK: baglanti (link) durumu=UP
+ULAK: RX/TX halkalari kuruldu, kart hazir
+ULAK: IP adresi ayarlandi=0x0000000A.0x00000000.0x00000002.0x0000000F
+ULAK: ag gecidine ARP istegi gonderildi
+ULAK: UDP test paketi gonderildi
+[BILGI][ULAK-SOK] soket katmani baslatildi
+[BILGI][ULAK-DHCP] DHCP istemcisi baslatildi
+[BILGI][ULAK-DNS] DNS istemcisi baslatildi
+ULAK-DHCP: DISCOVER yayinlaniyor...
+AGHIZMET: hizmetler dinlemede - YANKI(7) ZAMAN(13) DURUM(1900)
+[BILGI][AGHIZMET] ag hizmetleri baslatildi
+[BILGI][ULAK-TCP] TCP katmani baslatildi
+ULAK-TCP: baglanti baslatiliyor -> 0x0000000A.0x00000000.0x00000002.0x00000064:0x00001F90 (SYN gonderiliyor, ISN=0x00001000)
+ULAK-TCP: baglanti istegi gonderildi, SYN-ACK bekleniyor...
+kesmeler acildi (sti)
+disk: okuma hatasi (sektor bekleme)
+fat16: boot sector okunamadi
+ULGEN (grafik masaustu ortami) baslatildi - otukenOS-mini calisir durumda
+vfs: baslatildi
+vfs: baglandi noktasi='/'
+vfs-fat16: FAT16 '/' noktasina baglandi
+vfs-test: '/' listelendi, dosya sayisi=0x00000000
+vfs-test: vfs_open basarisiz
+BITIG(fat16): birim bagli degil - yazma reddedildi
+ beklenen=
+vfs-fat32-test: ikinci disk/FAT32 bulunamadi (atlandi)
+sched: baslatildi, ana gorev='gui_main', idle gorevi eklendi
+process: yonetici baslatildi
+sched: gorev olusturuldu: TaskA
+sched: gorev olusturuldu: TaskB
+sched: gorev olusturuldu: TaskC-bounded
+vmm: yeni adres alani olusturuldu PML4=0x002D2000
+sched: gorev 'TaskC-bounded' adres alanina baglandi PML4=0x002D2000
+process: olusturuldu pid=0x00000001 isim=TaskC-bounded
+sched: gorev olusturuldu: TaskD-forever
+vmm: yeni adres alani olusturuldu PML4=0x002D3000
+sched: gorev 'TaskD-forever' adres alanina baglandi PML4=0x002D3000
+process: olusturuldu pid=0x00000002 isim=TaskD-forever
+thread: yonetici baslatildi
+sched: gorev olusturuldu: ThreadE-sleep30
+sched: gorev olusturuldu: ThreadF-sleep75
+sched: gorev olusturuldu: HeapStresI
+sched: gorev olusturuldu: HeapStresJ
+sched: gorev olusturuldu: ThreadG-sync
+sched: gorev olusturuldu: ThreadH-sync
+sched: gorev olusturuldu: MQ-Producer
+sched: gorev olusturuldu: MQ-Consumer
+sched: gorev olusturuldu: Pipe-Writer
+sched: gorev olusturuldu: Pipe-Reader
+scheduler+process+thread+sync+ipc: hazir
+shm: olusturuldu id=0x00000001 cerceve_sayisi=0x00000001
+shm: attach edildi id=0x00000001 adres=0x000000060x00000000
+shm: attach edildi id=0x00000001 adres=0x000000060x10000000
+shm-test: va1'e yazilan=0xC0FFEE42, va2'den okunan=0xC0FFEE42 (DOGRU - ayni fiziksel bellek)
+shm: yok edildi id=0x00000001
+syscall: SYSCALL/SYSRET mekanizmasi kuruldu (STAR/LSTAR/FMASK/EFER.SCE), 19 syscall kayitli
+
+ (0xFFFFFFFF beklenir)
+tss: kuruldu ve LTR ile yuklendi (RSP0 ayarlandi)
+sched: gorev olusturuldu: Ring3Test
+sched: gorev olusturuldu: Ring3ELF
+[BILGI][UMAY] calisma zamani baslatildi
+TORE: pid=0x00000064 yetkileri ayarlandi=0x00000011
+UMAY: model 'umay-userland-v1' yuklendi, durum=HAZIR, yetki=0x00000011 ipc_port=0xFFFFFFFF
+[BILGI][UMAY] model yuklendi ve hazir
+[BILGI][KARARLILIK] izleme baslatildi
+BASKI: 0x00000028 tur | cerceve once=0x0001F751 sonra=0x0001F751 | hata=0x00000000
+UMAY: sozlesme reddi -> umay:dosya_yaz
+UMAY: sozlesme reddi -> umay:ag_gonder
+UMAY: bellek siniri asildi - RED
+
+--- OTUKEN 1.0 HAZIR ---
+bilesenler: cekirdek(64-bit,higher-half) PMM VMM heap zamanlayici surec thread senkronizasyon IPC syscall Ring3 ELF VFS BITIG(FAT16/32) surucu PCI AHCI NVMe USB ULAK(TCP/UDP/DHCP/DNS/soket) TIMUR TORE KUT gunluk ULGEN KERVAN servis UMAY kararlilik
+bellek: 0x000001FE MB | bos cerceve: 0x0001F751 | aktif surucu: 0x00000005
+kabuk baslatiliyor...
+
+sched: gorev olusturuldu: OtukenKabuk
+[BILGI][ULGEN] compositor baslatildi
+ULGEN: yuzey olusturuldu 'ULGEN YUZEY 1' kimlik=0x00000000
+ULGEN: yuzey olusturuldu 'ULGEN YUZEY 2 (ustte)' kimlik=0x00000001
+ ikinci (degisiklik yok) is= -> BASARILI (hasar takibi calisiyor, bosa cizim yok)
+
+[BILGI][KERVAN] paket sistemi baslatildi
+KERVAN: 'otuken-ornek' surum 1.0.0 kuruluyor (0x00000002 girdi)
+BITIG(fat16): birim bagli degil - yazma reddedildi
+KERVAN: girdi yazilamadi: OKUBENI.TXT
+ -> HATA
+KERVAN: bildirilen boyut dosyadan BUYUK -> REDDEDILDI
+ -> REDDEDILDI (dogru)
+
+[BILGI][IPC2] servis iletisim katmani baslatildi
+[BILGI][SERVIS] servis yoneticisi (init) baslatildi
+SERVIS: tanimlandi 'zamand'
+SERVIS: tanimlandi 'hesapd' (bagimlilik: zamand)
+sched: gorev olusturuldu: zamand
+SERVIS: 'zamand' CALISIYOR
+sched: gorev olusturuldu: hesapd
+SERVIS: 'hesapd' CALISIYOR
+SERVIS: baslatma tamamlandi, calisan servis sayisi=0x00000002
+sched: gorev olusturuldu: IpcIstemci
+sched: gorev olusturuldu: UMAY
+[TaskC] islerini bitirdi (sayac=0x000F4240), kendi kendine sonlaniyor
+process: kendi kendine sonlandi pid=0x00000001
+sched: gorev sonlandi: TaskC-bounded
+sched: gorev sonlandi: HeapStresI
+sched: gorev sonlandi: HeapStresJ
+[ThreadG] bitti
+sched: gorev sonlandi: ThreadG-sync
+[ThreadH] bitti
+sched: gorev sonlandi: ThreadH-sync
+[MQ-Consumer] alindi: 0x00000001
+ring3: kod (0x0000001F bayt) ve yigin sayfalari hazir, ring3'e atlaniyor...
+syscall: SYS_RING3_PROOF alindi - ring3 kodu GERCEKTEN calisiyor ve syscall ile geri geldi!
+syscall: SYS_EXIT alindi - gorev sonlandiriliyor
+sched: gorev sonlandi: Ring3Test
+ring3-elf: gomulu ELF ayristiriliyor (0x00001408 bayt)...
+[BILGI][ELF] giris noktasi=0x8000400000
+[BILGI][ELF] program basligi sayisi=0x4
+ELF: segment yuklendi vaddr=0x000000800x00400000 boyut=0x000000D0 izin=R-X
+ring3-elf: 0x00000001 segment yuklendi, giris noktasi=0x000000800x00400000
+ring3-elf: ELF programina atlaniyor (Ring3)...
+MERHABA! Bu yazi GERCEK bir ELF64 programindan geliyor.
+kabuk: ELF ayristiriliyor (0x000039F8 bayt)...
+[BILGI][ELF] giris noktasi=0x8000600000
+[BILGI][ELF] program basligi sayisi=0x3
+ELF: segment yuklendi vaddr=0x000000800x00600000 boyut=0x00002140 izin=R-X
+ELF: segment yuklendi vaddr=0x000000800x00603000 boyut=0x00000008 izin=RW-
+kabuk: Ring3'e geciliyor, giris noktasi=0x00600000
+
+IPC2: port acildi 'hesapd' kimlik=0x00000000
+UMAY-HOST: program diskte bulunamadi: /UMAY.ELF
+UMAY-HOST: baslatilamadi
+sched: gorev sonlandi: UMAY
+ beklenen= -> BASARILI (kayip guncelleme yok, mutex calisiyor)
+HEAP-YARIS-TESTI: 2 gorev x 0x0000012C es zamanli kmalloc/kfree -> hata sayisi=0x00000000 -> BASARILI (heap bozulmadi, kesme korumasi calisiyor)
+syscall: SYS_RING3_PROOF alindi - ring3 kodu GERCEKTEN calisiyor ve syscall ile geri geldi!
+syscall: SYS_EXIT alindi - gorev sonlandiriliyor
+sched: gorev sonlandi: Ring3ELF
+========================================
+sched: reap ediliyor: TaskC-bounded
+sched: reap ediliyor: HeapStresI
+sched: reap ediliyor: HeapStresJ
+sched: reap ediliyor: ThreadG-sync
+sched: reap ediliyor: ThreadH-sync
+sched: reap ediliyor: Ring3Test
+sched: reap ediliyor: Ring3ELF
+sched: reap ediliyor: UMAY
+[MQ-Consumer] alindi: 0x00000002
+ OTUKEN Kabugu 2.0 - kullanici modunda
+ 'yardim' yazip Enter'a basin
+henuz gelmedi
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000001
+[MQ-Consumer] alindi: 0x00000003
+IPC2: port acildi 'istemci' kimlik=0x00000001
+========================================
+ (beklenen 0x) -> BASARILI
+sched: gorev sonlandi: IpcIstemci
+sched: reap ediliyor: IpcIstemci
+otuken> [MQ-Consumer] alindi: 0x00000004
+ULAK: ARP onbellegine eklendi 0x0000000A.0x00000000.0x00000002.0x00000002 -> 0x00000052:0x00000055:0x0000000A:0x00000000:0x00000002:0x00000002
+ULAK: ARP yaniti alindi, gonderen IP=0x0000000A.0x00000000.0x00000002.0x00000002
+ULAK: IPv4 paketi, protokol=0x00000011 kaynak=0x0000000A.0x00000000.0x00000002.0x00000002
+ULAK: UDP paketi, kaynak_port=0x00000043 hedef_port=0x00000044
+ULAK-DHCP: OFFER alindi, onerilen IP=0x0000000A.0x00000000.0x00000002.0x0000000F -> REQUEST gonderiliyor
+ULAK: IPv4 paketi, protokol=0x00000001 kaynak=0x0000007F.0x00000000.0x00000000.0x00000001
+ULAK: ICMP paketi alindi
+ULAK: IPv4 paketi, protokol=0x00000011 kaynak=0x0000000A.0x00000000.0x00000002.0x00000002
+ULAK: UDP paketi, kaynak_port=0x00000043 hedef_port=0x00000044
+ULAK: IP adresi ayarlandi=0x0000000A.0x00000000.0x00000002.0x0000000F
+ULAK-DHCP: ACK alindi - YAPILANDIRMA TAMAM
+ULAK-DHCP:   IP=0x0000000A.0x00000000.0x00000002.0x0000000F maske=0x000000FF.0x000000FF.0x000000FF.0x00000000
+ULAK-DHCP:   gecit=0x0000000A.0x00000000.0x00000002.0x00000002 DNS=0x0000000A.0x00000000.0x00000002.0x00000003
+[BILGI][ULAK-DHCP] adres yapilandirmasi alindi
+ULAK-TCP: baglanti baslatiliyor -> 0x0000000A.0x00000000.0x00000002.0x00000064:0x00001F90 (SYN gonderiliyor, ISN=0x00011000)
+ULAK-TCP: ARP cozuldukten sonra baglanti yeniden denendi
+ULAK-DNS: 'example.com' icin A kaydi soruluyor
+ULAK: IPv4 paketi, protokol=0x00000011 kaynak=0x0000000A.0x00000000.0x00000002.0x00000003
+ULAK: UDP paketi, kaynak_port=0x00000035 hedef_port=0x00009C95
+ULAK-DNS: 'example.com' -> 0x00000068.0x00000014.0x00000017.0x0000009A  COZULDU
+[BILGI][ULAK-DNS] ad cozumlemesi basarili
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000002
+[MQ-Consumer] alindi: 0x00000005
+SYN_GONDERDI
+ULAK-TCP: segment alindi port 0x00001F90->0x00009C41 bayraklar=SYN ACK 
+ULAK-TCP: SYN-ACK alindi -> ACK gonderildi -> BAGLANTI KURULDU (uc-yollu el sikismasi TAMAM)
+[BILGI][ULAK-TCP] SENTETIK handshake tamam (ag DOGRULAMASI DEGIL)
+KURULDU recv_next= (0xABCD0001 olmali)
+BASARILI (durum KURULDU, sira no dogru, ACK gonderildi)
+ gonderilen_bayt= sira_no_ilerlemesi= -> BASARILI
+ULAK-TCP: baglanti kapatiliyor (FIN gonderildi)
+FIN_BEKLIYOR -> BASARILI
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000001
+[MQ-Consumer] alindi: 0x00000006
+  - zamand : CALISIYOR nabiz=0x00000008
+  - hesapd : CALISIYOR nabiz=0x00000020
+/ -> BASARILI
+ alinan=
+[Pipe-Reader] tamamlandi, okunan: OTUKEN ISLETIM SISTEMI PIPE TESTI
+sched: gorev sonlandi: Pipe-Reader
+sched: gorev sonlandi: Pipe-Writer
+BASARILI
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000003
+[MQ-Consumer] alindi: 0x00000007
+sched: reap ediliyor: Pipe-Writer
+sched: reap ediliyor: Pipe-Reader
+ -> BASARILI (ring3 kodu calisti)
+[MQ-Consumer] alindi: 0x00000008
+example.com' cozumlemesi -> BASARILI 0x00000068.0x00000014.0x00000017.0x0000009A
+FIN_BEKLIYOR -> el sikismasi tamamlanmadi (durum yukarida)
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000004
+[MQ-Consumer] alindi: 0x00000009
+sched: DISARIDAN sonlandirildi: TaskD-forever
+sched: reap ediliyor: TaskD-forever
+vmm: adres alani yok edildi PML4=0x002D3000
+process: disaridan yok edildi pid=0x00000002
+[MQ-Consumer] alindi: 0x0000000A
+sched: gorev sonlandi: MQ-Consumer
+sched: reap ediliyor: MQ-Consumer
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000005
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000002
+sched: gorev sonlandi: MQ-Producer
+ sira=DOGRU -> BASARILI
+sched: reap ediliyor: MQ-Producer
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000006
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000007
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000003
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000008
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000009
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000000A
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000004
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000000B
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000000C
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000005
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000000D
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000000E
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000000F
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000006
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000010
+KARARLILIK: ornek=0x00000004 tik=0x00000198 gorev=0x00000009
+KARARLILIK: bos cerceve ilk=0x0001F751 son=0x0001F73E | heap bos ilk=0x000730D0 son=0x00090848
+KARARLILIK: sizinti suphesi -> YOK
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000011
+[TaskA] calisiyor, sayac=0x00000014
+[TaskB] calisiyor, sayac=0x00000014
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000007
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000012
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000013
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000014
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000008
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000015
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000016
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000009
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000017
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000018
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000019
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000000A
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000001A
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000001B
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000000B
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000001C
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000001D
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000001E
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000000C
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000001F
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000020
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000000D
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000021
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000022
+[TaskA] calisiyor, sayac=0x00000028
+[TaskB] calisiyor, sayac=0x00000028
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000023
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000000E
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000024
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000025
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000000F
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000026
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000027
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000028
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000010
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000029
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000002A
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000002B
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000011
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000002C
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000002D
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000012
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000002E
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000002F
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000030
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000013
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000031
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000032
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000014
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000033
+[TaskA] calisiyor, sayac=0x0000003C
+[TaskB] calisiyor, sayac=0x0000003C
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000034
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000035
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000015
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000036
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000037
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000016
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000038
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000039
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000003A
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000017
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000003B
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000003C
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000018
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000003D
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000003E
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x0000003F
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x00000019
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000040
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000041
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000001A
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000042
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000043
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000044
+[ThreadF] uyandim (daha seyrek periyot), sayac=0x0000001B
+[ThreadE] uyandim (Sleep/Wake calisiyor), sayac=0x00000045
+[TaskA] calisiyor, sayac=0x00000050
+[TaskB] calisiyor, sayac=0x00000050
+qemu-system-x86_64: terminating on signal 15 from pid 145 (timeout)

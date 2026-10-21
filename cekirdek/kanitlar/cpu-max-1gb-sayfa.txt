@@ -1,0 +1,27 @@
+ABCDE
+===============================================
+  OTUKEN 1.0  (x86_64 / AArch64)
+===============================================
+otukenOS-mini: kernel_main basladi
+multiboot magic dogrulandi
+framebuffer adres: 0xFD000000 genislik: 0x00000400 yukseklik: 0x00000300 bpp: 0x00000020
+64-bit long mode'dayiz (boot.asm GDT'yi zaten kurdu)
+log: cekirdek gunlukleyici baslatildi (seviye=BILGI, halka tampon=64 kayit)
+IDT + PIC kuruldu
+framebuffer baslatildi
+pmm: multiboot bellek haritasi kullaniliyor
+pmm: toplam cerceve=0x000000000001FFE0 kullanilan=0x00000000000001A4 bos=0x000000000001FE3C
+pmm: toplam bellek(bayt)=0x000000001FFE0000
+pmm-test: ayrilan cerceveler: 0x001A4000 0x001A5000 0x001A6000
+pmm-test: bos cerceve (alloc oncesi/sonrasi): 0x0001FE3C / 0x0001FE39
+pmm-test: bos cerceve (free sonrasi, basa esit olmali): 0x0001FE3C
+pmm-test: BASARILI (free_after_free == free_before)
+vmm: hazir (mevcut CR3 uzerinden calisiyor)
+vmm-test: sanal=0x000000050x00000000 fiziksel=0x001A4000 yazilan=0xDEADBEEF okunan=0x00000000
+vmm-test: vmm_get_physical dogrulamasi=0x00000000 (YANLIS!)
+vmm-test: HATA
+vmm-test: unmap edildi, cerceve PMM'e iade edildi
+vmm-split-test: haritalama basarisiz
+heap: baslatildi, baslangic=1MB, adres=0x0000000400000000
+kmalloc: HATA - heap bozulmasi tespit edildi (magic uyusmuyor)! Adres=0x0000000400000000
+qemu-system-x86_64: terminating on signal 15 from pid 130 (timeout)

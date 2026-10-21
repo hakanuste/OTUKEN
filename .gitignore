@@ -1,0 +1,22 @@
+# --- derleme ciktilari ---
+*.o
+*.a
+*.so
+*.elf
+*.iso
+*.img
+kov/
+cik/
+__pycache__/
+*.pyc
+.venv/
+
+# --- uretilen ---
+cekirdek/otukenos-mini.*
+cekirdek/iso/
+cekirdek/arm64/*.elf
+umay/kov/
+us1/c/*.o
+
+# --- isletim sistemi ---
+.DS_Store

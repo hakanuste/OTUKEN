@@ -1,0 +1,3 @@
+== SONUC ==
+  GECEN: 10   KALAN: 0
+
