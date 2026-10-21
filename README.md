@@ -1,62 +1,48 @@
 # ÖTÜKEN
 
-Sıfırdan yazılmış 64 bit x86 işletim sistemi ve üstünde koşan UMAY
-yapay us uygulaması.
-
-| dizin | ne |
-|---|---|
-| `cekirdek/` | ÖTÜKEN çekirdeği — uzun kip, sayfalama, Ring3, VFS/FAT16, TCP/IP, ÜLGEN arayüzü, TÖRE yetki dizgesi |
-| `umay/` | UMAY — tek başına çalışan Türkçe yapay us yardımcısı |
-| `us1/` | US1 — tamsayı aritmetiğiyle koşan küçük dönüştürücü motoru ve eğitim araçları |
-
-## Çekirdek
+Sıfırdan yazılmış 64 bit x86 işletim sistemi.
 
 ```
-cd cekirdek
-make            # x86_64 derler
-make iso        # açılabilir ISO
-bash testler.sh # tam gerileme sınaması
+make             # x86_64 derler
+make iso         # açılabilir ISO
+bash testler.sh  # tam gerileme sınaması
 ```
 
-Sınama takımı 80 başlıkta koşar: bellek, zamanlayıcı, süreç, Ring3
-yalıtımı, dosya dizgesi, ağ, ses. Ses bölümü üretilen dalgayı
-**ölçerek** sınar — ünlülerin ayırt edilebilirliği, ünsüz ayrımı,
-hece vurgusu, duraklarda sessizlik, çıkış taşması.
+## Ne var
+
+Uzun kip, dört düzeyli sayfalama, süreç başına CR3, Ring3 yalıtımı,
+ELF64 yükleyici ve W^X. Zamanlayıcı, iş parçacıkları, kilitler, boru
+hatları, paylaşımlı bellek, ileti kuyrukları. VFS üstünde FAT16 (alt
+dizinlerle) ve FAT32, disk önbelleği, AHCI/NVMe/IDE, USB. TCP/IP,
+DHCP, DNS, soketler. ÜLGEN pencere dizgesi, ÜLGEN teması, Orbitron
+yazı tipi. TÖRE yetki dizgesi, KUT yetenek bitleri. AC'97 ses.
+
+Sınama takımı 80 başlıkta koşar; iki başarısız başlık ortamdan gelen
+DNS kaynaklıdır (sanal ağ A kaydı döndürmüyor), çekirdek doğru
+davranıp "A kaydı yok" diyor — sınama zayıflatılmadı.
+
+## Ses
+
+`src/dede.c` — Dede Korkut'un sesi. Tamsayı aritmetiğiyle çalışan
+formant sentezleyici: Rosenberg gırtlak darbesi, kademeli ses yolu
+(altı çınlayıcı), ünsüz boğumlanma yerleri, hece vurgusu, ağızdan
+yayılım. Kayan nokta birimi kapalıyken koşar.
+
+Ses kalitesi **gerileme sınamasındadır** (`ses_sinama/`): çekirdeğin
+kendi dede.c'si ana bilgisayarda derlenir, üretilen dalga ölçülür ve
+altı koşul doğrulanır — ünlülerin amaçlanan formantlarda olması,
+ünsüzlerin birbirinden ayırt edilebilmesi, ses düzeylerinin doğal
+aralıkta kalması, hece vurgusunun varlığı, duraklarda gerçek
+sessizlik, çıkışta taşma olmaması.
+
+Formant sentezi belirli bir insanın ses kimliğini taşıyamaz; ölçülebilir
+niteliklerini eşler. Doğal ses isteyen kullanım için UMAY'ın Piper
+arka ucuna bakın.
 
 ## UMAY
 
-```
-cd umay
-./kur.sh              # derler, sınar, kurar, doğrular
-./kur.sh --ses        # Piper ses arka ucunu da kurar
-umay                  # konuşma kipi
-umay "soru"           # tek soru
-```
+Üstünde koşan yapay us uygulaması ayrı depodadır:
+https://github.com/hakanuste/UMAY
 
-OTAĞ meclisi, 12 uzman ajan, OZAN dil katmanı, BİLGİ kitaplığı, BENGİ
-kalıcı belleği, değiştirilebilir US motoru ve ses arka ucu. 207 sınama.
-
-ÖTÜKEN'e bağlanma noktası tek bir katmandır (`umay/port/`); çekirdek
-kodunda tek bir koşullu derleme yoktur.
-
-```
-cd umay
-make otuken-denetle   # dikiş sağlam mı (ÖTÜKEN ağacı gerekmez)
-make otuken OT=../cekirdek
-```
-
-## Nerede duruyoruz
-
-**Dil modeli bir oyuncaktır.** US1 motorunun izin verdiği en büyük
-model 467 bin değişkendir; o boyut Türkçenin harf dizilimini öğrenir,
-anlamlı cümle kurmaz. Ana bilgisayarda US katmanı Ollama'ya
-bağlanabilir ve gerçek bir modelle yanıt verir; ÖTÜKEN'in kendi
-üstünde US1 kalır.
-
-**Ses iki ayrı yerde iki ayrı şeydir.** ÖTÜKEN'de `cekirdek/src/dede.c`
-— tamsayı aritmetiğiyle çalışan formant sentezleyici; anlaşılır ama
-mekanik. Ana bilgisayarda Piper — sinir ağı tabanlı, doğal. Formant
-sentezi belirli bir insanın ses kimliğini taşıyamaz.
-
-Her ikisi de sahte başarı üretmez: arka uç hazırlanamazsa açıkça
-söylenir ve bir alt seçeneğe düşülür.
+Bağlanma noktası UMAY'ın `port/` katmanıdır; UMAY'ın çekirdek kodunda
+ÖTÜKEN'e özgü tek bir koşullu derleme yoktur.

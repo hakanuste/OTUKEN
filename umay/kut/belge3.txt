@@ -1,7 +1,0 @@
-UMAY OTAG DUZENI
-kaynak: umay-mimari
-alan: ortak
-
-Otag 24 yuvali bir gorev havuzudur. Atanamayan gorev kuyrugu
-kilitlemez. Bagimli gorev ciktisi ardilin oncul baglamina gecer,
-dayanak listesine GIRMEZ.

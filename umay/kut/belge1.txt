@@ -1,8 +1,0 @@
-OTUKEN CEKIRDEK NOTLARI
-kaynak: cekirdek-denetimi
-alan: demir
-
-Bellek yonetimi iki katmandir. PMM 4 KB cerceveleri bit haritasiyla
-dagitir; VMM dort seviyeli sayfa tablosu kurar ve her surece kendi
-CR3 degerini verir. Kullanici isaretcileri syscall katmaninda
-dogrulanir: her seviyede PRESENT ve USER biti aranir.
