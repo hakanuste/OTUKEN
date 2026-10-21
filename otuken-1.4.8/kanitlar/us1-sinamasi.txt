@@ -1,0 +1,23 @@
+# US1 motoru: referans + KV onbellegi (us1/us1_sina)
+# Tarih: 2026-09-27 21:13 (Europe/Istanbul)
+# Kaynak: OTUKEN 1.4.5 + UMAY (git f2354b6), QEMU 8.2.2, ajan arastirma yordami dahil
+
+  [GECTI] model yuklendi
+  [GECTI] bicim alanlari tutarli
+  [GECTI] bozuk dosya reddedildi
+  [GECTI] bilinmeyen surum reddedildi
+  [GECTI] kisa dosya reddedildi
+  [GECTI] ileri gecis kostu
+  [GECTI] sozluk disi im reddedildi
+  referans: 4150 deger, en buyuk fark 0.3906, genlik 33.6558
+  [GECTI] referansa yakin (Q8 + sabit nokta payi)
+  en olasi im uyusmasi: 50/50 konum
+  [GECTI] en olasi im referansla %90+ ayni
+  [GECTI] KV onbellekli adim tam gecisle bit bit ayni (tum baglam)
+  [GECTI] baglam dolunca US1_DOLU
+  [GECTI] adim: sozluk disi im reddedildi
+  [GECTI] sifirlama konumu 0 yapti
+  [GECTI] belirlenimci secim gecerli im veriyor
+  [GECTI] ayni tohum ayni imi veriyor
+
+=== US1 SINAMA: 15 gecti, 0 kaldi ===

@@ -1,0 +1,22 @@
+  [GECTI] geçerli model yüklenir ve koşar
+  [KALDI] reddedilir: sihir bozuk
+  [GECTI] reddedilir: sürüm 2 (bilinmeyen)
+  [GECTI] reddedilir: sürüm 0
+  [GECTI] reddedilir: d = 0
+  [GECTI] reddedilir: d > azami
+  [GECTI] reddedilir: d = 2^32-1
+  [GECTI] reddedilir: katman = 0
+  [GECTI] reddedilir: katman > azami
+  [GECTI] reddedilir: baş = 0
+  [GECTI] reddedilir: baş d'yi bölmüyor
+  [GECTI] reddedilir: baş > d
+  [GECTI] reddedilir: ffn = 0
+  [GECTI] reddedilir: ffn > azami
+  [GECTI] reddedilir: sözlük = 0
+  [GECTI] reddedilir: sözlük > azami
+  [GECTI] reddedilir: bağlam = 0
+  [GECTI] reddedilir: bağlam > azami
+  [KALDI] reddedilir: ayrılmış alan dolu
+==3163==ERROR: AddressSanitizer: global-buffer-overflow on address 0x5604f4909180 at pc 0x5604f44e4a0d bp 0x7ffefe35fa10 sp 0x7ffefe35fa00
+WRITE of size 4 at 0x5604f4909180 thread T0
+SUMMARY: AddressSanitizer: global-buffer-overflow us1/c/us1.c:223 in matcarp

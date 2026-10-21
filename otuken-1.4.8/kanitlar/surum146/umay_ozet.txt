@@ -1,0 +1,3 @@
+
+=== SONUC: 274 gecti, 0 kaldi ===
+make: Leaving directory '/tmp/nihai/umay'

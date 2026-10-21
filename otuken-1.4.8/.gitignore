@@ -1,0 +1,16 @@
+*.o
+*.d
+*.uo
+*.iso
+*.elf
+iso/
+iso_uefi/
+__pycache__/
+umay/kov/
+us1/us1_sina
+arm64/otuken-arm64.img
+kanitlar/agir/*.log
+kanitlar/uyum/*.log
+us1/us1_uret
+us1/kov/
+tests/us1_conformance/son_rapor.json

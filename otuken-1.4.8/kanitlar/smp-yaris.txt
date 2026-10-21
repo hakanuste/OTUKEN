@@ -1,0 +1,21 @@
+# SMP-YARIS: 6 gorev x 12 tur eszamanli dosya okuma/yazma + heap/VMM + gunluk (TANI kipi)
+# Tarih: 2026-09-27 14:18 (Europe/Istanbul)
+# Kaynak: git 308da4d (tani kosulari tazelendi; KONTROL GRUBU bolumu onceki kosudan, git 3e311e7)
+
+## -smp 1 (kesilme altinda), testler.sh tani kosusu:
+SMP-YARIS: GECTI gorev=0x00000006 hata=0x00000000 cekirdek_sayisi=0x00000001 maske=0x00000001
+SMP-DAGITIM: is gecisleri c0x00000000=0x00000115
+
+## -smp 4, kilitli (testler.sh bolum 13):
+SMP: is dagitimi acik - zamanlayiciya katilan AP=3/3 (LAPIC tik sayimi=1262766)
+SMP-YARIS: GECTI gorev=0x00000006 hata=0x00000000 cekirdek_sayisi=0x00000004 maske=0x0000000F
+SMP-DAGITIM: is gecisleri c0x00000000=0x0000033B c0x00000001=0x000000EB c0x00000002=0x0000000A c0x00000003=0x00000052
+
+## KONTROL GRUBU: -smp 4, -DDEPO_KILIT_KAPALI (depolama kilidi devre disi) - hata BULMALI:
+SMP: is dagitimi acik - zamanlayiciya katilan AP=3/3 (LAPIC tik sayimi=1261935)
+SMP-YARIS: KALDI gorev=0x00000006 hata=0x00000009 cekirdek_sayisi=0x00000004 maske=0x0000000F
+SMP-YARIS: ilk hata kodlari 0x0000000C 0x00000014 0x0000000C 0x00000014 0x00000014 0x0000000A
+SMP-DAGITIM: is gecisleri c0x00000000=0x00000049 c0x00000001=0x00000003 c0x00000002=0x00000003 c0x00000003=0x0000000A
+UMAY acildi mi (us1-yerel etkin): 0 (disk bozuldugu icin 0)
+
+Hata kodlari: 0x0A ortak dosya acilamadi, 0x0B/0x0C ortak dosya boyu/icerigi yanlis, 0x14 yazma basarisiz, 0x21xx/0x22xx geri okuma boyu/icerigi yanlis.

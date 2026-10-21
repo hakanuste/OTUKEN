@@ -1,0 +1,35 @@
+  [GECTI] geçerli model yüklenir ve koşar
+  [GECTI] reddedilir: sihir bozuk (US2)
+  [GECTI] reddedilir: sürüm 2 (bilinmeyen)
+  [GECTI] reddedilir: sürüm 0
+  [GECTI] reddedilir: d = 0
+  [GECTI] reddedilir: d > azami
+  [GECTI] reddedilir: d = 2^32-1
+  [GECTI] reddedilir: katman = 0
+  [GECTI] reddedilir: katman > azami
+  [GECTI] reddedilir: baş = 0
+  [GECTI] reddedilir: baş d'yi bölmüyor
+  [GECTI] reddedilir: baş > d
+  [GECTI] reddedilir: ffn = 0
+  [GECTI] reddedilir: ffn > azami
+  [GECTI] reddedilir: sözlük = 0
+  [GECTI] reddedilir: sözlük > azami
+  [GECTI] reddedilir: bağlam = 0
+  [GECTI] reddedilir: bağlam > azami
+  [GECTI] reddedilir: ayrılmış alan dolu
+  [GECTI] reddedilir: wq biçimi yanlış (bayt sayısı aynı)
+  [GECTI] reddedilir: gömme satır sayısı sözlükle uyuşmuyor
+  [GECTI] reddedilir: ölçek NaN
+  [GECTI] reddedilir: ölçek +Inf
+  [GECTI] reddedilir: ölçek -Inf
+  [GECTI] reddedilir: ölçek negatif
+  [GECTI] reddedilir: ölçek dev (1e30)
+  [GECTI] kabul: ölçek alt-normal (~0, zararsız)
+  [GECTI] reddedilir: kesik dosya (son bayt eksik)
+  [GECTI] reddedilir: yalnız başlık
+  [GECTI] reddedilir: 47 bayt
+  [GECTI] reddedilir: sonda fazladan bayt
+2) rastgele bozma (20000 deneme, ASan+UBSan)
+     20000 denemeden 6109'i yüklendi (zararsız bozmalar), çökme/ASan/UBSan yok
+  [GECTI] rastgele bozmalarda bellek hatası ve tanımsız davranış yok
+=== US1 FUZZ: 32 gecti, 0 kaldi ===
