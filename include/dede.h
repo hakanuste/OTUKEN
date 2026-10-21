@@ -14,7 +14,9 @@
 
 #include <stdint.h>
 
-#define DEDE_TEMEL_PERDE 112     /* Hz — olculen hedef: ortanca 105.3 (%10-%90: 85-125) */
+#define DEDE_TEMEL_PERDE 107     /* Hz — Soylev kaydinda (130 sn) perde
+                                  * ortancasi 107, %10-%90: 86-132. Onceki
+                                  * 112 daha kisa bir kesitten olculmustu. */
 
 /* Metni seslendirir. Ses aygiti yoksa -1 doner. */
 int dede_konus(const char *metin);

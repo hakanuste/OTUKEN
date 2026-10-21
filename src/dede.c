@@ -189,7 +189,13 @@ typedef struct {
  * Bütün birim süreleri tek bir ölçekten geçer ki hız deneyle
  * ayarlanabilsin ve ölçüme bağlanabilsin. */
 #ifndef SURE_OLCEK
-#define SURE_OLCEK  65          /* yüzde; 100 = eski, iki kat yavaş hal */
+#define SURE_OLCEK  72          /* yüzde; 100 = eski, iki kat yavaş hal */
+/* 72 NEREDEN: Söylev kaydı (130 sn, gerçek hatip) ölçüldü —
+ *     hece hızı 2.4 Hz, 3-8 Hz payı %31.3, susma payı %25.9
+ * Ölçek taraması bu paya en çok 72-75'te yaklaşıyor (%28-33).
+ * espeak-ng ise 3.6 Hz'de; yani baskın kiplenim frekansı konuşma
+ * ÜSLUBUNA göre değişir, ayırt edici olan 3-8 Hz PAYIdır (eski
+ * DEDE %14.5'teydi). */
 #endif
 #ifndef DURAK_SOZ
 #define DURAK_SOZ     50        /* ms; sözcük arası */

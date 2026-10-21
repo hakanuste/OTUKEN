@@ -30,7 +30,12 @@ const ses_denetleyici_t *ses_durum(void);
  * Basari: 0, hata: -1 */
 int  ses_cal(const int16_t *pcm, uint32_t kare_sayisi);
 
-/* Calmayi durdurur. */
+/* Kuyruktaki ses BITENE kadar bekler (tavanli dongu).
+ * ses_dur() dogrudan cagrilirsa kuyrukta bekleyen ornekler hic
+ * duyulmaz; cumlenin sonu kesilir. Susturmadan once bunu cagir. */
+void ses_bekle(void);
+
+/* Calmayi durdurur (ANINDA; kuyrugu bosaltmaz). */
 void ses_dur(void);
 
 /* Ana ses seviyesi 0..100 */

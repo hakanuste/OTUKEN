@@ -59,7 +59,27 @@ else
   kal "hece yaylari olagan araligin disinda"; sed -n '1,3p' /tmp/dede_hiz.txt
 fi
 
-# 7) TASMA: cikis sinirlayiciya dayaniyor mu
+# 7) AC'97 SURUCUSU: taklit kartla kosulur (cekirdek ses.c'si)
+# NEDEN: ses.c donanima I/O kapilariyla konusur ve hic sinanmiyordu;
+# icinde dort hata birden duruyordu (sayfa tasmasi, motorun her
+# cagrida bastan baslamasi, 32 girise 16 tampon, ses_ton(0) hatasi).
+SES_C="$OT/src/ses.c"
+if [ -f "$SES_C" ] && [ -f "$KOK/kabuk/ses_kosum.c" ]; then
+  if gcc -O1 -DSES_KAYNAK="\"$SES_C\"" -I "$KOK/kabuk/sahte" -I "$OT/include" \
+         -o "$KOK/cik/ses_kosum" "$KOK/kabuk/ses_kosum.c" 2>/dev/null; then
+    if "$KOK/cik/ses_kosum" >/tmp/dede_ses.txt 2>&1; then
+      gec "AC'97 surucusu: $(grep -o 'SONUC: .*' /tmp/dede_ses.txt)"
+    else
+      kal "AC'97 surucusu kosumu basarisiz"; grep KALDI /tmp/dede_ses.txt | head -4
+    fi
+  else
+    kal "AC'97 kosumu derlenmedi"
+  fi
+else
+  kal "ses_kosum.c ya da src/ses.c yok"
+fi
+
+# 8) TASMA: cikis sinirlayiciya dayaniyor mu
 TAS=0
 for T in "Ötüken'in yurdunda ocak tütüyor." \
          "Su akar, taş kalır; söz uçar, yazı kalır." \

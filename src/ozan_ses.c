@@ -126,6 +126,7 @@ void ozan_soyle(const char *metin, int hiz)
         sayac++;
         p += b;
     }
+    ses_bekle();      /* ezginin sonu kesilmesin */
     ses_dur();
 }
 

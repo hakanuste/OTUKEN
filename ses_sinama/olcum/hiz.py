@@ -35,8 +35,17 @@ METIN = ("Ötüken'in yurdunda ocak tütüyor. "
          "Bilge Kağan sözünü söyledi, budun dinledi.")
 HECE = 27                 # metindeki unlu sayisi
 
-HIZ_ALT, HIZ_UST = 3.0, 8.0     # hece hizi bu aralikta olmali
-PAY_ALT = 0.16                  # 3-8 Hz bandinin en az payi
+# OLCUT NEDEN BOYLE
+#   Ilk surumde alt sinir 3.0 Hz'di. Sonra GERCEK hatip olculdu:
+#   Soylev kaydi (130 sn) 2.4 Hz cikti — yani kendi gecidim gercek
+#   insan sesini KALDIRIYORDU. espeak-ng ise 3.6 Hz. Demek ki baskin
+#   kiplenim frekansi konusma USLUBUNA gore degisir ve tek basina
+#   olcut olamaz.
+#   Ayirt edici olan 3-8 Hz PAYIdir:
+#         Soylev (gercek) %31.3     espeak %20.8     eski DEDE %14.5
+#   Alt sinir bu yuzden 2.0 Hz'e genisletildi; asil kapi paydir.
+HIZ_ALT, HIZ_UST = 2.0, 8.0
+PAY_ALT = 0.20                  # 3-8 Hz bandinin en az payi
 
 
 def wav_oku(yol):
@@ -99,7 +108,7 @@ def sina(ikili, ayrinti=True):
               % (hiz, HIZ_ALT, HIZ_UST))
         print('3-8 Hz payi     : %%%.1f     (en az %%%.0f)'
               % (pay * 100, PAY_ALT * 100))
-        print('karsilastirma   : espeak-ng Turkce 3.6 Hz, %20.8')
+        print('karsilastirma   : Soylev (gercek) 2.4 Hz %31.3 | espeak 3.6 Hz %20.8')
     return {'gecti': gecti, 'hiz': hiz, 'pay': pay,
             'sure': sure, 'hece_sn': hece_sn}
 
