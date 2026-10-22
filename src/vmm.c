@@ -1,6 +1,11 @@
 #include "vmm.h"
+#include "smp.h"
 #include "pmm.h"
 #include "serial.h"
+
+/* SMP adim 6: VMM: kernel ve surec sayfa tablolari; heap buyurken de cagrilir. Kisa islemler -> ozyinelemeli donen kilit. */
+#include "spinlock.h"
+static ozspin_t vmm_kilit = OZSPIN_BASLANGIC;
 
 #define ENTRIES 512
 #define PAGE_2MB (2ULL * 1024 * 1024)
@@ -133,7 +138,7 @@ void vmm_init(void) {
     serial_write("vmm: hazir (mevcut CR3 uzerinden calisiyor)\n");
 }
 
-int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
+static int vmm_map_page__ic(uint64_t virt, uint64_t phys, uint64_t flags) {
     virt &= ~0xFFFULL;
     phys &= ~0xFFFULL;
 
@@ -162,12 +167,15 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
     if (pt_phys == 0) return -1;
     uint64_t *pt = table_ptr(pt_phys);
 
+    uint64_t eski = pt[i1];
     pt[i1] = phys | (flags & 0xFFFULL) | VMM_PRESENT;
     invlpg(virt);
+    /* Onceden gecerli girdi degistiyse diger cekirdeklerin TLB'si bayat. */
+    if (eski & VMM_PRESENT) tlb_uzak_vur(virt);
     return 0;
 }
 
-void vmm_unmap_page(uint64_t virt) {
+static void vmm_unmap_page__ic(uint64_t virt) {
     virt &= ~0xFFFULL;
     int i4 = (int)((virt >> 39) & 0x1FF);
     int i3 = (int)((virt >> 30) & 0x1FF);
@@ -178,6 +186,9 @@ void vmm_unmap_page(uint64_t virt) {
     if (!(pml4[i4] & VMM_PRESENT)) return;
     uint64_t *pdpt = table_ptr(pml4[i4] & 0x000FFFFFFFFFF000ULL);
     if (!(pdpt[i3] & VMM_PRESENT)) return;
+    /* 1GB sayfa: tek 4KB kaldirilamaz (ve PD sanilirsa rastgele fiziksel
+     * bellege SIFIR yazilirdi). 2MB durumuyla ayni davranis: dokunma. */
+    if (pdpt[i3] & PS_BIT) return;
     uint64_t *pd = table_ptr(pdpt[i3] & 0x000FFFFFFFFFF000ULL);
     if (!(pd[i2] & VMM_PRESENT)) return;
     if (pd[i2] & PS_BIT) {
@@ -187,6 +198,7 @@ void vmm_unmap_page(uint64_t virt) {
     uint64_t *pt = table_ptr(pd[i2] & 0x000FFFFFFFFFF000ULL);
     pt[i1] = 0;
     invlpg(virt);
+    tlb_uzak_vur(virt);
 }
 
 uint64_t vmm_get_physical(uint64_t virt) {
@@ -201,6 +213,10 @@ uint64_t vmm_get_physical(uint64_t virt) {
     if (!(pml4[i4] & VMM_PRESENT)) return 0;
     uint64_t *pdpt = table_ptr(pml4[i4] & 0x000FFFFFFFFFF000ULL);
     if (!(pdpt[i3] & VMM_PRESENT)) return 0;
+    /* 1GB sayfa (PDPT.PS): eskiden PD tablosu sanilip o fiziksel bellek
+     * tablo diye okunuyordu -> 1GB kimlik bolgesinde COP adres. */
+    if (pdpt[i3] & PS_BIT)
+        return (pdpt[i3] & 0x000FFFFFC0000000ULL) | (virt & 0x3FFFFFFFULL);
     uint64_t *pd = table_ptr(pdpt[i3] & 0x000FFFFFFFFFF000ULL);
     if (!(pd[i2] & VMM_PRESENT)) return 0;
     if (pd[i2] & PS_BIT) {
@@ -223,6 +239,36 @@ uint64_t vmm_get_physical(uint64_t virt) {
 #define KERNEL_PML4_IDENTITY 0
 #define KERNEL_PML4_HIGHER   511
 
+/* 1.4.7: CANLI adres alani sayaci (olusturulan - yok edilen). Gercek
+ * muhasebe: surec yasam dongusu sinamasi, yok edilen surecin adres alaninin
+ * GERCEKTEN geri alindigini gurultusuz (baska ayirmalardan etkilenmeden)
+ * olcer. vmm_kilit altinda degisir. */
+static int64_t canli_alan = 0;
+int64_t vmm_canli_alan_sayisi(void) { return __atomic_load_n(&canli_alan, __ATOMIC_ACQUIRE); }
+
+/* 1.4.8: canli adres alanlarinin kimligi (olusturma sirasi). PML4 cercevesi
+ * yok edildikten sonra YENIDEN kullanilabilir; sira no bunu ayirt eder.
+ * Yalniz sinama/tani icindir (vmm_kilit altinda guncellenir). */
+#define ALAN_KAYIT 64
+static struct { uint64_t pml4, sira; } alan_kayit[ALAN_KAYIT];
+static uint64_t alan_sira = 0;
+static void alan_kaydet(uint64_t pml4) {
+    for (int i = 0; i < ALAN_KAYIT; i++)
+        if (!alan_kayit[i].pml4) { alan_kayit[i].pml4 = pml4; alan_kayit[i].sira = ++alan_sira; return; }
+}
+static void alan_sil(uint64_t pml4) {
+    for (int i = 0; i < ALAN_KAYIT; i++)
+        if (alan_kayit[i].pml4 == pml4) { alan_kayit[i].pml4 = 0; alan_kayit[i].sira = 0; }
+}
+uint64_t vmm_alan_kimlik(uint64_t pml4) {
+    uint64_t r = 0;
+    ozspin_al(&vmm_kilit);
+    for (int i = 0; i < ALAN_KAYIT && !r; i++)
+        if (alan_kayit[i].pml4 == pml4) r = alan_kayit[i].sira;
+    ozspin_birak(&vmm_kilit);
+    return r;
+}
+
 uint64_t vmm_current_address_space(void) {
     return read_cr3() & 0x000FFFFFFFFFF000ULL;
 }
@@ -231,7 +277,7 @@ void vmm_switch_address_space(uint64_t pml4_phys) {
     __asm__ volatile ("mov %0, %%cr3" : : "r"(pml4_phys) : "memory");
 }
 
-uint64_t vmm_create_address_space(void) {
+static uint64_t vmm_create_address_space__ic(void) {
     uint64_t new_pml4 = pmm_alloc_frame();
     if (new_pml4 == 0) {
         serial_write("vmm: adres alani icin cerceve ayrilamadi\n");
@@ -248,6 +294,8 @@ uint64_t vmm_create_address_space(void) {
      * alanlarinda gecerli olur) */
     dst[KERNEL_PML4_IDENTITY] = src[KERNEL_PML4_IDENTITY];
     dst[KERNEL_PML4_HIGHER]   = src[KERNEL_PML4_HIGHER];
+    __atomic_add_fetch(&canli_alan, 1, __ATOMIC_ACQ_REL);
+    alan_kaydet(new_pml4);
 
     serial_write("vmm: yeni adres alani olusturuldu PML4=");
     serial_write_hex((uint32_t)new_pml4);
@@ -257,7 +305,7 @@ uint64_t vmm_create_address_space(void) {
 
 /* Belirtilen PML4 uzerinde haritalama - mevcut CR3 degismez.
  * (Ara tablolar identity map sayesinde dogrudan erisilebilir.) */
-int vmm_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags) {
+static int vmm_map_page_in__ic(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags) {
     virt &= ~0xFFFULL;
     phys &= ~0xFFFULL;
 
@@ -293,7 +341,7 @@ int vmm_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t f
     return 0;
 }
 
-void vmm_destroy_address_space(uint64_t pml4_phys) {
+static void vmm_destroy_address_space__ic(uint64_t pml4_phys) {
     if (pml4_phys == 0) return;
     if (pml4_phys == vmm_current_address_space()) {
         serial_write("vmm: UYARI - KULLANIMDA olan adres alani yok "
@@ -334,8 +382,46 @@ void vmm_destroy_address_space(uint64_t pml4_phys) {
         pmm_free_frame(pdpt_phys);
     }
 
+    alan_sil(pml4_phys);
     pmm_free_frame(pml4_phys);
+    __atomic_sub_fetch(&canli_alan, 1, __ATOMIC_ACQ_REL);
     serial_write("vmm: adres alani yok edildi PML4=");
     serial_write_hex((uint32_t)pml4_phys);
     serial_write("\n");
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
+    ozspin_al(&vmm_kilit);
+    int r = vmm_map_page__ic(virt, phys, flags);
+    ozspin_birak(&vmm_kilit);
+    return r;
+}
+
+void vmm_unmap_page(uint64_t virt) {
+    ozspin_al(&vmm_kilit);
+    vmm_unmap_page__ic(virt);
+    ozspin_birak(&vmm_kilit);
+}
+
+int vmm_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags) {
+    ozspin_al(&vmm_kilit);
+    int r = vmm_map_page_in__ic(pml4_phys, virt, phys, flags);
+    ozspin_birak(&vmm_kilit);
+    return r;
+}
+
+uint64_t vmm_create_address_space(void) {
+    ozspin_al(&vmm_kilit);
+    uint64_t r = vmm_create_address_space__ic();
+    ozspin_birak(&vmm_kilit);
+    return r;
+}
+
+void vmm_destroy_address_space(uint64_t pml4_phys) {
+    ozspin_al(&vmm_kilit);
+    vmm_destroy_address_space__ic(pml4_phys);
+    ozspin_birak(&vmm_kilit);
 }

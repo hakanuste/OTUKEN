@@ -38,6 +38,9 @@ int kut_bind_process(uint32_t pid, uint32_t uid);
 /* Surecin sahibi olan kullaniciyi dondurur (yoksa 0). */
 const kut_user_t *kut_owner_of(uint32_t pid);
 const kut_user_t *kut_find_user(uint32_t uid);
+/* 1.4.9: salt-okunur doku (KUT uygulamasi) */
+int kut_kullanici_al(int i, kut_user_t *out);
+int kut_bag_al(int i, uint32_t *pid, uint32_t *uid);
 const char *kut_rol_name(kut_rol_t r);
 uint32_t kut_capabilities_for_role(kut_rol_t r);
 

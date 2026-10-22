@@ -1,4 +1,5 @@
 #include "gpt.h"
+#include "depo_kilit.h"
 #include "disk.h"
 #include "log.h"
 #include "serial.h"
@@ -67,7 +68,7 @@ static int sektor_oku(int disk_id, uint64_t lba, void *tampon) {
     return disk2_read_sectors(lba, 1, tampon);
 }
 
-int gpt_tara(int disk_id) {
+static int gpt_tara__ic(int disk_id) {
     static uint8_t sek[512];
     bolum_sayisi = 0;
     for (int i = 0; i < GPT_AZAMI_BOLUM; i++) bolumler[i].var = 0;
@@ -184,4 +185,14 @@ int gpt_bolum_sayisi(void) { return bolum_sayisi; }
 const gpt_bolum_t *gpt_bolum_al(int i) {
     if (i < 0 || i >= bolum_sayisi) return 0;
     return &bolumler[i];
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int gpt_tara(int disk_id) {
+    ozkilit_al(&depo_kilit);
+    int r = gpt_tara__ic(disk_id);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

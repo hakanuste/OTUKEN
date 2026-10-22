@@ -1,9 +1,11 @@
 #include "elf.h"
+#include "smap.h"
 #include "pmm.h"
 #include "vmm.h"
 #include "timur.h"
 #include "log.h"
 #include "serial.h"
+#include "mutex.h"
 
 int elf_validate(const uint8_t *data, uint64_t size) {
     if (size < sizeof(elf64_header_t)) {
@@ -75,7 +77,21 @@ static void elf_geri_al(elf_sayfa_kaydi_t *kayit, int adet) {
     }
 }
 
+/* Denetim (1.4.6): geri alma kaydi (kayit[]) DURAGAN ve tektir; iki
+ * cekirdekte ayni anda yukleme (kabuk yeniden baslatma + UMAY) birinin
+ * basarisizliginda digerinin sayfalarini serbest birakabiliyordu. Yuklemeler
+ * gorev kilidiyle SIRAYA konur (uyuyan kilit; zamanlayici yokken islem yok). */
+static int elf_load__ic(const uint8_t *data, uint64_t size, elf_image_t *out);
+static ozkilit_t elf_kilit;
+
 int elf_load(const uint8_t *data, uint64_t size, elf_image_t *out) {
+    ozkilit_al(&elf_kilit);
+    int r = elf_load__ic(data, size, out);
+    ozkilit_birak(&elf_kilit);
+    return r;
+}
+
+static int elf_load__ic(const uint8_t *data, uint64_t size, elf_image_t *out) {
     if (elf_validate(data, size) != 0) return -1;
 
     const elf64_header_t *h = (const elf64_header_t *)data;
@@ -202,13 +218,17 @@ int elf_load(const uint8_t *data, uint64_t size, elf_image_t *out) {
             }
             /* .bss icin sifirla (p_memsz > p_filesz oldugunda gerekli) */
             uint8_t *pg = (uint8_t *)(uintptr_t)(seg_start + p * PMM_FRAME_SIZE);
+            kullanici_ac();                     /* 1.4.9 SMAP: kullanici sayfasi */
             for (int k = 0; k < PMM_FRAME_SIZE; k++) pg[k] = 0;
+            kullanici_kapat();
         }
 
         /* Dosyadaki icerigi hedef sanal adrese kopyala */
         uint8_t *dst = (uint8_t *)(uintptr_t)ph->p_vaddr;
         const uint8_t *src = data + ph->p_offset;
+        kullanici_ac();
         for (uint64_t k = 0; k < ph->p_filesz; k++) dst[k] = src[k];
+        kullanici_kapat();
 
         /* Simdi GERCEK izinleri uygula - W^X politikasi:
          * calistirilabilir segment YAZILAMAZ, veri segmenti CALISTIRILAMAZ */

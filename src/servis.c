@@ -5,6 +5,10 @@
 #include "log.h"
 #include "serial.h"
 
+/* SMP adim 6: servis tablosu ve nabiz sayaclari. Kisa islemler -> ozyinelemeli donen kilit. */
+#include "spinlock.h"
+static ozspin_t servis_kilit = OZSPIN_BASLANGIC;
+
 static servis_t servisler[SERVIS_MAX];
 static int servis_count = 0;
 
@@ -36,7 +40,7 @@ void servis_init(void) {
     log_write(LOG_BILGI, "SERVIS", "servis yoneticisi (init) baslatildi");
 }
 
-int servis_tanimla(const char *name, const char *depends_on,
+static int servis_tanimla__ic(const char *name, const char *depends_on,
                     void (*entry)(void), uint32_t max_restarts) {
     if (servis_count >= SERVIS_MAX) {
         log_write(LOG_HATA, "SERVIS", "servis tablosu dolu");
@@ -66,7 +70,7 @@ int servis_tanimla(const char *name, const char *depends_on,
     return servis_count++;
 }
 
-int servis_bul(const char *name) {
+static int servis_bul__ic(const char *name) {
     for (int i = 0; i < servis_count; i++)
         if (servisler[i].used && name_eq(servisler[i].name, name)) return i;
     return -1;
@@ -96,7 +100,7 @@ static int servis_baslat_tek(int id) {
     return 0;
 }
 
-int servis_hepsini_baslat(void) {
+static int servis_hepsini_baslat__ic(void) {
     int started = 0;
     /* Bagimlilik sirasi: en fazla SERVIS_MAX tur donerek, bagimliligi
      * karsilanan servisleri baslat. Bu basit yaklasim dongusel
@@ -129,12 +133,12 @@ int servis_hepsini_baslat(void) {
     return started;
 }
 
-void servis_nabiz(int id) {
+static void servis_nabiz__ic(int id) {
     if (id < 0 || id >= servis_count) return;
     servisler[id].heartbeat++;
 }
 
-int servis_izle(void) {
+static int servis_izle__ic(void) {
     int restarted = 0;
     for (int i = 0; i < servis_count; i++) {
         servis_t *s = &servisler[i];
@@ -175,3 +179,42 @@ const servis_t *servis_al(int id) {
 }
 
 int servis_sayisi(void) { return servis_count; }
+
+/* --- SMP adim 6: kilit sarmalayicisi (islev isaretcisi parametreli; elle) --- */
+int servis_tanimla(const char *name, const char *depends_on,
+                   void (*entry)(void), uint32_t max_restarts) {
+    ozspin_al(&servis_kilit);
+    int r = servis_tanimla__ic(name, depends_on, entry, max_restarts);
+    ozspin_birak(&servis_kilit);
+    return r;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int servis_bul(const char *name) {
+    ozspin_al(&servis_kilit);
+    int r = servis_bul__ic(name);
+    ozspin_birak(&servis_kilit);
+    return r;
+}
+
+int servis_hepsini_baslat(void) {
+    ozspin_al(&servis_kilit);
+    int r = servis_hepsini_baslat__ic();
+    ozspin_birak(&servis_kilit);
+    return r;
+}
+
+void servis_nabiz(int id) {
+    ozspin_al(&servis_kilit);
+    servis_nabiz__ic(id);
+    ozspin_birak(&servis_kilit);
+}
+
+int servis_izle(void) {
+    ozspin_al(&servis_kilit);
+    int r = servis_izle__ic();
+    ozspin_birak(&servis_kilit);
+    return r;
+}

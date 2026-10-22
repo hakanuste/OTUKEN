@@ -36,10 +36,20 @@ context_switch:
 ; kapisindan girildigi icin (ve context_switch bunu degistirmedigi
 ; icin) hala KAPALI durumda olur - acmazsak bu gorev hicbir zaman
 ; zamanlayici tarafindan yeniden bolunemez (preempt edilemez).
+extern sched_gecis_sonrasi
+extern task_exit
 global task_trampoline
 task_trampoline:
+    ; SMP adim 5: yeni gorev ILK kez calisiyor - gecisin ikinci yarisini
+    ; (eski gorevi birak, rq kilidini ac) tamamla, sonra kesmeleri ac.
+    ; rbx ABI geregi korunur; RSP burada 16 hizali (call oncesi dogru).
+    call sched_gecis_sonrasi
     sti
     call rbx
+    ; Giris islevi GERI DONDU: eskiden asagidaki cli;hlt ile TUM CEKIRDEK
+    ; olduruluyordu (tek cekirdekte sistem donardi). Gorevi duzgunce
+    ; sonlandir; task_exit geri donmez.
+    call task_exit
 .hang:
     cli
     hlt

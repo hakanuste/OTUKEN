@@ -16,9 +16,12 @@
 #define MULTIBOOT2_BOOTLOADER_MAGIC 0x36D76289
 
 #define MB2_TAG_SON          0
+#define MB2_TAG_MODUL        3   /* 1.4.9: onyukleme modulu */
 #define MB2_TAG_BELLEK       4   /* temel bellek bilgisi */
 #define MB2_TAG_MMAP         6   /* bellek haritasi */
 #define MB2_TAG_FRAMEBUFFER  8
+#define MB2_TAG_ACPI_ESKI    14  /* RSDP v1 kopyasi */
+#define MB2_TAG_ACPI_YENI    15  /* RSDP v2 kopyasi */
 
 typedef struct {
     uint32_t tur;
@@ -36,5 +39,10 @@ int onyukleme_protokolu(uint32_t magic);
  * 32-bit mmap_addr alani higher-half adresleri tasiyamaz). */
 uint64_t multiboot2_mmap_adresi(void);
 uint32_t multiboot2_mmap_uzunlugu(void);
+
+/* SMP adim 3: GRUB-UEFI, RSDP'yi BIOS alaninda birakmayabilir; bunun
+ * yerine multiboot2 etiketi (14/15) olarak KOPYASINI verir. Kopya
+ * burada saklanir. Etiket yoksa 0 doner. */
+const uint8_t *multiboot2_rsdp(void);
 
 #endif

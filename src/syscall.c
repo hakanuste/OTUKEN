@@ -1,11 +1,8 @@
 #include "syscall.h"
-#include "dede.h"
-#include "tore.h"
-#include "tema.h"
-#include "ozan_ses.h"
-#include "ses.h"
+#include "heap.h"
 #include "serial.h"
 #include "log.h"
+#include "cpu.h"
 #include "sched.h"
 #include "thread.h"
 #include "vfs.h"
@@ -18,7 +15,31 @@
 #include "ipc2.h"
 #include "sched.h"
 #include "ulgen.h"
+#include "ulgen_theme.h"
+#include "gorsel_kilit.h"
+#include "ekran.h"
 #include "servis.h"
+#include "tore.h"
+#include "tema.h"
+#include "ag.h"
+#include "io.h"
+#include "rtc.h"
+#include "kervan2.h"
+#include "tcp.h"
+#include "kut.h"
+#include "timur.h"
+#include "ses.h"
+#include "dede.h"
+#include "asena.h"
+#include "smap.h"
+#include "fat16_ic.h"
+#include "ergenekon.h"
+#include "bearssl.h"
+#include "otukenconf.h"
+
+#include "ozan_ses.h"
+#include "ses.h"
+#include "fat16.h"
 
 #define MSR_EFER  0xC0000080
 #define MSR_STAR  0xC0000081
@@ -30,6 +51,26 @@ extern void syscall_entry(void);
 typedef uint64_t (*syscall_fn_t)(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4);
 
 static syscall_fn_t syscall_table[SYS_MAX];
+
+/* =====================================================================
+ * GOREV-BASINA SYSCALL TAMPONU (SMP adim 6)
+ * syscall_entry kesmeleri yeniden acar (sti): bir syscall ortasinda
+ * gorev kesilip AYNI cekirdekte baska gorev calisabilir. Eskiden
+ * tamponlar CEKIRDEK-BASINA (cpu_yerel) ya da STATIK idi; kesilen
+ * gorevin tamponunu digeri eziyordu -> A sureci B'nin dosya icerigini
+ * kendi bellegine kopyalayabilirdi (tek cekirdekte bile). Bir gorev
+ * ayni anda tek syscall yurutur: gorev-basina tek tampon yeterli.
+ * Ilk kullanimda ayrilir, reap'te serbest birakilir.
+ * ===================================================================== */
+#define SC_TAMPON_BOYUT 4096
+static uint8_t sc_onyukleme_tamponu[SC_TAMPON_BOYUT];   /* zamanlayici oncesi (tek akis) */
+
+static void *gorev_tamponu(void) {
+    task_t *t = scheduler_current_task();
+    if (!t) return sc_onyukleme_tamponu;
+    if (!t->sc_tampon) t->sc_tampon = kmalloc(SC_TAMPON_BOYUT);
+    return t->sc_tampon;       /* bellek yoksa 0: cagiran -1 doner */
+}
 
 static void wrmsr(uint32_t msr, uint64_t value) {
     uint32_t lo = (uint32_t)(value & 0xFFFFFFFF);
@@ -79,6 +120,10 @@ static int sayfa_kullanici_erisimli_ex(uint64_t va, int yazma) {
     if (!(pml4[i4] & VMM_PRESENT) || !(pml4[i4] & VMM_USER)) return 0;
     uint64_t *pdpt = (uint64_t *)(uintptr_t)(pml4[i4] & 0x000FFFFFFFFFF000ULL);
     if (!(pdpt[i3] & VMM_PRESENT) || !(pdpt[i3] & VMM_USER)) return 0;
+    if (pdpt[i3] & (1ULL << 7)) {              /* 1GB sayfa, US dogrulandi */
+        if (yazma && !(pdpt[i3] & VMM_WRITABLE)) return 0;
+        return 1;
+    }
     uint64_t *pd = (uint64_t *)(uintptr_t)(pdpt[i3] & 0x000FFFFFFFFFF000ULL);
     if (!(pd[i2] & VMM_PRESENT) || !(pd[i2] & VMM_USER)) return 0;
     if (pd[i2] & (1ULL << 7)) {                /* 2MB sayfa, US dogrulandi */
@@ -145,7 +190,9 @@ static int dize_kopyala_ham(uint64_t ptr, char *hedef, int azami) {
             if (!sayfa_kullanici_erisimli(sayfa)) return -1;
             son_sayfa = sayfa;
         }
+        kullanici_ac();
         char ch = *(volatile char *)(uintptr_t)va;
+        kullanici_kapat();
         hedef[i] = ch;
         if (ch == 0) return i;
     }
@@ -184,7 +231,9 @@ static int kullanicidan_atomik_oku(void *hedef, uint64_t kaynak, uint64_t uzunlu
     if (ok) {
         uint8_t *h = (uint8_t *)hedef;
         const volatile uint8_t *k = (const volatile uint8_t *)(uintptr_t)kaynak;
+        kullanici_ac();
         for (uint64_t i = 0; i < uzunluk; i++) h[i] = k[i];
+        kullanici_kapat();
     }
 
     __asm__ volatile ("push %0; popfq" : : "r"(bayrak) : "memory", "cc");
@@ -196,8 +245,9 @@ static int kullanicidan_atomik_oku(void *hedef, uint64_t kaynak, uint64_t uzunlu
 
 static uint64_t sys_write_impl(uint64_t str_ptr, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
-    static char guvenli[512];
-    if (kullanici_dize_kopyala(str_ptr, guvenli, sizeof(guvenli)) < 0) {
+    char *guvenli = (char *)gorev_tamponu();
+    if (!guvenli) return (uint64_t)-1;
+    if (kullanici_dize_kopyala(str_ptr, guvenli, 512) < 0) {
         log_write(LOG_UYARI, "SYSCALL", "write: gecersiz kullanici isaretcisi");
         return (uint64_t)-1;
     }
@@ -266,19 +316,20 @@ static uint64_t sys_exit_impl(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4
 #define HEAP_YUVA_SAYISI 32
 static uint32_t heap_yuva_haritasi = 0;
 
+/* Denetim (1.4.6): denetle-sonra-yaz kilitsizdi; iki cekirdekte ayni
+ * anda ilk sbrk ayni yuvayi alabiliyordu. Artik atomik. */
 static int heap_yuva_al(void) {
     for (int i = 0; i < HEAP_YUVA_SAYISI; i++) {
-        if (!(heap_yuva_haritasi & (1u << i))) {
-            heap_yuva_haritasi |= (1u << i);
-            return i;
-        }
+        uint32_t bit = 1u << i;
+        if (__atomic_load_n(&heap_yuva_haritasi, __ATOMIC_ACQUIRE) & bit) continue;
+        if (!(__atomic_fetch_or(&heap_yuva_haritasi, bit, __ATOMIC_ACQ_REL) & bit)) return i;
     }
     return -1;
 }
 
 void heap_yuva_birak(int yuva) {
     if (yuva >= 0 && yuva < HEAP_YUVA_SAYISI)
-        heap_yuva_haritasi &= ~(1u << yuva);
+        __atomic_fetch_and(&heap_yuva_haritasi, ~(1u << yuva), __ATOMIC_ACQ_REL);
 }
 
 static int kullaniciya_atomik_yaz(uint64_t hedef, const void *kaynak, uint64_t uzunluk) {
@@ -290,7 +341,9 @@ static int kullaniciya_atomik_yaz(uint64_t hedef, const void *kaynak, uint64_t u
     if (ok) {
         volatile uint8_t *h = (volatile uint8_t *)(uintptr_t)hedef;
         const uint8_t *k = (const uint8_t *)kaynak;
+        kullanici_ac();
         for (uint64_t i = 0; i < uzunluk; i++) h[i] = k[i];
+        kullanici_kapat();
     }
 
     __asm__ volatile ("push %0; popfq" : : "r"(bayrak) : "memory", "cc");
@@ -345,15 +398,25 @@ static uint64_t sys_sbrk_impl(uint64_t increment, uint64_t a2, uint64_t a3, uint
     uint64_t son = (yeni_son + 0xFFF) & ~0xFFFULL;
     for (uint64_t va = ilk; va < son; va += 4096) {
         if (va < eski_son && eski_son != gorev->heap_baslangic) continue;
-        if (vmm_get_physical(va) != 0) continue;   /* zaten haritali */
+        uint64_t eski_fiz = vmm_get_physical(va);
+        if (eski_fiz != 0) {
+            /* Denetim (1.4.6): yuva iade edilirken sayfalari haritada
+             * kaliyor; yuvanin yeni sahibi eski programin verisini
+             * goruyordu. Bu gorevin sinirinin OTESINDEKI haritali sayfa
+             * oncekinden kalmadir: sifirlanir. */
+            /* 1.4.9 SMAP: kullanici adresinden degil, KIMLIK haritasindan */
+            uint8_t *eski = (uint8_t *)(uintptr_t)(eski_fiz & ~0xFFFULL);
+            for (int z = 0; z < 4096; z++) eski[z] = 0;
+            continue;
+        }
         uint64_t fiz = pmm_alloc_frame();
         if (fiz == 0) return (uint64_t)-1;
+        uint8_t *pg = (uint8_t *)(uintptr_t)fiz;          /* 1.4.9: haritalamadan ONCE, kimlikten */
+        for (int i = 0; i < 4096; i++) pg[i] = 0;
         if (vmm_map_page(va, fiz, VMM_PRESENT | VMM_WRITABLE | VMM_USER) != 0) {
             pmm_free_frame(fiz);
             return (uint64_t)-1;
         }
-        uint8_t *pg = (uint8_t *)(uintptr_t)va;
-        for (int i = 0; i < 4096; i++) pg[i] = 0;
     }
     gorev->heap_son = yeni_son;
     return eski_son;
@@ -378,7 +441,8 @@ static uint64_t sys_read_impl(uint64_t fd, uint64_t buf_ptr, uint64_t size, uint
     }
     /* TOCTOU: dogrudan kullanici tamponuna okumak yerine once
      * CEKIRDEK ara tamponuna oku, sonra atomik olarak kopyala. */
-    static uint8_t ara_tampon[4096];
+    uint8_t *ara_tampon = (uint8_t *)gorev_tamponu();   /* gorev-basina */
+    if (!ara_tampon) return (uint64_t)-1;
     int n = vfs_read((int)fd, ara_tampon, size);
     if (n <= 0) return (uint64_t)(int64_t)n;
     if (kullaniciya_atomik_yaz(buf_ptr, ara_tampon, (uint64_t)n) != 0) {
@@ -395,7 +459,7 @@ static uint64_t sys_close_impl(uint64_t fd, uint64_t a2, uint64_t a3, uint64_t a
 
 static uint64_t sys_readkey_impl(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a1; (void)a2; (void)a3; (void)a4;
-    return (uint64_t)(uint8_t)keyboard_pop_char();
+    return (uint64_t)(uint8_t)keyboard_pop_for(KLAVYE_ODAK_KABUK);
 }
 
 static uint64_t sys_listdir_impl(uint64_t path_ptr, uint64_t out_ptr, uint64_t max, uint64_t a4) {
@@ -418,7 +482,8 @@ static uint64_t sys_listdir_impl(uint64_t path_ptr, uint64_t out_ptr, uint64_t m
     if (n < 0) return (uint64_t)-1;
 
     /* TOCTOU: once CEKIRDEK tamponunda kur, sonra atomik kopyala. */
-    static sys_dirent_t ara_dizin[16];
+    sys_dirent_t *ara_dizin = (sys_dirent_t *)gorev_tamponu();
+    if (!ara_dizin) return (uint64_t)-1;
     sys_dirent_t *out = ara_dizin;
 
     for (int i = 0; i < n; i++) {
@@ -468,10 +533,31 @@ static uint64_t sys_pencere_ac_impl(uint64_t baslik, uint64_t xy, uint64_t wh, u
         log_write(LOG_UYARI, "SYSCALL", "pencere_ac: gecersiz baslik isaretcisi");
         return (uint64_t)-1;
     }
-    return (uint64_t)(int64_t)ulgen_yuzey_olustur(guv_baslik, x, y, w, h);
+    /* 1.4.8 pencere yoneticisi kurali: uygulama penceresinin basligi ust
+     * cubugun ALTINDA baslar (ust cubuk her zaman ustte; baslik oraya
+     * denk gelirse pencere tasinamaz/kapatilamaz olurdu). */
+    if (y < ULGEN_UST_BAR + ULGEN_BASLIK_YUK) y = ULGEN_UST_BAR + ULGEN_BASLIK_YUK;
+    int yid = ulgen_yuzey_olustur(guv_baslik, x, y, w, h);
+    /* uygulama yuzeyi: yalniz SYS_PEN_SUN ile sunulan kare ekrana cikar */
+    if (yid >= 0 && ulgen_elle_sun(yid) != 0) { ulgen_yuzey_yoket(yid); yid = -1; }
+    return (uint64_t)(int64_t)yid;
 }
+/* 1.4.7 — PENCERE NESNE SAHIPLIGI: Ring3 cagirani yalniz KENDI actigi
+ * yuzeye cizebilir/kapatabilir/olayini okuyabilir. Eskiden herhangi bir
+ * program baska programin (ya da cekirdegin) penceresine yaziyor,
+ * olaylarini (tuslarini) okuyor ya da onu kapatiyordu. Ring0 cekirdek
+ * gorevi hepsine erisir. */
+static int yuzey_benim(uint64_t id) {
+    task_t *t = scheduler_current_task();
+    if (!t || !t->kullanici) return 1;
+    uint32_t sahip = 0;
+    if (id > 0x7FFFFFFFULL || ulgen_yuzey_sahibi((int)id, &sahip) != 0) return 0;
+    return sahip == t->id;
+}
+
 static uint64_t sys_pen_doldur_impl(uint64_t id, uint64_t renk, uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
+    if (!yuzey_benim(id)) return (uint64_t)-1;
     ulgen_doldur((int)id, (uint32_t)renk);
     return 0;
 }
@@ -479,22 +565,25 @@ static uint64_t sys_pen_yazi_impl(uint64_t id, uint64_t xy, uint64_t txt, uint64
     int x = (int)((xy >> 16) & 0xFFFF), y = (int)(xy & 0xFFFF);
     /* DENETIM BULGUSU (HIGH): metin de dogrulanmadan dereference
      * ediliyordu - ayni bilgi sizintisi riski. */
+    if (!yuzey_benim(id)) return (uint64_t)-1;
     char guv_metin[128];
     if (kullanici_dize_kopyala(txt, guv_metin, sizeof(guv_metin)) < 0) {
         log_write(LOG_UYARI, "SYSCALL", "pen_yazi: gecersiz metin isaretcisi");
         return (uint64_t)-1;
     }
-    ulgen_yazi((int)id, x, y, guv_metin, (uint32_t)renk, 0xE8E4DA);
+    ulgen_yazi((int)id, x, y, guv_metin, (uint32_t)renk & 0xFFFFFF, ULGEN_SAYDAM);
     return 0;
 }
 static uint64_t sys_pen_dik_impl(uint64_t id, uint64_t xy, uint64_t wh, uint64_t renk) {
     int x = (int)((xy >> 16) & 0xFFFF), y = (int)(xy & 0xFFFF);
     int w = (int)((wh >> 16) & 0xFFFF), h = (int)(wh & 0xFFFF);
+    if (!yuzey_benim(id)) return (uint64_t)-1;
     ulgen_dikdortgen((int)id, x, y, w, h, (uint32_t)renk);
     return 0;
 }
 static uint64_t sys_pen_kapat_impl(uint64_t id, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
+    if (!yuzey_benim(id)) return (uint64_t)-1;
     return (uint64_t)(int64_t)ulgen_yuzey_yoket((int)id);
 }
 static uint64_t sys_servis_liste_impl(uint64_t out_ptr, uint64_t max, uint64_t a3, uint64_t a4) {
@@ -508,7 +597,8 @@ static uint64_t sys_servis_liste_impl(uint64_t out_ptr, uint64_t max, uint64_t a
 
     /* TOCTOU: kullanici bellegine DOGRUDAN yazmak yerine once
      * CEKIRDEK tamponunda kur, sonra atomik olarak kopyala. */
-    static sys_servis_t ara_servis[16];
+    sys_servis_t *ara_servis = (sys_servis_t *)gorev_tamponu();
+    if (!ara_servis) return (uint64_t)-1;
     sys_servis_t *out = ara_servis;
 
     int n = servis_sayisi();
@@ -558,8 +648,13 @@ static uint64_t sys_ipc_gonder_impl(uint64_t hedef, uint64_t opkod,
      * oraya donebilsin. Basit cozum: 'kabuk' portu varsa onu kullan.
      * (Tam cozum surec->port eslesmesi gerektirir; su anki tek
      * istemci kabuk oldugu icin bu yeterli ve dogru davraniyor.) */
-    int gonderen = ipc_port_find("kabuk");
-    m.sender_port = (gonderen >= 0) ? (uint32_t)gonderen : 0;
+    /* UYUM duzeltmesi: gonderen eskiden SABIT 'kabuk' portuydu. Kabuk
+     * disinda bir istemci UMAY'a soru sorunca yanit KABUGA gidiyordu.
+     * Artik gonderen = cagiran gorevin KENDI portu; portu yoksa
+     * IPC_GONDEREN_YOK (0 gecerli bir port kimligidir, 'yok' degil). */
+    task_t *cg = scheduler_current_task();
+    int gonderen = cg ? ipc_gorevin_portu(cg->id) : -1;
+    m.sender_port = (gonderen >= 0) ? (uint32_t)gonderen : IPC_GONDEREN_YOK;
     m.sequence = 0;
     /* TOCTOU: dogrulama sonrasi kullanici isaretcisini DOGRUDAN
      * okumak yerine, dogrulama+kopyalama tek kesmesiz bolgede yapilir
@@ -575,15 +670,25 @@ static uint64_t sys_ipc_gonder_impl(uint64_t hedef, uint64_t opkod,
 static uint64_t sys_ipc_al_impl(uint64_t port, uint64_t cikti,
                                  uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
+    /* UYUM duzeltmesi: her gorev HERHANGI bir portu bosaltabiliyordu;
+     * iki istemci ayni anda UMAY'la konusurken biri otekinin yanitini
+     * alabilirdi. Kullanici alani yalniz KENDI portundan okur. */
+    {
+        uint32_t sahip = 0;
+        task_t *cg = scheduler_current_task();
+        if (ipc_port_sahibi((int)port, &sahip) != 0) return 0;      /* kapali: ileti yok */
+        if (!cg || sahip != cg->id) return (uint64_t)-1;
+    }
     if (!kullanici_tampon_yazilabilir(cikti, sizeof(ipc_message_t))) {
         log_write(LOG_UYARI, "SYSCALL", "ipc_al: gecersiz cikti tamponu");
         return (uint64_t)-1;
     }
     /* TOCTOU: mesaji CEKIRDEK tamponuna al, sonra atomik kopyala. */
-    static ipc_message_t ara_mesaj;
-    int r = ipc_try_receive((int)port, &ara_mesaj);
+    ipc_message_t *ara_mesaj_p = (ipc_message_t *)gorev_tamponu();
+    if (!ara_mesaj_p) return (uint64_t)-1;
+    int r = ipc_try_receive((int)port, ara_mesaj_p);
     if (r <= 0) return (uint64_t)(int64_t)r;
-    if (kullaniciya_atomik_yaz(cikti, &ara_mesaj, sizeof(ipc_message_t)) != 0) {
+    if (kullaniciya_atomik_yaz(cikti, ara_mesaj_p, sizeof(ipc_message_t)) != 0) {
         log_write(LOG_UYARI, "SYSCALL", "ipc_al: kullaniciya yazma reddedildi");
         return (uint64_t)-1;
     }
@@ -598,120 +703,664 @@ static uint64_t sys_sistem_bil_impl(uint64_t alan, uint64_t a2,
         case SYSBIL_TOPLAM_BELLEK: return pmm_total_bytes();
         case SYSBIL_GOREV_SAYISI:  return (uint64_t)scheduler_task_count();
         case SYSBIL_TIK:           return timer_get_ticks();
+        case SYSBIL_TIK_HZ:        return timer_hz();
+        case SYSBIL_SES_VAR:       { const ses_denetleyici_t *d = ses_durum(); return d && d->var; }
+        case SYSBIL_DEDE_MESGUL:   return (uint64_t)dede_mesgul();
         default:                   return 0;
     }
 }
 
-
 /* =====================================================================
- * Asama 42: dosya bilgisi, ses ve tema cagrilari.
- * Isaretci dogrulamasi: bu agacta genel bir dogrulayici yok; her
- * cagri KENDI isaretcisini denetler. Sessiz kabul YOKTUR.
+ * UMAY paketi (Asama 42) cagrilari.
+ *
+ * GUVENLIK: paketteki surum kullanici isaretcilerini yalniz ADRES
+ * ARALIGIYLA denetleyip DOGRUDAN okuyup yaziyordu. Aralik icindeki
+ * haritalanmamis bir adres cekirdekte sayfa hatasi -> panik demekti
+ * (herhangi bir Ring3 programi sistemi dusurebilirdi); ust sinir da
+ * kullanici heap penceresini kesiyordu. Burada HER isaretci mevcut
+ * yardimcilarla (sayfa varligi + RW denetimi, kesmesiz tek bolgede)
+ * cekirdek tamponuna kopyalanir; cekirdek kullanici bellegine
+ * dogrudan dokunmaz.
  * ===================================================================== */
-static int kul_isaretci_gecerli(uint64_t adres, uint64_t boy)
-{
-    if (adres == 0 || boy == 0) return 0;
-    if (adres < 0x8000000000ULL) return 0;          /* cekirdek alani */
-    if (adres + boy < adres) return 0;              /* tasma */
-    /* Ust sinir kullanici yarisinin sonudur. Ilk surumde 0x8000C00000
-     * yazmistim; UMAY'in yigini 0x8000E00000'da oldugu icin gecerli
-     * isaretciler reddediliyordu ve kutuphane hep bos kaliyordu. */
-    if (adres + boy > 0x8001400000ULL) return 0;
-    return 1;
+static uint32_t cagiran_pid(void) {
+    task_t *t = scheduler_current_task();
+    return t ? (uint32_t)t->id : 0;
 }
 
-static uint64_t sys_stat_impl(uint64_t yol, uint64_t cikti, uint64_t a3, uint64_t a4)
-{
+static uint64_t sys_stat_impl(uint64_t yol_p, uint64_t cikti, uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
-    if (!kul_isaretci_gecerli(yol, 1)) return (uint64_t)-1;
-    if (!kul_isaretci_gecerli(cikti, sizeof(sys_stat_t))) return (uint64_t)-1;
+    char yol[VFS_MAX_PATH];
+    if (kullanici_dize_kopyala(yol_p, yol, sizeof(yol)) < 0) return (uint64_t)-1;
     uint64_t boyut = 0;
     int dizin = 0;
-    if (vfs_stat((const char *)(uintptr_t)yol, &boyut, &dizin) != 0)
-        return (uint64_t)-1;
-    sys_stat_t *o = (sys_stat_t *)(uintptr_t)cikti;
-    o->boyut = boyut;
-    o->dizin_mi = (uint32_t)dizin;
-    o->ayrilmis = 0;
+    if (vfs_stat(yol, &boyut, &dizin) != 0) return (uint64_t)-1;
+    sys_stat_t o;
+    o.boyut = boyut;
+    o.dizin_mi = (uint32_t)dizin;
+    o.ayrilmis = 0;
+    if (kullaniciya_atomik_yaz(cikti, &o, sizeof(o)) != 0) return (uint64_t)-1;
     return 0;
 }
 
-/* Cagiran surecin yetenegi var mi. TORE denetiminden GECMEZ: yetkinin
- * kendisini sorar, reddedilen erisim kaydi olusturmamalidir. */
-static uint64_t sys_mkdir_impl(uint64_t yol, uint64_t a2, uint64_t a3, uint64_t a4)
-{
+static uint64_t sys_mkdir_impl(uint64_t yol_p, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
-    if (!kul_isaretci_gecerli(yol, 1)) return (uint64_t)-1;
-    task_t *t = scheduler_current_task();
-    uint32_t pid = t ? (uint32_t)t->id : 0;
-    if (!tore_check(pid, KUT_DISK_WRITE, "dizin olustur")) return (uint64_t)-1;
-    return (uint64_t)(int64_t)vfs_mkdir((const char *)(uintptr_t)yol);
+    char yol[VFS_MAX_PATH];
+    if (kullanici_dize_kopyala(yol_p, yol, sizeof(yol)) < 0) return (uint64_t)-1;
+    if (!tore_yol_yazilabilir(cagiran_pid(), yol, 1)) return (uint64_t)-1;   /* 1.4.9 yazma koku */
+    /* 1.4.7: KUT_DISK_WRITE denetimi politika kapisinda (syscall_dispatch). */
+    return (uint64_t)(int64_t)vfs_mkdir(yol);
 }
 
-static uint64_t sys_yetki_impl(uint64_t yetenek, uint64_t a2, uint64_t a3, uint64_t a4)
-{
+/* Cagiranin yetenegi var mi. TORE denetiminden GECMEZ: yetkinin
+ * kendisini sorar, reddedilen erisim kaydi olusturmamalidir. */
+static uint64_t sys_yetki_impl(uint64_t yetenek, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
-    task_t *t = scheduler_current_task();
-    uint32_t pid = t ? (uint32_t)t->id : 0;
-    uint32_t sahip = tore_get_capabilities(pid);
+    uint32_t sahip = tore_get_capabilities(cagiran_pid());
     return (sahip & (uint32_t)yetenek) ? 1u : 0u;
 }
 
-static uint64_t sys_pen_sun_impl(uint64_t id, uint64_t a2, uint64_t a3, uint64_t a4)
-{
-    (void)id; (void)a2; (void)a3; (void)a4;
+/* Yalniz KOK dizine yazar ("/AD.UZN", 8.3): FAT16 surucusunde alt
+ * dizine dosya yazimi YOK. Alt dizin yolu acikca reddedilir. */
+#define YAZ_AZAMI 4096
+static uint64_t sys_write_file_impl(uint64_t yol_p, uint64_t tampon, uint64_t n, uint64_t a4) {
+    (void)a4;
+    char yol[VFS_MAX_PATH];
+    if (kullanici_dize_kopyala(yol_p, yol, sizeof(yol)) < 0) return (uint64_t)-1;
+    /* 1.4.7: KUT_DISK_WRITE denetimi politika kapisinda (syscall_dispatch). */
+    if (yol[0] != '/' || yol[1] == 0) return (uint64_t)-1;
+    if (!tore_yol_yazilabilir(cagiran_pid(), yol, 0)) return (uint64_t)-1;   /* 1.4.9 yazma koku */
+    int alt = 0;
+    for (int i = 1; yol[i]; i++) if (yol[i] == '/') alt = 1;
+    if (n > YAZ_AZAMI) return (uint64_t)-1;
+    uint8_t *veri = (uint8_t *)gorev_tamponu();
+    if (!veri) return (uint64_t)-1;
+    if (kullanicidan_atomik_oku(veri, tampon, n) != 0) return (uint64_t)-1;
+    /* fat16_write_file BASARIDA YAZILAN BAYT SAYISINI dondurur (0 degil).
+     * Ilk surumde "!= 0 -> hata" yazmistim: her basarili yazim -1
+     * donuyordu. SMP-YARIS sinamasi yakaladi.
+     * 1.4.9: alt dizin yollari fat16_yol_yaz ile (eskiden reddediliyordu). */
+    int yazilan = alt ? fat16_yol_yaz(yol, veri, (uint32_t)n) : fat16_write_file(yol + 1, veri, (uint32_t)n);
+    if (yazilan < 0) return (uint64_t)-1;
+    return (uint64_t)yazilan;
+}
+
+/* 1.4.9: agdan indirilen paket (Ring3 bellegi) cekirdege kopyalanir ve
+ * dosyadaki ile AYNI dogrulamayla kurulur. Kopya 4 KB'lik parcalarla
+ * (her parca kesmesiz, dogrulamali). */
+static uint64_t sys_kervan_yukle_impl(uint64_t veri, uint64_t boy, uint64_t neden_p, uint64_t a4) {
+    (void)a4;
+    char neden[64];
+    neden[0] = 0;
+    if (boy == 0 || boy > KERVAN2_AZAMI_BOY) return (uint64_t)-1;
+    uint8_t *k = (uint8_t *)kmalloc(boy);
+    if (!k) return (uint64_t)-1;
+    for (uint64_t o = 0; o < boy; o += 4096) {
+        uint64_t n = boy - o < 4096 ? boy - o : 4096;
+        if (kullanicidan_atomik_oku(k + o, veri + o, n) != 0) { kfree(k); return (uint64_t)-1; }
+    }
+    int r = kervan2_kur_bellek(k, (uint32_t)boy, neden);
+    kfree(k);
+    if (neden_p) kullaniciya_atomik_yaz(neden_p, neden, sizeof neden);
+    return (uint64_t)(int64_t)r;
+}
+
+/* 1.4.9: dosyanin SONUNA ekle (gunluk dosyalari: yalniz yeni bayt yazilir) */
+static uint64_t sys_dosya_ekle_impl(uint64_t yol_p, uint64_t tampon, uint64_t n, uint64_t a4) {
+    (void)a4;
+    char yol[VFS_MAX_PATH];
+    if (kullanici_dize_kopyala(yol_p, yol, sizeof(yol)) < 0) return (uint64_t)-1;
+    if (yol[0] != '/' || yol[1] == 0 || n > YAZ_AZAMI) return (uint64_t)-1;
+    if (!tore_yol_yazilabilir(cagiran_pid(), yol, 0)) return (uint64_t)-1;
+    uint8_t *veri = (uint8_t *)gorev_tamponu();
+    if (!veri) return (uint64_t)-1;
+    if (kullanicidan_atomik_oku(veri, tampon, n) != 0) return (uint64_t)-1;
+    int r = fat16_yol_ekle(yol, veri, (uint32_t)n);
+    return r < 0 ? (uint64_t)-1 : (uint64_t)r;
+}
+
+/* 1.4.9: dosya ya da BOS dizin sil */
+static uint64_t sys_dosya_sil_impl(uint64_t yol_p, uint64_t a2, uint64_t a3, uint64_t a4) {
+    (void)a2; (void)a3; (void)a4;
+    char yol[VFS_MAX_PATH];
+    if (kullanici_dize_kopyala(yol_p, yol, sizeof(yol)) < 0) return (uint64_t)-1;
+    if (yol[0] != '/' || yol[1] == 0) return (uint64_t)-1;
+    if (!tore_yol_yazilabilir(cagiran_pid(), yol, 0)) return (uint64_t)-1;
+    return fat16_yol_sil(yol) == 0 ? 0 : (uint64_t)-1;
+}
+
+static uint64_t sys_proc_liste_impl(uint64_t cikti, uint64_t azami, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    /* 1.4.7: KUT_PROC_CREATE denetimi politika kapisinda (syscall_dispatch). */
+    if (azami > 32) azami = 32;
+    uint64_t adet = 0;
+    for (uint32_t i = 0; adet < azami; i++) {
+        sys_surec_t s;
+        if (scheduler_gorev_bilgi(i, &s.pid, s.ad, &s.durum, &s.bellek_kb) != 0) break;
+        if (kullaniciya_atomik_yaz(cikti + adet * sizeof(sys_surec_t), &s, sizeof(s)) != 0)
+            return (uint64_t)-1;
+        adet++;
+    }
+    return adet;
+}
+
+static uint64_t sys_pen_sun_impl(uint64_t id, uint64_t a2, uint64_t a3, uint64_t a4) {
+    (void)a2; (void)a3; (void)a4;
+    /* 1.4.8: kimlik artik kullaniliyor: YALNIZ kendi yuzeyini sunabilir */
+    if (!yuzey_benim(id) || ulgen_sun((int)id) != 0) return (uint64_t)-1;
     return (uint64_t)(int64_t)ulgen_birlestir();
 }
 
-static uint64_t sys_pen_olay_impl(uint64_t id, uint64_t cikti, uint64_t a3, uint64_t a4)
-{
+static uint64_t sys_pen_olay_impl(uint64_t id, uint64_t cikti, uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
-    if (!kul_isaretci_gecerli(cikti, sizeof(sys_olay_t))) return (uint64_t)-1;
-    sys_olay_t *o = (sys_olay_t *)(uintptr_t)cikti;
+    sys_olay_t o = { 0, 0, 0, 0 };
     ulgen_olay_t e;
+    uint64_t sonuc;
+    if (!yuzey_benim(id)) return (uint64_t)-1;     /* 1.4.7: baskasinin olaylari okunamaz */
     if (ulgen_olay_cek((int)id, &e)) {
-        o->tur = e.tur; o->tus = e.tus; o->x = e.x; o->y = e.y;
-        return 1;
+        o.tur = e.tur; o.tus = e.tus; o.x = e.x; o.y = e.y;
+        sonuc = 1;
+    } else {
+        /* yalniz klavye odagi penceredeyse (Tab) VE bu yuzey en ustteyse
+         * (1.4.9) tus al; digerleri kuyruga dokunmaz */
+        char c = (ulgen_odak_yuzey() == (int)id) ? keyboard_pop_for(KLAVYE_ODAK_PENCERE) : 0;
+        if (c == 0) { sonuc = 0; }
+        else { o.tur = 1; o.tus = klavye_kod_noktasi((unsigned char)c); sonuc = 1; }   /* 1.4.8: Unicode */
     }
-    char c = keyboard_pop_char();
-    if (c == 0) { o->tur = 0; return 0; }
-    o->tur = 1; o->tus = (uint32_t)(unsigned char)c; o->x = 0; o->y = 0;
-    return 1;
+    if (kullaniciya_atomik_yaz(cikti, &o, sizeof(o)) != 0) return (uint64_t)-1;
+    return sonuc;
 }
 
-static uint64_t sys_ses_nota_impl(uint64_t hz, uint64_t ms, uint64_t a3, uint64_t a4)
-{
+static uint64_t sys_ses_nota_impl(uint64_t hz, uint64_t ms, uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
     if (ms > 3000) ms = 3000;
     return (uint64_t)(int64_t)ses_ton((uint32_t)hz, (uint32_t)ms);
 }
 
-static uint64_t sys_ozan_soyle_impl(uint64_t metin, uint64_t hiz, uint64_t a3, uint64_t a4)
-{
+static uint64_t sys_ozan_soyle_impl(uint64_t metin_p, uint64_t hiz, uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
-    if (!kul_isaretci_gecerli(metin, 1)) return (uint64_t)-1;
-    ozan_soyle((const char *)(uintptr_t)metin, (int)hiz);
+    char *metin = (char *)gorev_tamponu();
+    if (!metin) return (uint64_t)-1;
+    if (kullanici_dize_kopyala(metin_p, metin, 512) < 0) return (uint64_t)-1;
+    ozan_soyle(metin, (int)hiz);
     return 0;
 }
 
-static uint64_t sys_dede_konus_impl(uint64_t metin, uint64_t a2, uint64_t a3, uint64_t a4)
-{
+static uint64_t sys_dede_konus_impl(uint64_t metin_p, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
-    if (!kul_isaretci_gecerli(metin, 1)) return (uint64_t)-1;
-    return (uint64_t)(int64_t)dede_konus((const char *)(uintptr_t)metin);
+    char *metin = (char *)gorev_tamponu();
+    if (!metin) return (uint64_t)-1;
+    if (kullanici_dize_kopyala(metin_p, metin, 512) < 0) return (uint64_t)-1;
+    /* 1.4.9: sıraya koyar, konuşmayı BEKLEMEZ (bkz. dede_konus_sirala) */
+    return (uint64_t)(int64_t)dede_konus_sirala(metin);
 }
 
-static uint64_t sys_ses_var_impl(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4)
-{
-    (void)a1; (void)a2; (void)a3; (void)a4;
-    return (uint64_t)(ses_var() ? 1 : 0);
+static uint64_t sys_tema_impl(uint64_t ad_p, uint64_t a2, uint64_t a3, uint64_t a4) {
+    (void)a2; (void)a3; (void)a4;
+    char ad[32];
+    if (kullanici_dize_kopyala(ad_p, ad, sizeof(ad)) < 0) return (uint64_t)-1;
+    int r = tema_uygula(ad);
+    if (r == 0) {             /* 1.4.8: masaustu katmani yeni renklerle yeniden */
+        ozkilit_al(&gorsel_kilit);
+        ekran_masaustu_hazirla();
+        ekran_isle();
+        ozkilit_birak(&gorsel_kilit);
+    }
+    return (uint64_t)(int64_t)r;
 }
 
-static uint64_t sys_tema_impl(uint64_t ad, uint64_t a2, uint64_t a3, uint64_t a4)
-{
+/* 1.4.8: tema adlari (Gorunum uygulamasi). sira=-1: simdiki tema. */
+static uint64_t sys_tema_bil_impl(uint64_t sira, uint64_t cikti, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    const tema_t *t = ((int64_t)sira == -1) ? tema_simdiki()
+                    : (sira < (uint64_t)tema_sayisi() ? tema_sirali((int)sira) : 0);
+    if (!t || !t->ad) return (uint64_t)-1;
+    char ad[32];
+    int i = 0;
+    for (; t->ad[i] && i < 31; i++) ad[i] = t->ad[i];
+    for (; i < 32; i++) ad[i] = 0;
+    if (kullaniciya_atomik_yaz(cikti, ad, sizeof(ad)) != 0) return (uint64_t)-1;
+    return 0;
+}
+
+/* --- 1.4.9: ag cagrilari (ag.c). Veri gorev tamponundan gecer (4 KB). --- */
+static uint32_t ben_id(void) {
+    task_t *t = scheduler_current_task();
+    return t ? t->id : 0;
+}
+
+static uint64_t sys_ag_coz_impl(uint64_t ad_p, uint64_t cikti, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    char ad[256];
+    if (kullanici_dize_kopyala(ad_p, ad, sizeof(ad)) < 0 || ad[0] == 0) return (uint64_t)-1;
+    uint8_t ip[4];
+    if (ag_coz(ad, ip) != 0) return (uint64_t)-1;
+    if (kullaniciya_atomik_yaz(cikti, ip, 4) != 0) return (uint64_t)-1;
+    return 0;
+}
+
+static uint64_t sys_ag_baglan_impl(uint64_t ip32, uint64_t port, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    if (port == 0 || port > 65535 || ip32 > 0xFFFFFFFFULL) return (uint64_t)-1;
+    uint8_t ip[4] = { (uint8_t)(ip32 >> 24), (uint8_t)(ip32 >> 16), (uint8_t)(ip32 >> 8), (uint8_t)ip32 };
+    return (uint64_t)(int64_t)ag_baglan(ben_id(), ip, (uint16_t)port);
+}
+
+static uint64_t sys_ag_gonder_impl(uint64_t t, uint64_t tampon, uint64_t n, uint64_t a4) {
+    (void)a4;
+    if (t > 0x7FFFFFFFULL || n > SC_TAMPON_BOYUT) return (uint64_t)-1;
+    uint8_t *ara = (uint8_t *)gorev_tamponu();
+    if (!ara) return (uint64_t)-1;
+    if (n && kullanicidan_atomik_oku(ara, tampon, n) != 0) return (uint64_t)-1;
+    return (uint64_t)(int64_t)ag_gonder(ben_id(), (int)t, ara, (uint32_t)n);
+}
+
+static uint64_t sys_ag_al_impl(uint64_t t, uint64_t tampon, uint64_t azami, uint64_t a4) {
+    (void)a4;
+    if (t > 0x7FFFFFFFULL) return (uint64_t)-1;
+    if (azami > SC_TAMPON_BOYUT) azami = SC_TAMPON_BOYUT;
+    if (azami == 0 || !kullanici_tampon_yazilabilir(tampon, azami)) return (uint64_t)-1;
+    uint8_t *ara = (uint8_t *)gorev_tamponu();
+    if (!ara) return (uint64_t)-1;
+    int n = ag_al(ben_id(), (int)t, ara, (uint32_t)azami);
+    if (n > 0 && kullaniciya_atomik_yaz(tampon, ara, (uint64_t)n) != 0) return (uint64_t)-1;
+    return (uint64_t)(int64_t)n;
+}
+
+static uint64_t sys_ag_kapat_impl(uint64_t t, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
-    if (!kul_isaretci_gecerli(ad, 1)) return (uint64_t)-1;
-    return (uint64_t)(int64_t)tema_uygula((const char *)(uintptr_t)ad);
+    if (t > 0x7FFFFFFFULL) return (uint64_t)-1;
+    return (uint64_t)(int64_t)ag_kapat(ben_id(), (int)t);
+}
+
+static uint64_t sys_ag_bilgi_impl(uint64_t cikti, uint64_t a2, uint64_t a3, uint64_t a4) {
+    (void)a2; (void)a3; (void)a4;
+    ag_bilgi_t b;
+    ag_bilgi(&b);
+    if (kullaniciya_atomik_yaz(cikti, &b, sizeof(b)) != 0) return (uint64_t)-1;
+    return 0;
+}
+
+/* --- 1.4.9: donanim rastgeleligi ve gercek saat (TLS icin) --- */
+static int rng_turu = -1;             /* 0 yok, 1 RDRAND, 2 RDSEED(+RDRAND) */
+static void rng_bul(void) {
+    uint32_t a, b, c, d;
+    __asm__ volatile ("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1), "c"(0));
+    int rdrand = (c >> 30) & 1;
+    __asm__ volatile ("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(7), "c"(0));
+    int rdseed = (b >> 18) & 1;
+    rng_turu = rdseed ? 2 : rdrand ? 1 : 0;
+}
+static int rng_64(uint64_t *v) {
+    for (int deneme = 0; deneme < 32; deneme++) {
+        uint8_t ok;
+        if (rng_turu == 2 && deneme < 16)
+            __asm__ volatile ("rdseed %0; setc %1" : "=r"(*v), "=qm"(ok));
+        else
+            __asm__ volatile ("rdrand %0; setc %1" : "=r"(*v), "=qm"(ok));
+        if (ok) return 0;
+        __asm__ volatile ("pause");
+    }
+    return -1;
+}
+/* SYS_RASTGELE: a1=tampon a2=n (<=256) -> n / -1 (donanim RNG yoksa -1:
+ * zayif kaynakla SESSIZCE devam etmek yerine acik ret). */
+static uint64_t sys_rastgele_impl(uint64_t tampon, uint64_t n, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    if (n == 0 || n > 256) return (uint64_t)-1;
+    if (rng_turu < 0) rng_bul();
+    if (rng_turu == 0) return (uint64_t)-1;
+    uint8_t ara[256];
+    for (uint64_t i = 0; i < n; i += 8) {
+        uint64_t v;
+        if (rng_64(&v) != 0) return (uint64_t)-1;
+        for (int k = 0; k < 8 && i + (uint64_t)k < n; k++) ara[i + k] = (uint8_t)(v >> (8 * k));
+    }
+    int r = kullaniciya_atomik_yaz(tampon, ara, n);
+    for (int i = 0; i < 256; i++) ((volatile uint8_t *)ara)[i] = 0;
+    return r == 0 ? n : (uint64_t)-1;
+}
+
+/* SYS_ZAMAN: gercek saat (UTC; CMOS dogrudan okunur, bkz. rtc.c).
+ * a1=&sys_zaman_t -> 0/-1 */
+static uint64_t sys_zaman_impl(uint64_t cikti, uint64_t a2, uint64_t a3, uint64_t a4) {
+    (void)a2; (void)a3; (void)a4;
+    sys_zaman_t z;
+    if (rtc_oku(&z) != 0) return (uint64_t)-1;
+    return kullaniciya_atomik_yaz(cikti, &z, sizeof(z)) == 0 ? 0 : (uint64_t)-1;
+}
+
+/* --- 1.4.9: KERVAN v2 --- */
+static uint64_t sys_kervan_liste_impl(uint64_t cikti, uint64_t azami, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    if (azami == 0) return 0;
+    if (azami > 24) azami = 24;
+    kervan2_oge_t *t = (kervan2_oge_t *)kmalloc(sizeof(kervan2_oge_t) * 24);
+    if (!t) return (uint64_t)-1;
+    int n = kervan2_liste(t, (int)azami);
+    uint64_t r = (uint64_t)n;
+    if (n > 0 && kullaniciya_atomik_yaz(cikti, t, (uint64_t)n * sizeof(kervan2_oge_t)) != 0) r = (uint64_t)-1;
+    kfree(t);
+    return r;
+}
+static uint64_t kervan_ortak(uint64_t ad_p, uint64_t neden_p, int kur) {
+    char ad[32], neden[64];
+    neden[0] = 0;
+    if (kullanici_dize_kopyala(ad_p, ad, sizeof(ad)) < 0) return (uint64_t)-1;
+    int r = kur ? kervan2_kur(ad, neden) : kervan2_kaldir(ad, neden);
+    neden[63] = 0;
+    if (neden_p) kullaniciya_atomik_yaz(neden_p, neden, sizeof(neden));
+    return (uint64_t)(int64_t)r;
+}
+static uint64_t sys_kervan_kur_impl(uint64_t a, uint64_t n, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4; return kervan_ortak(a, n, 1);
+}
+static uint64_t sys_kervan_kaldir_impl(uint64_t a, uint64_t n, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4; return kervan_ortak(a, n, 0);
+}
+
+/* =====================================================================
+ * 1.4.7 — SYSCALL POLITIKA TABLOSU (TORE / KUT)
+ *
+ * Her cagri icin BILINCLI bir karar yazilir: gerekli TORE yetenegi ya da
+ * SERBEST. Politikasi YAZILMAMIS cagri (tanimli=0) REDDEDILIR: VARSAYILAN
+ * IZIN YOKTUR. Eskiden 36 cagridan yalniz 3'u (mkdir, write_file,
+ * proc_liste) yetki denetliyordu; digerleri (dosya ac/oku, heap, IPC,
+ * pencere, klavye, ses, tema...) HERKESE acikti.
+ *
+ * Kapi Ring3 cagirana uygulanir (task->kullanici): Ring3 programi AÇIK
+ * profilini ring3_hazirla ile alir (ring3.c). Ring3'e hic gecmemis
+ * cekirdek gorevi Ring0'da calisir (kendi syscall katmanini dogrudan
+ * cagirir: iskence sinamalari isaretci dogrulamasini boyle sinar); ona
+ * yetki kapisi anlamsizdir.
+ *
+ * Isaretci dogrulamasi ve NESNE SAHIPLIGI (dosya taniticisi, pencere,
+ * IPC portu) cagrinin kendi icinde yapilir; tablo bunlari belgeler.
+ * Tam tablo: docs/FD-YETKILENDIRME.md.
+ * ===================================================================== */
+#define SERBEST 0u
+typedef struct {
+    uint32_t    yetenek;     /* gerekli KUT biti; SERBEST = herkes */
+    uint8_t     tanimli;     /* politika bilincli yazildi mi (0: RED) */
+    const char *ad;          /* ret kaydinda */
+} sc_politika_t;
+
+static const sc_politika_t sc_politika[SYS_MAX] = {
+    [SYS_WRITE]        = { KUT_EKRAN,      1, "konsol yaz" },
+    [SYS_GETPID]       = { SERBEST,        1, "getpid" },
+    [SYS_YIELD]        = { SERBEST,        1, "yield" },
+    [SYS_SLEEP]        = { SERBEST,        1, "uyu" },
+    [SYS_RING3_PROOF]  = { KUT_TANI,       1, "ring3 kaniti" },
+    [SYS_EXIT]         = { SERBEST,        1, "cik" },
+    [SYS_OPEN]         = { KUT_DISK_READ,  1, "dosya ac" },
+    [SYS_READ]         = { KUT_DISK_READ,  1, "dosya oku" },
+    [SYS_CLOSE]        = { KUT_DISK_READ,  1, "dosya kapat" },
+    [SYS_SBRK]         = { KUT_MEM_ALLOC,  1, "heap buyut" },
+    [SYS_READKEY]      = { KUT_KLAVYE,     1, "tus oku" },
+    [SYS_LISTDIR]      = { KUT_DISK_READ,  1, "dizin listele" },
+    [SYS_PUTPIXEL]     = { KUT_EKRAN,      1, "piksel" },
+    [SYS_TICKS]        = { SERBEST,        1, "tik" },
+    [SYS_PENCERE_AC]   = { KUT_EKRAN,      1, "pencere ac" },
+    [SYS_PEN_DOLDUR]   = { KUT_EKRAN,      1, "pencere doldur" },
+    [SYS_PEN_YAZI]     = { KUT_EKRAN,      1, "pencere yazi" },
+    [SYS_PEN_DIK]      = { KUT_EKRAN,      1, "pencere dikdortgen" },
+    [SYS_PEN_KAPAT]    = { KUT_EKRAN,      1, "pencere kapat" },
+    [SYS_SERVIS_LISTE] = { KUT_SISTEM,     1, "servis listele" },
+    [SYS_IPC_ACS]      = { KUT_IPC,        1, "ipc port ac" },
+    [SYS_IPC_BUL]      = { KUT_IPC,        1, "ipc port bul" },
+    [SYS_IPC_GONDER]   = { KUT_IPC,        1, "ipc gonder" },
+    [SYS_IPC_AL]       = { KUT_IPC,        1, "ipc al" },
+    [SYS_SISTEM_BIL]   = { KUT_SISTEM,     1, "sistem bilgisi" },
+    [SYS_WRITE_FILE]   = { KUT_DISK_WRITE, 1, "dosya yaz" },
+    [SYS_STAT]         = { KUT_DISK_READ,  1, "dosya bilgisi" },
+    [SYS_MKDIR]        = { KUT_DISK_WRITE, 1, "dizin olustur" },
+    [SYS_YETKI]        = { SERBEST,        1, "kendi yetkisini sor" },
+    [SYS_PROC_LISTE]   = { KUT_PROC_CREATE,1, "surec listele" },
+    [SYS_PEN_SUN]      = { KUT_EKRAN,      1, "pencere birlestir" },
+    [SYS_PEN_OLAY]     = { KUT_KLAVYE,     1, "pencere olayi" },
+    [SYS_SES_NOTA]     = { KUT_SES,        1, "ses tonu" },
+    [SYS_OZAN_SOYLE]   = { KUT_SES,        1, "ozan soyle" },
+    [SYS_TEMA]         = { KUT_AYAR,       1, "tema degistir" },
+    [SYS_DEDE_KONUS]   = { KUT_SES,        1, "dede konus" },
+    [SYS_TEMA_BIL]     = { KUT_SISTEM,     1, "tema adlari (salt okunur)" },
+    [SYS_AG_COZ]       = { KUT_NET_SEND,   1, "ad cozumle (DNS sorusu gider)" },
+    [SYS_AG_BAGLAN]    = { KUT_NET_SEND,   1, "TCP baglan" },
+    [SYS_AG_GONDER]    = { KUT_NET_SEND,   1, "TCP gonder" },
+    [SYS_AG_AL]        = { KUT_NET_RECV,   1, "TCP al" },
+    [SYS_AG_KAPAT]     = { KUT_NET_SEND,   1, "TCP kapat" },
+    [SYS_AG_BILGI]     = { KUT_SISTEM,     1, "ag durumu (salt okunur)" },
+    [SYS_RASTGELE]     = { SERBEST,        1, "donanim rastgele sayilari" },
+    [SYS_ZAMAN]        = { SERBEST,        1, "gercek saat (salt okunur)" },
+    [SYS_KERVAN_LISTE] = { KUT_KERVAN,     1, "paketleri listele (dogrulayarak)" },
+    [SYS_KERVAN_KUR]   = { KUT_KERVAN,     1, "imzali paket kur" },
+    [SYS_KERVAN_KALDIR]= { KUT_KERVAN,     1, "paket kaldir" },
+    [SYS_AG_BAGLANTILAR]={ KUT_SISTEM,     1, "TCP baglanti listesi" },
+    [SYS_GUVENLIK_BILGI]={ KUT_SISTEM,     1, "guvenlik durumu (salt okunur)" },
+    [SYS_ASENA_DENETLE]= { KUT_SISTEM,     1, "disk denetimi (salt okunur)" },
+    [SYS_ASENA_ONAR]   = { KUT_KURTARMA,   1, "disk onarimi / dosya kurtarma" },
+    [SYS_ERGENEKON]    = { KUT_KURTARMA,   1, "yeniden kurulum" },
+    [SYS_TAMGA_BILGI]  = { KUT_SISTEM,     1, "kimlik bilgisi (salt okunur)" },
+    [SYS_DOSYA_EKLE]   = { KUT_DISK_WRITE, 1, "dosya sonuna ekle" },
+    [SYS_DOSYA_SIL]    = { KUT_DISK_WRITE, 1, "dosya / bos dizin sil" },
+    [SYS_KERVAN_YUKLE] = { KUT_KERVAN,     1, "indirilen imzali paketi kur" },
+};
+
+/* --- 1.4.9: ULAK / TORE / TIMUR / KUT uygulamalari (salt okunur) --- */
+static uint64_t sys_ag_baglantilar_impl(uint64_t cikti, uint64_t azami, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    if (azami > 16) azami = 16;
+    sys_tcp_ozet_t t[16];
+    uint64_t n = 0;
+    for (; n < azami; n++) {
+        int durum, sahipli;
+        sys_tcp_ozet_t *o = &t[n];
+        o->b1 = o->b2 = 0;
+        if (tcp_ozet((int)n, o->ip, &o->yerel, &o->uzak, &durum, &sahipli, &o->alinan, &o->gonderilen, &o->yeniden) != 0) break;
+        o->durum = (uint8_t)durum; o->sahipli = (uint8_t)sahipli;
+    }
+    if (n && kullaniciya_atomik_yaz(cikti, t, n * sizeof(sys_tcp_ozet_t)) != 0) return (uint64_t)-1;
+    return n;
+}
+
+static uint64_t oku_cr4(void) { uint64_t v; __asm__ volatile ("mov %%cr4, %0" : "=r"(v)); return v; }
+
+
+/* ===================== 1.4.9: ASENA, ERGENEKON, TAMGA ===================== */
+static uint64_t sys_asena_denetle_impl(uint64_t tur, uint64_t sira, uint64_t cikti, uint64_t a4) {
+    (void)a4;
+    if (tur == 0) {
+        asena_rapor_t r;
+        if (asena_tara(0, &r) != 0 && r.hata == 0) return (uint64_t)-1;
+        return kullaniciya_atomik_yaz(cikti, &r, sizeof r) == 0 ? 0 : (uint64_t)-1;
+    }
+    if (tur == 1) {
+        asena_bulgu_t b;
+        if (asena_bulgu((int)sira, &b) != 0) return (uint64_t)-1;
+        return kullaniciya_atomik_yaz(cikti, &b, sizeof b) == 0 ? 0 : (uint64_t)-1;
+    }
+    if (tur == 2) {
+        ergenekon_dosya_t d;
+        if (sira > 1024 || ergenekon_dosya((int)sira, &d) != 0) return (uint64_t)-1;
+        return kullaniciya_atomik_yaz(cikti, &d, sizeof d) == 0 ? 0 : (uint64_t)-1;
+    }
+    return (uint64_t)-1;
+}
+
+static uint64_t sys_asena_onar_impl(uint64_t tur, uint64_t ad_p, uint64_t cikti, uint64_t onay) {
+    /* diske yazan cagri: acik onay sozcugu ve cikti yeri SART (butun
+     * argumanlari 0 olan bir cagri - ISKENCE sinamasi boyle cagirir -
+     * hicbir sey yazmamali) */
+    if (onay != SYS_ONAY || cikti == 0) return (uint64_t)-1;
+    if (tur == 0) {
+        asena_rapor_t r;
+        asena_tara(1, &r);
+        return kullaniciya_atomik_yaz(cikti, &r, sizeof r) == 0 ? (r.hata ? (uint64_t)-1 : 0) : (uint64_t)-1;
+    }
+    if (tur == 1) {
+        char ad[16], neden[64];
+        if (kullanici_dize_kopyala(ad_p, ad, 13) < 0) return (uint64_t)-1;
+        int r = ergenekon_dosya_kurtar(ad, neden);
+        if (kullaniciya_atomik_yaz(cikti, neden, sizeof neden) != 0) return (uint64_t)-1;
+        return (uint64_t)(int64_t)r;
+    }
+    return (uint64_t)-1;
+}
+
+static uint64_t sys_ergenekon_impl(uint64_t islem, uint64_t cikti, uint64_t onay, uint64_t a4) {
+    (void)a4;
+    if (cikti == 0) return (uint64_t)-1;
+    if (islem != 0 && onay != SYS_ONAY) return (uint64_t)-1;   /* yikici islemler onay ister */
+    ergenekon_durum_t d;
+    int r;
+    switch (islem) {
+    case 0: r = ergenekon_durum(&d); break;
+    case 1: r = ergenekon_yenile(&d); break;
+    case 2: r = ergenekon_sifirdan(&d); break;
+    case 3: ergenekon_yeniden_baslat();
+    default: return (uint64_t)-1;
+    }
+    if (kullaniciya_atomik_yaz(cikti, &d, sizeof d) != 0) return (uint64_t)-1;
+    return (uint64_t)(int64_t)r;
+}
+
+extern const char cekirdek_metin_bas[], cekirdek_metin_son[], cekirdek_salt_bas[], cekirdek_salt_son[];
+static uint64_t sys_tamga_bilgi_impl(uint64_t tur, uint64_t sira, uint64_t cikti, uint64_t a4) {
+    (void)a4;
+    sys_tamga_t t;
+    for (unsigned i = 0; i < sizeof t; i++) ((uint8_t *)&t)[i] = 0;
+    br_sha256_context h;
+    if (tur == TB_ANAHTAR && sira < 2) {
+        const uint8_t *a = sira == 0 ? KERVAN_ANAHTAR_0 : KERVAN_ANAHTAR_1;
+        for (int i = 0; i < 65; i++) t.anahtar[i] = a[i];
+        br_sha256_init(&h); br_sha256_update(&h, a, 65); br_sha256_out(&h, t.ozet);
+        t.gecerli = (uint8_t)(sira == 0 ? 1 : OTUKEN_TANI_MODU);
+    } else if (tur == TB_CEKIRDEK && sira == 0) {
+        uint64_t mb = (uint64_t)(cekirdek_metin_son - cekirdek_metin_bas);
+        uint64_t sb = (uint64_t)(cekirdek_salt_son - cekirdek_salt_bas);
+        br_sha256_init(&h);
+        br_sha256_update(&h, cekirdek_metin_bas, mb);
+        br_sha256_update(&h, cekirdek_salt_bas, sb);
+        br_sha256_out(&h, t.ozet);
+        t.boy = (uint32_t)(mb + sb);
+        t.gecerli = 1;
+    } else return (uint64_t)-1;
+    return kullaniciya_atomik_yaz(cikti, &t, sizeof t) == 0 ? 0 : (uint64_t)-1;
+}
+
+static uint64_t sys_guvenlik_bilgi_impl(uint64_t tur, uint64_t sira, uint64_t cikti, uint64_t a4) {
+    (void)a4;
+    sys_guvenlik_t g;
+    for (unsigned i = 0; i < sizeof g; i++) g.ham[i] = 0;
+    int ok = 0;
+    switch (tur) {
+    case GB_POLITIKA:
+        if (sira < SYS_MAX) {
+            const sc_politika_t *p = &sc_politika[sira];
+            g.politika.no = (int32_t)sira;
+            g.politika.yetki = (!p->tanimli || !syscall_table[sira]) ? -1 : (int32_t)p->yetenek;
+            const char *a = p->tanimli ? p->ad : "(tanimsiz)";
+            for (int i = 0; a && a[i] && i < 39; i++) g.politika.ad[i] = a[i];
+            ok = 1;
+        }
+        break;
+    case GB_GOREV: {
+        uint32_t id, durum, kb;
+        char ad[16];
+        if (sira < 0xFFFFFFFFULL && scheduler_gorev_bilgi((uint32_t)sira, &id, ad, &durum, &kb) == 0) {
+            g.gorev.id = id; g.gorev.durum = (uint8_t)durum;
+            g.gorev.kayitli = (uint8_t)tore_kayit_var_mi(id);
+            g.gorev.yetki = g.gorev.kayitli ? tore_get_capabilities(id) : 0;
+            int k = scheduler_gorev_kullanici((uint32_t)sira);
+            g.gorev.kullanici = (uint8_t)(k > 0);
+            const kut_user_t *u = kut_owner_of(id);
+            g.gorev.uid = u ? u->uid : 0;
+            for (int i = 0; i < 16; i++) g.gorev.ad[i] = ad[i];
+            g.gorev.ad[15] = 0;
+            ok = 1;
+        }
+        break;
+    }
+    case GB_YETKI_ADI:
+        if (sira < KUT_YETKI_SAYISI) {
+            const char *a = tore_capability_name((kut_capability_t)(1u << sira));
+            for (int i = 0; a && a[i] && i < 23; i++) g.yetki_adi.ad[i] = a[i];
+            ok = 1;
+        }
+        break;
+    case GB_TIMUR:
+        if (sira == 0) {
+            uint32_t ea, eb, ec, ed;
+            __asm__ volatile ("cpuid" : "=a"(ea), "=b"(eb), "=c"(ec), "=d"(ed) : "a"(7), "c"(0));
+            uint64_t cr4 = oku_cr4();
+            g.timur.nx_destek = (uint8_t)timur_nx_available();
+            g.timur.nx_acik = (uint8_t)((rdmsr(0xC0000080) >> 11) & 1);
+            g.timur.smep_destek = (uint8_t)((eb >> 7) & 1);
+            g.timur.smap_destek = (uint8_t)((eb >> 20) & 1);
+            g.timur.smep_acik = (uint8_t)((cr4 >> 20) & 1);
+            g.timur.smap_acik = (uint8_t)((cr4 >> 21) & 1);
+            if (rng_turu < 0) rng_bul();
+            g.timur.rng = (uint8_t)rng_turu;
+            g.timur.rtc = (uint8_t)zaman_var();
+            g.timur.reddedilen = tore_denied_count();
+            g.timur.politikasiz = (uint32_t)syscall_politikasiz_sayisi();
+            g.timur.kervan_kurulu = (uint32_t)kervan2_kurulu_sayisi();
+            g.timur.cagri_sayisi = SYS_MAX;
+            { uint64_t cr0; __asm__ volatile ("mov %%cr0, %0" : "=r"(cr0)); g.timur.wp = (uint32_t)((cr0 >> 16) & 1); }
+            uint32_t r3 = 0;
+            for (uint32_t i = 0; i < 256; i++) { int k = scheduler_gorev_kullanici(i); if (k < 0) break; r3 += (k > 0); }
+            g.timur.ring3_gorev = r3;
+            ok = 1;
+        }
+        break;
+    case GB_KULLANICI: {
+        kut_user_t u;
+        if (sira < 64 && kut_kullanici_al((int)sira, &u) == 0) {
+            g.kullanici.uid = u.uid; g.kullanici.rol = (uint32_t)u.rol;
+            for (int i = 0; i < 15 && u.name[i]; i++) g.kullanici.ad[i] = u.name[i];
+            const char *r = kut_rol_name(u.rol);
+            for (int i = 0; i < 15 && r[i]; i++) g.kullanici.rol_ad[i] = r[i];
+            ok = 1;
+        }
+        break;
+    }
+    case GB_KUT_BAG:
+        if (sira < 64 && kut_bag_al((int)sira, &g.bag.pid, &g.bag.uid) == 0) ok = 1;
+        break;
+    default: break;
+    }
+    if (!ok) return (uint64_t)-1;
+    return kullaniciya_atomik_yaz(cikti, &g, sizeof g) == 0 ? 0 : (uint64_t)-1;
+}
+
+/* Politika kapisi: Ring3 cagiraninin yetkisi var mi (tek karar noktasi). */
+static int sc_izinli(uint64_t num) {
+    const sc_politika_t *p = &sc_politika[num];
+    if (!p->tanimli) {
+        log_write_num(LOG_UYARI, "SYSCALL", "politikasi olmayan cagri reddedildi", num);
+        return 0;
+    }
+    if (p->yetenek == SERBEST) return 1;
+    task_t *t = scheduler_current_task();
+    if (!t || !t->kullanici) return 1;           /* Ring0 cekirdek gorevi */
+    return tore_check((uint32_t)t->id, (kut_capability_t)p->yetenek, p->ad);
+}
+
+/* Sinama/denetim: kayitli olup politikasi yazilmamis cagri sayisi (0 olmali). */
+int syscall_politikasiz_sayisi(void) {
+    int n = 0;
+    for (int i = 0; i < SYS_MAX; i++)
+        if (syscall_table[i] && !sc_politika[i].tanimli) n++;
+    return n;
+}
+
+/* Sinama: politikadaki cagri adi (tanimsizsa 0) */
+const char *syscall_politika_adi(uint64_t num) {
+    return (num < SYS_MAX && sc_politika[num].tanimli) ? sc_politika[num].ad : 0;
+}
+
+/* Sinama: bir cagrinin gerektirdigi yetenek (SERBEST=0); politikasizsa -1. */
+int64_t syscall_gereken_yetki(uint64_t num) {
+    if (num >= SYS_MAX || !sc_politika[num].tanimli) return -1;
+    return (int64_t)sc_politika[num].yetenek;
 }
 
 uint64_t syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
@@ -719,7 +1368,29 @@ uint64_t syscall_dispatch(uint64_t num, uint64_t a1, uint64_t a2, uint64_t a3, u
         log_write_num(LOG_UYARI, "SYSCALL", "gecersiz cagri no", num);
         return (uint64_t)-1;
     }
+    if (!sc_izinli(num)) return (uint64_t)-1;
     return syscall_table[num](a1, a2, a3, a4);
+}
+
+/* SMP adim 5: SYSCALL MSR'leri CEKIRDEK-BASINADIR. Eskiden yalniz
+ * BSP'de, AP'ler uyandiktan SONRA kuruluyordu; AP'ye dusen bir Ring3
+ * gorevinin ilk 'syscall' komutu #UD veriyordu (EFER.SCE=0). Her
+ * cekirdek zamanlayiciya katilmadan once bunu cagirir. */
+void syscall_msr_kur(void) {
+    uint64_t efer = rdmsr(MSR_EFER);
+    efer |= 1ULL; /* SCE (System Call Extensions) biti */
+    wrmsr(MSR_EFER, efer);
+
+    /* STAR[47:32]=0x08 -> SYSCALL: CS=0x08(kernel kod), SS=0x08+8=0x10(kernel veri)
+     * STAR[63:48]=0x18 -> SYSRET:  SS=0x18+8=0x20(kullanici veri),
+     *                              CS=0x18+16=0x28(kullanici 64-bit kod)
+     * (bkz. boot.asm gdt64 - bu offsetler icin ozel olarak duzenlendi) */
+    uint64_t star = (0x18ULL << 48) | (0x08ULL << 32);
+    wrmsr(MSR_STAR, star);
+    wrmsr(MSR_LSTAR, (uint64_t)(uintptr_t)syscall_entry);
+    /* SYSCALL sirasinda IF (bit9) kapatilsin; 1.4.9: AC (bit18, SMAP'i
+     * delerdi: kullanici popf ile AC=1 yapip cekirdege girebilirdi) ve DF de */
+    wrmsr(MSR_FMASK, 0x200 | 0x400 | 0x40000);
 }
 
 void syscall_init(void) {
@@ -743,16 +1414,38 @@ void syscall_init(void) {
     syscall_table[SYS_IPC_GONDER]  = sys_ipc_gonder_impl;
     syscall_table[SYS_IPC_AL]      = sys_ipc_al_impl;
     syscall_table[SYS_SISTEM_BIL]  = sys_sistem_bil_impl;
+    syscall_table[SYS_WRITE_FILE]  = sys_write_file_impl;
     syscall_table[SYS_STAT]        = sys_stat_impl;
     syscall_table[SYS_MKDIR]       = sys_mkdir_impl;
     syscall_table[SYS_YETKI]       = sys_yetki_impl;
+    syscall_table[SYS_PROC_LISTE]  = sys_proc_liste_impl;
     syscall_table[SYS_PEN_SUN]     = sys_pen_sun_impl;
     syscall_table[SYS_PEN_OLAY]    = sys_pen_olay_impl;
     syscall_table[SYS_SES_NOTA]    = sys_ses_nota_impl;
     syscall_table[SYS_OZAN_SOYLE]  = sys_ozan_soyle_impl;
     syscall_table[SYS_TEMA]        = sys_tema_impl;
     syscall_table[SYS_DEDE_KONUS]  = sys_dede_konus_impl;
-    syscall_table[SYS_SES_VAR]     = sys_ses_var_impl;
+    syscall_table[SYS_TEMA_BIL]    = sys_tema_bil_impl;
+    syscall_table[SYS_AG_COZ]      = sys_ag_coz_impl;
+    syscall_table[SYS_AG_BAGLAN]   = sys_ag_baglan_impl;
+    syscall_table[SYS_AG_GONDER]   = sys_ag_gonder_impl;
+    syscall_table[SYS_AG_AL]       = sys_ag_al_impl;
+    syscall_table[SYS_AG_KAPAT]    = sys_ag_kapat_impl;
+    syscall_table[SYS_AG_BILGI]    = sys_ag_bilgi_impl;
+    syscall_table[SYS_RASTGELE]    = sys_rastgele_impl;
+    syscall_table[SYS_ZAMAN]       = sys_zaman_impl;
+    syscall_table[SYS_KERVAN_LISTE]= sys_kervan_liste_impl;
+    syscall_table[SYS_KERVAN_KUR]  = sys_kervan_kur_impl;
+    syscall_table[SYS_KERVAN_KALDIR]= sys_kervan_kaldir_impl;
+    syscall_table[SYS_AG_BAGLANTILAR]= sys_ag_baglantilar_impl;
+    syscall_table[SYS_GUVENLIK_BILGI]= sys_guvenlik_bilgi_impl;
+    syscall_table[SYS_ASENA_DENETLE] = sys_asena_denetle_impl;
+    syscall_table[SYS_ASENA_ONAR]    = sys_asena_onar_impl;
+    syscall_table[SYS_ERGENEKON]     = sys_ergenekon_impl;
+    syscall_table[SYS_TAMGA_BILGI]   = sys_tamga_bilgi_impl;
+    syscall_table[SYS_DOSYA_EKLE]    = sys_dosya_ekle_impl;
+    syscall_table[SYS_DOSYA_SIL]     = sys_dosya_sil_impl;
+    syscall_table[SYS_KERVAN_YUKLE]  = sys_kervan_yukle_impl;
     syscall_table[SYS_PENCERE_AC]  = sys_pencere_ac_impl;
     syscall_table[SYS_PEN_DOLDUR]  = sys_pen_doldur_impl;
     syscall_table[SYS_PEN_YAZI]    = sys_pen_yazi_impl;
@@ -760,19 +1453,15 @@ void syscall_init(void) {
     syscall_table[SYS_PEN_KAPAT]   = sys_pen_kapat_impl;
     syscall_table[SYS_SERVIS_LISTE]= sys_servis_liste_impl;
 
-    uint64_t efer = rdmsr(MSR_EFER);
-    efer |= 1ULL; /* SCE (System Call Extensions) biti */
-    wrmsr(MSR_EFER, efer);
+    syscall_msr_kur();
 
-    /* STAR[47:32]=0x08 -> SYSCALL: CS=0x08(kernel kod), SS=0x08+8=0x10(kernel veri)
-     * STAR[63:48]=0x18 -> SYSRET:  SS=0x18+8=0x20(kullanici veri),
-     *                              CS=0x18+16=0x28(kullanici 64-bit kod)
-     * (bkz. boot.asm gdt64 - bu offsetler icin ozel olarak duzenlendi) */
-    uint64_t star = (0x18ULL << 48) | (0x08ULL << 32);
-    wrmsr(MSR_STAR, star);
-    wrmsr(MSR_LSTAR, (uint64_t)(uintptr_t)syscall_entry);
-    wrmsr(MSR_FMASK, 0x200); /* SYSCALL sirasinda IF (bit9) kapatilsin */
 
     serial_write("syscall: SYSCALL/SYSRET mekanizmasi kuruldu "
                  "(STAR/LSTAR/FMASK/EFER.SCE), 19 syscall kayitli\n");
 }
+
+_Static_assert(SC_TAMPON_BOYUT >= 4096, "read/write_file tamponu");
+_Static_assert(SC_TAMPON_BOYUT >= YAZ_AZAMI, "write_file");
+_Static_assert(SC_TAMPON_BOYUT >= 16 * sizeof(sys_dirent_t), "listdir");
+_Static_assert(SC_TAMPON_BOYUT >= 16 * sizeof(sys_servis_t), "servis");
+_Static_assert(SC_TAMPON_BOYUT >= sizeof(ipc_message_t), "ipc_al");

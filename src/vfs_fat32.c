@@ -1,4 +1,5 @@
 #include "fat32.h"
+#include "vfs_fat32.h"
 #include "vfs.h"
 #include "serial.h"
 #define ADAPTER_MAX_FILES 16

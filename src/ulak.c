@@ -1,4 +1,23 @@
 #include "ulak.h"
+#include "cpu.h"
+#include "serial.h"
+#include "ag.h"
+
+/* 1.4.9: ULAK/TCP/soket/DNS artik ag_kilit ile korunur (bkz. ag.h).
+ * Eskiden kilitsizdi ve yalniz BSP'deki ana dongu dokunuyordu; Ring3 ag
+ * cagrilari herhangi bir cekirdekten gelir. Donanima dokunan iki giris
+ * (ulak_poll, ulak_send_frame) kilidi alir; ozyineli oldugu icin ust
+ * katmanlarin (TCP, DNS) aldigi kilidin icinden de cagrilabilir. */
+#define KILIT   ozspin_al(&ag_kilit)
+#define BIRAK   ozspin_birak(&ag_kilit)
+
+/* Paket basina seri gunluk: acilista ilk paketler (tani), sonra sessiz.
+ * Her pakette seri yazmak (115200 bod) sayfa indirmeyi olduruyordu. */
+static uint32_t ayrinti_kalan = 48;
+#ifdef OTUKEN_AG_KAYIP
+static uint32_t ag_kayip_sayisi = 0;
+uint32_t ulak_kayip_sayisi(void) { return ag_kayip_sayisi; }
+#endif
 #include "pci.h"
 #include "vmm.h"
 #include "pmm.h"
@@ -54,7 +73,7 @@
 #define TXD_STAT_DD    (1 << 0)
 #define RXD_STAT_DD    (1 << 0)
 
-#define NUM_RX_DESC 16
+#define NUM_RX_DESC 64     /* 1.4.9: 16 -> 64 (tik basina yoklamada tasma) */
 #define NUM_TX_DESC 16
 #define RX_BUF_SIZE 2048
 
@@ -292,7 +311,7 @@ int ulak_init(void) {
     tx_ring = (volatile tx_desc_t *)tx_ring_virt;
 
     for (int i = 0; i < NUM_TX_DESC; i++) {
-        if (alloc_dma_page(ULAK_RING_VIRT + 0x30000 + (uint64_t)i * 4096,
+        if (alloc_dma_page(ULAK_RING_VIRT + 0x60000 + (uint64_t)i * 4096,
                             &tx_buf_phys[i], &tx_buffers[i]) != 0) {
             serial_write("ULAK: TX tamponu ayrilamadi\n");
             return -1;
@@ -314,8 +333,8 @@ int ulak_init(void) {
     return 0;
 }
 
-int ulak_send_frame(const uint8_t *data, uint16_t len) {
-    if (len > RX_BUF_SIZE) return -1;
+static int ulak_send_frame__ic(const uint8_t *data, uint16_t len) {
+    if (!tx_ring || len > RX_BUF_SIZE) return -1;
 
     uint32_t i = tx_cur;
     for (uint16_t k = 0; k < len; k++) tx_buffers[i][k] = data[k];
@@ -336,6 +355,13 @@ int ulak_send_frame(const uint8_t *data, uint16_t len) {
     }
     serial_write("ULAK: TX zaman asimi\n");
     return -1;
+}
+
+int ulak_send_frame(const uint8_t *data, uint16_t len) {
+    KILIT;
+    int r = ulak_send_frame__ic(data, len);
+    BIRAK;
+    return r;
 }
 
 /* ---- protokol katmanlari ---- */
@@ -377,10 +403,26 @@ int ulak_send_ipv4(const uint8_t dest_ip[4], uint8_t protocol,
     /* Hedef MAC'i ARP onbelleginden coz; yoksa ARP istegi gonderip
      * (bu paket icin) yayina dus - bir sonraki gonderimde onbellekte
      * hazir olacak. */
+    /* 1.4.9: YONLENDIRME. Alt ag disindaki hedefe (internet) cerceve ag
+     * gecidinin MAC'ine gider; eskiden hedef IP'nin kendisi ARP'laniyordu
+     * ve alt ag disina hicbir paket cikamiyordu (DNS sunucusu ayni alt
+     * agda oldugu icin fark edilmemisti). */
+    const dhcp_config_t *dc = dhcp_get_config();
+    const uint8_t *sonraki = dest_ip;
+    if (dc && dc->configured) {
+        int ayni = 1;
+        for (int i = 0; i < 4; i++)
+            if ((dest_ip[i] & dc->netmask[i]) != (state.ip[i] & dc->netmask[i])) ayni = 0;
+        int yayin = dest_ip[0] == 255 && dest_ip[1] == 255 && dest_ip[2] == 255 && dest_ip[3] == 255;
+        if (!ayni && !yayin) sonraki = dc->gateway;
+    }
     uint8_t dst_mac[6];
-    if (!arp_cache_get(dest_ip, dst_mac)) {
+    KILIT;
+    int bilinen = arp_cache_get(sonraki, dst_mac);
+    BIRAK;
+    if (!bilinen) {
         for (int i = 0; i < 6; i++) dst_mac[i] = 0xFF;
-        ulak_send_arp_request(dest_ip);
+        ulak_send_arp_request(sonraki);
     }
     for (int i = 0; i < 6; i++) frame[pos++] = dst_mac[i];
     for (int i = 0; i < 6; i++) frame[pos++] = state.mac[i];
@@ -495,28 +537,45 @@ static void handle_ipv4(const uint8_t *pkt, uint16_t len) {
     uint8_t ihl = (uint8_t)((ip[0] & 0x0F) * 4);
     uint8_t proto = ip[9];
     const uint8_t *src_ip = &ip[12];
+    /* Denetim (1.4.6): IHL, IP toplam boyu ve UDP boyu PAKETIN BASLIGINDAN
+     * geliyordu ve cercevenin gercek boyuyla sinanmiyordu: buyuk boy bildiren
+     * bir paket ust katmanlari RX tamponunun disini okumaya goturebilirdi.
+     * Artik hepsi cerceveye (len) kirpilir. */
+    if (ihl < 20 || (uint32_t)14 + ihl > len) return;
+    uint16_t ip_cerceve = (uint16_t)(len - 14);
+    uint16_t ip_bildirilen = ((uint16_t)ip[2] << 8) | ip[3];
+    if (ip_bildirilen < ihl) return;
+    uint16_t ip_boy = ip_bildirilen < ip_cerceve ? ip_bildirilen : ip_cerceve;
 
     state.rx_ipv4++;
+    if (ayrinti_kalan) {
+    ayrinti_kalan--;
     serial_write("ULAK: IPv4 paketi, protokol=");
     serial_write_hex(proto);
     serial_write(" kaynak=");
     for (int i = 0; i < 4; i++) { serial_write_hex(src_ip[i]); if (i<3) serial_write("."); }
     serial_write("\n");
+    }
 
     if (proto == 17) { /* UDP */
+        if ((uint32_t)ihl + 8 > ip_boy) return;      /* UDP basligi cercevede yok */
         const uint8_t *udp = ip + ihl;
         uint16_t sport = ((uint16_t)udp[0] << 8) | udp[1];
         uint16_t dport = ((uint16_t)udp[2] << 8) | udp[3];
         state.rx_udp++;
         uint16_t udp_total = ((uint16_t)udp[4] << 8) | udp[5];
+        uint16_t udp_azami = (uint16_t)(ip_boy - ihl);
+        if (udp_total > udp_azami) udp_total = udp_azami;
         uint16_t payload_len = (udp_total > 8) ? (uint16_t)(udp_total - 8) : 0;
         const uint8_t *udp_payload = udp + 8;
 
-        serial_write("ULAK: UDP paketi, kaynak_port=");
+if (ayrinti_kalan) {
+                serial_write("ULAK: UDP paketi, kaynak_port=");
         serial_write_hex(sport);
         serial_write(" hedef_port=");
         serial_write_hex(dport);
         serial_write("\n");
+        }
 
         /* Asama 29: datagrami ust katmanlara yonlendir */
         if (dport == 68) {
@@ -527,9 +586,18 @@ static void handle_ipv4(const uint8_t *pkt, uint16_t len) {
             socket_deliver_udp(src_ip, sport, dport, udp_payload, payload_len);
         }
     } else if (proto == 6) { /* TCP */
+#ifdef OTUKEN_AG_KAYIP
+        /* Sinama (tests/ag): gelen TCP paketlerinin %N'i dusurulur. Gercek
+         * internetteki kaybi taklit eder: yeniden gonderme ve sira disi
+         * yolu sinanir. Uretim yapisinda bu kod YOKTUR. */
+        {
+            static uint32_t tohum = 12345;
+            tohum = tohum * 1103515245u + 12345u;
+            if (((tohum >> 16) % 100) < (uint32_t)(OTUKEN_AG_KAYIP)) { ag_kayip_sayisi++; return; }
+        }
+#endif
         const uint8_t *tcp_seg = ip + ihl;
-        uint16_t ip_total = ((uint16_t)ip[2] << 8) | ip[3];
-        uint16_t tcp_len = (ip_total > ihl) ? (uint16_t)(ip_total - ihl) : 0;
+        uint16_t tcp_len = (ip_boy > ihl) ? (uint16_t)(ip_boy - ihl) : 0;
         state.rx_tcp++;
         tcp_handle_segment(src_ip, tcp_seg, tcp_len);
     } else if (proto == 1) { /* ICMP */
@@ -539,6 +607,8 @@ static void handle_ipv4(const uint8_t *pkt, uint16_t len) {
 }
 
 int ulak_poll(void) {
+    if (!rx_ring) return 0;             /* kart yok / kurulamadi */
+    KILIT;
     int processed = 0;
 
     while (rx_ring[rx_cur].status & RXD_STAT_DD) {
@@ -559,6 +629,7 @@ int ulak_poll(void) {
         mw32(E1000_RDT, rx_cur);
         rx_cur = (rx_cur + 1) % NUM_RX_DESC;
     }
+    BIRAK;
     return processed;
 }
 

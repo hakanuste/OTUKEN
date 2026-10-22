@@ -6,6 +6,23 @@
 #define MAX_LINE 128
 #define MAX_ARGS 8
 
+/* Satir tamponu: her cikti satiri TEK puts (tek SYS_WRITE) ile yazilir.
+ * Parca parca yazilan satirlar, seri portta diger gorevlerin ciktisiyla
+ * bolunuyordu ("Surec kimligi (PID): [ThreadE] ..."). */
+typedef struct { char b[192]; int n; } satir_u;
+static void s_bas(satir_u *s) { s->n = 0; s->b[0] = 0; }
+static void s_ekle(satir_u *s, const char *t) {
+    while (*t && s->n < (int)sizeof(s->b) - 1) s->b[s->n++] = *t++;
+    s->b[s->n] = 0;
+}
+static void s_sayi(satir_u *s, uint64_u v) {
+    char t[24]; int i = 0;
+    do { t[i++] = (char)('0' + v % 10); v /= 10; } while (v && i < 23);
+    while (i-- > 0 && s->n < (int)sizeof(s->b) - 1) s->b[s->n++] = t[i];
+    s->b[s->n] = 0;
+}
+static void s_yaz(satir_u *s) { puts(s->b); }
+
 static void cmd_yardim(void) {
     puts("OTUKEN Kabugu - kullanilabilir komutlar:\n");
     puts("  yardim         bu listeyi goster\n");
@@ -15,7 +32,7 @@ static void cmd_yardim(void) {
     puts("  saat           zamanlayici tik sayisini goster\n");
     puts("  bellek         userland bellek ayirma sinamasi\n");
     puts("  ciz            ekrana renkli bir sekil ciz\n");
-    puts("  umay <soru>    UMAY'a IPC ile soru sor (durum/bellek/gorev/zaman/dosya)\n");
+    puts("  umay <soru>    UMAY'a IPC ile soru sor (ornek: umay durum)\n");
     puts("  pencere        ULGEN penceresi acan GUI uygulamasi\n");
     puts("  servisler      calisan sistem servislerini listele\n");
     puts("  yankila <söz>  verilen sozu geri yazdir\n");
@@ -25,29 +42,26 @@ static void cmd_yardim(void) {
 static void cmd_listele(const char *path) {
     dirent_u entries[16];
     int n = listdir(path, entries, 16);
+    satir_u s;
     if (n < 0) {
-        puts("HATA: dizin okunamadi: ");
-        puts(path);
-        puts("\n");
+        s_bas(&s); s_ekle(&s, "HATA: dizin okunamadi: "); s_ekle(&s, path); s_ekle(&s, "\n"); s_yaz(&s);
         return;
     }
-    puts("Dizin: "); puts(path); puts("\n");
+    s_bas(&s); s_ekle(&s, "Dizin: "); s_ekle(&s, path); s_ekle(&s, "\n"); s_yaz(&s);
     for (int i = 0; i < n; i++) {
-        puts("  ");
-        puts(entries[i].name);
-        puts("  ");
-        print_dec(entries[i].size);
-        puts(" bayt");
-        if (entries[i].is_dir) puts(" [dizin]");
-        puts("\n");
+        s_bas(&s);
+        s_ekle(&s, "  "); s_ekle(&s, entries[i].name); s_ekle(&s, "  ");
+        s_sayi(&s, entries[i].size); s_ekle(&s, " bayt");
+        if (entries[i].is_dir) s_ekle(&s, " [dizin]");
+        s_ekle(&s, "\n"); s_yaz(&s);
     }
-    puts("Toplam: "); print_dec((uint64_u)n); puts(" girdi\n");
+    s_bas(&s); s_ekle(&s, "Toplam: "); s_sayi(&s, (uint64_u)n); s_ekle(&s, " girdi\n"); s_yaz(&s);
 }
 
 static void cmd_goster(const char *path) {
     int fd = open(path);
     if (fd < 0) {
-        puts("HATA: dosya acilamadi: "); puts(path); puts("\n");
+        satir_u e; s_bas(&e); s_ekle(&e, "HATA: dosya acilamadi: "); s_ekle(&e, path); s_ekle(&e, "\n"); s_yaz(&e);
         return;
     }
     char buf[65];
@@ -60,7 +74,7 @@ static void cmd_goster(const char *path) {
         total += n;
     }
     close(fd);
-    puts("\n--- "); print_dec((uint64_u)total); puts(" bayt okundu ---\n");
+    satir_u s; s_bas(&s); s_ekle(&s, "\n--- "); s_sayi(&s, (uint64_u)total); s_ekle(&s, " bayt okundu ---\n"); s_yaz(&s);
 }
 
 static void cmd_bellek(void) {
@@ -76,13 +90,14 @@ static void cmd_bellek(void) {
     for (int i = 0; i < 64; i++)  if (a[i] != (char)('A' + (i % 26))) ok = 0;
     for (int i = 0; i < 128; i++) if (b[i] != (char)('a' + (i % 26))) ok = 0;
 
-    puts("  64 ve 128 baytlik bloklar ayrildi, veri butunlugu: ");
-    puts(ok ? "BASARILI\n" : "HATA\n");
+    satir_u s; s_bas(&s);
+    s_ekle(&s, "  64 ve 128 baytlik bloklar ayrildi, veri butunlugu: ");
+    s_ekle(&s, ok ? "BASARILI\n" : "HATA\n"); s_yaz(&s);
 
     free(a);
     char *c = (char *)malloc(64);   /* free edilen blok yeniden kullanilmali */
-    puts("  free sonrasi yeniden ayirma: ");
-    puts((c == a) ? "AYNI BLOK (yeniden kullanim calisiyor)\n" : "farkli blok\n");
+    s_bas(&s); s_ekle(&s, "  free sonrasi yeniden ayirma: ");
+    s_ekle(&s, (c == a) ? "AYNI BLOK (yeniden kullanim calisiyor)\n" : "farkli blok\n"); s_yaz(&s);
     free(b); free(c);
 }
 
@@ -104,7 +119,7 @@ static void cmd_pencere(void) {
     for (int i = 0; i < 5; i++)
         pencere_dikdortgen(w, 12 + i * 46, 100, 40, 30, renkler[i]);
 
-    puts("Pencere acildi (kimlik: "); print_dec((uint64_u)w); puts(")\n");
+    satir_u s; s_bas(&s); s_ekle(&s, "Pencere acildi (kimlik: "); s_sayi(&s, (uint64_u)w); s_ekle(&s, ")\n"); s_yaz(&s);
 }
 
 static void cmd_servisler(void) {
@@ -114,13 +129,10 @@ static void cmd_servisler(void) {
     const char *durumlar[5] = {"DURDU","BASLIYOR","CALISIYOR","COKTU","DEVRE_DISI"};
     puts("Sistem servisleri:\n");
     for (int i = 0; i < n; i++) {
-        puts("  ");
-        puts(sv[i].name);
-        puts("  durum=");
-        puts(sv[i].durum < 5 ? durumlar[sv[i].durum] : "?");
-        puts("  nabiz=");
-        print_dec(sv[i].nabiz);
-        puts("\n");
+        satir_u s; s_bas(&s);
+        s_ekle(&s, "  "); s_ekle(&s, sv[i].name);
+        s_ekle(&s, "  durum="); s_ekle(&s, sv[i].durum < 5 ? durumlar[sv[i].durum] : "?");
+        s_ekle(&s, "  nabiz="); s_sayi(&s, sv[i].nabiz); s_ekle(&s, "\n"); s_yaz(&s);
     }
 }
 
@@ -128,7 +140,29 @@ static void cmd_servisler(void) {
  * Kabuk ve UMAY AYRI kullanici programlaridir; birbirlerini yalnizca
  * IPC port ADIYLA bulur ve mesajlasirlar. Ikisi de cekirdegin parcasi
  * degildir - gercek bir servis mimarisi budur. */
-static void cmd_umay(const char *soru) {
+/* Klavye Turkce harfleri tek baytlik ISO-8859-9 olarak verir (ı=0xFD);
+ * UMAY UTF-8 bekler. Soru yollanmadan once UTF-8'e cevrilir: yoksa
+ * "altı" UMAY'a "altý" olarak gider ve kutuphanede eslesmez. */
+static void latin5_utf8(const char *g, char *c, int azami) {
+    int o = 0;
+    for (const unsigned char *p = (const unsigned char *)g; *p && o < azami - 3; p++) {
+        unsigned int k = *p;
+        if (k < 0x80) { c[o++] = (char)k; continue; }
+        switch (k) {                          /* Latin-5'in Latin-1'den farkli harfleri */
+        case 0xD0: k = 0x011E; break;  case 0xDD: k = 0x0130; break;
+        case 0xDE: k = 0x015E; break;  case 0xF0: k = 0x011F; break;
+        case 0xFD: k = 0x0131; break;  case 0xFE: k = 0x015F; break;
+        default: break;
+        }
+        c[o++] = (char)(0xC0 | (k >> 6));
+        c[o++] = (char)(0x80 | (k & 0x3F));
+    }
+    c[o] = 0;
+}
+
+static void cmd_umay(const char *ham_soru) {
+    char soru[MAX_LINE * 2];
+    latin5_utf8(ham_soru, soru, (int)sizeof soru);
     int hedef = ipc_bul("umay");
     if (hedef < 0) {
         puts("UMAY servisi bulunamadi (henuz baslamamis olabilir)\n");
@@ -137,24 +171,43 @@ static void cmd_umay(const char *soru) {
     int kendi = ipc_bul("kabuk");
     if (kendi < 0) kendi = ipc_ac("kabuk");
 
-    puts("UMAY'a soruluyor: "); puts(soru); puts("\n");
+    satir_u s; s_bas(&s); s_ekle(&s, "UMAY'a soruluyor: "); s_ekle(&s, soru); s_ekle(&s, "\n"); s_yaz(&s);
     if (ipc_gonder(hedef, 1, soru, (uint32_u)strlen(soru)) != 0) {
         puts("HATA: istek gonderilemedi\n");
         return;
     }
 
-    /* Yaniti bekle (en fazla ~3 saniye) */
+    /* Yaniti bekle (en fazla ~20 saniye). UMAY uzun yaniti 96 baytlik
+     * PARCALARA boler: opkod 1 = devami var, 0 = son parca. Hepsi
+     * okunmazsa artan parcalar kuyrukta kalir ve SONRAKI soruya
+     * karisir; bu yuzden son parcaya kadar okunur. */
     ipc_mesaj_u y;
-    for (int bekle = 0; bekle < 150; bekle++) {
+    char yanit[160];
+    uint32_u dolu = 0;
+    int parca = 0;
+    /* UYUM: UMAY'in cevabi cikarim motorundan gecer; yuk altinda (baska
+     * istemciler + agir is) QEMU'da 9 sn'yi buldu. Eski sinir 150 x 2 tik
+     * = 6 sn idi -> 'zaman asimi' deyip yaniti kuyrukta birakiyordu (bir
+     * SONRAKI soruya karisirdi). Sinir 20 sn; parca gelince yenilenir. */
+    for (int bekle = 0; bekle < 500; bekle++) {
         if (kendi >= 0 && ipc_al(kendi, &y) == 1) {
-            char yanit[128];
-            uint32_u n = y.length < 127 ? y.length : 127;
-            for (uint32_u i = 0; i < n; i++) yanit[i] = (char)y.payload[i];
-            yanit[n] = 0;
-            puts("UMAY yaniti: "); puts(yanit); puts("\n");
-            return;
+            for (uint32_u i = 0; i < y.length && dolu < sizeof(yanit) - 1; i++)
+                yanit[dolu++] = (char)y.payload[i];
+            parca++;
+            if (y.opcode == 0) {
+                yanit[dolu] = 0;
+                s_bas(&s); s_ekle(&s, "UMAY yaniti: "); s_ekle(&s, yanit); s_ekle(&s, "\n"); s_yaz(&s);
+                return;
+            }
+            bekle = 0;          /* devami geliyor: sureyi yenile */
+            continue;
         }
         sleep_ticks(2);
+    }
+    if (parca > 0) {
+        yanit[dolu] = 0;
+        s_bas(&s); s_ekle(&s, "UMAY yaniti (eksik): "); s_ekle(&s, yanit); s_ekle(&s, "\n"); s_yaz(&s);
+        return;
     }
     puts("UMAY yanit vermedi (zaman asimi)\n");
 }
@@ -211,13 +264,22 @@ int main(void) {
             if (argc > 1) cmd_goster(argv[1]);
             else puts("kullanim: goster <dosya>\n");
         } else if (strcmp(argv[0], "kimlik") == 0) {
-            puts("Surec kimligi (PID): "); print_dec((uint64_u)getpid()); puts("\n");
+            satir_u s; s_bas(&s); s_ekle(&s, "Surec kimligi (PID): "); s_sayi(&s, (uint64_u)getpid()); s_ekle(&s, "\n"); s_yaz(&s);
         } else if (strcmp(argv[0], "saat") == 0) {
-            puts("Zamanlayici tik: "); print_dec((uint64_u)ticks()); puts("\n");
+            satir_u s; s_bas(&s); s_ekle(&s, "Zamanlayici tik: "); s_sayi(&s, (uint64_u)ticks()); s_ekle(&s, "\n"); s_yaz(&s);
         } else if (strcmp(argv[0], "bellek") == 0) {
             cmd_bellek();
         } else if (strcmp(argv[0], "umay") == 0) {
-            cmd_umay(argc > 1 ? argv[1] : "durum");
+            /* 1.4.8: sorunun TAMAMI yollanir (eskiden yalniz ilk sozcuk) */
+            char birlesik[MAX_LINE];
+            int bo = 0;
+            birlesik[0] = 0;
+            for (int ai = 1; ai < argc; ai++) {
+                for (const char *q = argv[ai]; *q && bo < MAX_LINE - 2; q++) birlesik[bo++] = *q;
+                if (ai + 1 < argc && bo < MAX_LINE - 2) birlesik[bo++] = ' ';
+            }
+            birlesik[bo] = 0;
+            cmd_umay(argc > 1 ? birlesik : "durum");
         } else if (strcmp(argv[0], "ciz") == 0) {
             cmd_ciz();
         } else if (strcmp(argv[0], "pencere") == 0) {
@@ -225,14 +287,15 @@ int main(void) {
         } else if (strcmp(argv[0], "servisler") == 0) {
             cmd_servisler();
         } else if (strcmp(argv[0], "yankila") == 0) {
-            for (int i = 1; i < argc; i++) { puts(argv[i]); puts(" "); }
-            puts("\n");
+            satir_u s; s_bas(&s);
+            for (int i = 1; i < argc; i++) { s_ekle(&s, argv[i]); s_ekle(&s, " "); }
+            s_ekle(&s, "\n"); s_yaz(&s);
         } else if (strcmp(argv[0], "cik") == 0) {
             puts("Kabuk sonlandiriliyor.\n");
             return 0;
         } else {
-            puts("Bilinmeyen komut: "); puts(argv[0]);
-            puts("  ('yardim' deneyin)\n");
+            satir_u s; s_bas(&s); s_ekle(&s, "Bilinmeyen komut: "); s_ekle(&s, argv[0]);
+            s_ekle(&s, "  ('yardim' deneyin)\n"); s_yaz(&s);
         }
     }
 }

@@ -1,4 +1,5 @@
 #include "timur.h"
+#include "smp.h"
 #include "vmm.h"
 #include "serial.h"
 
@@ -59,6 +60,7 @@ static uint64_t *find_pte(uint64_t virt) {
     if (!(pml4[i4] & 1)) return 0;
     uint64_t *pdpt = (uint64_t *)(uintptr_t)(pml4[i4] & 0x000FFFFFFFFFF000ULL);
     if (!(pdpt[i3] & 1)) return 0;
+    if (pdpt[i3] & (1ULL << 7)) return 0; /* 1GB sayfa - 4KB giris yok */
     uint64_t *pd = (uint64_t *)(uintptr_t)(pdpt[i3] & 0x000FFFFFFFFFF000ULL);
     if (!(pd[i2] & 1)) return 0;
     if (pd[i2] & (1ULL << 7)) return 0; /* 2MB sayfa - 4KB giris yok */
@@ -67,8 +69,11 @@ static uint64_t *find_pte(uint64_t virt) {
     return &pt[i1];
 }
 
+/* Izin degisikligi gecerli bir girdide yapilir: diger cekirdeklerin
+ * TLB'si eski izni tasiyabilir (W^X delinir) -> uzak vurus da gerekir. */
 static void invlpg(uint64_t v) {
     __asm__ volatile ("invlpg (%0)" : : "r"(v) : "memory");
+    tlb_uzak_vur(v);
 }
 
 int timur_protect_data(uint64_t virt) {

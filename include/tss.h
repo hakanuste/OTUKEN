@@ -18,6 +18,9 @@ void tss_init(void);
  * birbirlerinin kayitli baglamini EZERLER (register bozulmasi, cop
  * syscall numaralari, cokme). Bu yuzden zamanlayici, her gorev
  * gecisinde RSP0'i O GOREVIN kendi cekirdek yiginina ayarlamalidir. */
-void tss_set_rsp0(uint64_t rsp0);
+void tss_set_rsp0(uint64_t rsp0);   /* CAGIRAN cekirdegin TSS'i */
+
+/* SMP: AP icin kendi GDT kopyasini ve TSS'ini kurar, lgdt + ltr yapar. */
+int tss_ap_kur(uint32_t indeks, uint64_t rsp0);
 
 #endif

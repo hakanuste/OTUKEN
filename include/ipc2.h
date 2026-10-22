@@ -28,8 +28,20 @@ int  ipc_port_create(const char *name);
 int  ipc_port_find(const char *name);
 int  ipc_port_close(int port);
 
-/* Hedef porta mesaj gonderir (bloklamaz). */
+/* Hedef porta mesaj gonderir (bloklamaz). 0 tamam, -1 gecersiz/kapali
+ * port, IPC_DOLU hedef kuyrugu dolu (gonderen sonra yeniden deneyebilir). */
+#define IPC_DOLU (-2)
 int  ipc_send(int dest_port, const ipc_message_t *msg);
+
+/* Gonderen portu olmayan ileti (sender_port). 0 GECERLI bir port
+ * kimligidir; 'yok' anlami icin bu deger kullanilir. */
+#define IPC_GONDEREN_YOK 0xFFFFFFFFu
+
+/* Gorevin sahip oldugu ilk port (yoksa -1) ve portun sahibi (yoksa -1). */
+int  ipc_gorevin_portu(uint32_t gorev_id);
+int  ipc_port_sahibi(int port, uint32_t *sahip);
+/* Sonlanan gorevin portlarini kapatir (reap cagirir); kapanan sayisi. */
+int  ipc_gorev_portlarini_kapat(uint32_t gorev_id);
 
 /* Kendi portundan mesaj alir. Yoksa 0, aldiysa 1 doner (bloklamaz). */
 int  ipc_try_receive(int port, ipc_message_t *out);

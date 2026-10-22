@@ -1,4 +1,5 @@
 #include "ring3.h"
+#include "smap.h"
 #include "tore.h"
 #include "sched.h"
 #include "pmm.h"
@@ -11,6 +12,23 @@
 extern uint8_t ring3_test_program[];
 extern uint8_t ring3_test_program_end[];
 extern void enter_ring3(uint64_t entry_rip, uint64_t user_rsp);
+
+/* 1.4.7: Ring3'e gecmeden HEMEN ONCE: gorev AÇIK TORE profilini alir ve
+ * "kullanici" olarak isaretlenir. Bundan sonra her syscall'u politika
+ * tablosundaki yetkiyle denetlenir (syscall.c). Profilde olmayan cagri
+ * REDDEDILIR - varsayilan izin yoktur. */
+static void ring3_hazirla(uint32_t profil) {
+    task_t *ben = scheduler_current_task();
+    if (!ben) return;
+    tore_set_capabilities((uint32_t)ben->id, profil);
+    ben->kullanici = 1;
+}
+
+void ring3_gir(uint64_t giris, uint64_t yigin, uint32_t profil) {
+    ring3_hazirla(profil);
+    enter_ring3(giris, yigin);
+    for (;;) __asm__ volatile ("cli; hlt");   /* enter_ring3 geri donmez */
+}
 
 /* 0-4GB kimlik haritasinin ve onceki testlerin (shm: 0x6...,
  * vmm: 0x5.../0x700000) disinda, bu asamaya ozel taze adresler. */
@@ -72,7 +90,9 @@ void ring3_run_test(void) {
     }
 
     uint8_t *dst = (uint8_t *)(uintptr_t)RING3_CODE_VIRT;
+    kullanici_ac();                         /* 1.4.9 SMAP: kullanici sayfasi */
     for (uint64_t i = 0; i < prog_size; i++) dst[i] = ring3_test_program[i];
+    kullanici_kapat();
 
     /* Kopyalama bitti: artik kod sayfasi YAZILAMAZ olmali (W^X). */
     timur_protect_code(RING3_CODE_VIRT);
@@ -82,6 +102,7 @@ void ring3_run_test(void) {
     serial_write(" bayt) ve yigin sayfalari hazir, ring3'e atlaniyor...\n");
 
     uint64_t user_rsp = RING3_STACK_VIRT + RING3_STACK_SIZE - 16; /* 16-hizali, tepe */
+    ring3_hazirla(TORE_PROFILE_SINAMA);
     enter_ring3(RING3_CODE_VIRT, user_rsp);
     /* BURAYA ASLA DONULMEZ */
 }
@@ -127,6 +148,7 @@ void ring3_run_elf(void) {
 
     serial_write("ring3-elf: ELF programina atlaniyor (Ring3)...\n");
     uint64_t user_rsp = ELF_USER_STACK_VIRT + PMM_FRAME_SIZE - 16;
+    ring3_hazirla(TORE_PROFILE_SINAMA);
     enter_ring3(img.entry_point, user_rsp);
     /* GERI DONMEZ */
 }
@@ -170,6 +192,7 @@ void ring3_run_shell(void) {
     serial_write("\n");
 
     uint64_t rsp = SHELL_STACK_VIRT + (uint64_t)SHELL_STACK_PAGES * PMM_FRAME_SIZE - 64;
+    ring3_hazirla(TORE_PROFILE_KABUK);
     enter_ring3(img.entry_point, rsp);
 }
 
@@ -181,19 +204,32 @@ void ring3_run_shell(void) {
  * Ayrica modeli guncellemek icin cekirdegi yeniden derlemek GEREKMEZ. */
 #define UMAY_YIGIN_VIRT  0x8000E00000ULL
 /* UMAY derin cagri zincirleri ve buyuk yerel tamponlar kullanir;
- * 4 sayfa (16 KB) yigin tasmasina yol aciyordu. 16 sayfa = 64 KB. */
-#define UMAY_YIGIN_SAYFA 16
+ * 4 sayfa (16 KB) yigin tasmasina yol aciyordu. 16 sayfa = 64 KB.
+ * 1.4.4: US1 egitimi sirasinda 64 KB de TASTI (umay_tur 52 KB cerceve;
+ * UMAY'da duzeltildi, en derin zincir artik ~20 KB). Pay icin 32 sayfa
+ * = 128 KB. Altindaki sayfa haritasizdir: tasma sessiz bozulma degil,
+ * yakalanan sayfa hatasidir. */
+#define UMAY_YIGIN_SAYFA 32
 /* 64 KB sinir UMAY'i KESIK okutuyordu (ikili 106 KB). Sinir buyutuldu;
  * sinirdan buyuk dosya artik SESSIZCE KESILMEZ, acikca reddedilir. */
 #define UMAY_AZAMI_BOYUT (512 * 1024)
 
 int ring3_umay_calistir(const char *yol) {
+    /* SMP adim 6: asagidaki 512 KB statik tampon tek kopya. Ikinci bir
+     * eszamanli yukleme onu ezerdi; islev Ring3'e gectigi icin GERI
+     * DONMEZ, kilitle sarilamaz -> tek kullanim korumasi. */
+    static volatile int yukleniyor = 0;
+    if (__atomic_exchange_n(&yukleniyor, 1, __ATOMIC_ACQUIRE)) {
+        serial_write("UMAY-HOST: REDDEDILDI - baska bir UMAY yuklemesi suruyor\n");
+        return -1;
+    }
     /* Ring3'e girmeden ONCE yetenek profili verilir: TORE olmadan UMAY
      * kendi kutuphanesini bile okuyamaz. Dogrudan donanim YOK. */
     {
+        /* 1.4.7: AÇIK UMAY profili (1.4.6'daki 4 bit + eskiden hic
+         * denetlenmeyen cagrilarin yetkileri). DISK_YAZ/SUREC_OLUSTUR yine YOK. */
         task_t *ben = scheduler_current_task();
-        if (ben) tore_set_capabilities((uint32_t)ben->id,
-                    KUT_DISK_READ | KUT_MEM_ALLOC | KUT_NET_SEND | KUT_NET_RECV);
+        if (ben) { tore_set_capabilities((uint32_t)ben->id, TORE_PROFILE_UMAY); tore_yazma_koku((uint32_t)ben->id, UMAY_YAZMA_KOKU); }
     }
 
     static uint8_t elf_tampon[UMAY_AZAMI_BOYUT];
@@ -203,6 +239,7 @@ int ring3_umay_calistir(const char *yol) {
         serial_write("UMAY-HOST: program diskte bulunamadi: ");
         serial_write(yol);
         serial_write("\n");
+        __atomic_store_n(&yukleniyor, 0, __ATOMIC_RELEASE);
         return -1;
     }
 
@@ -222,6 +259,7 @@ int ring3_umay_calistir(const char *yol) {
     vfs_close(fd);
     if (tasti) {
         serial_write("UMAY-HOST: REDDEDILDI - ikili tampon sinirini asiyor\n");
+        __atomic_store_n(&yukleniyor, 0, __ATOMIC_RELEASE);
         return -1;
     }
 
@@ -234,6 +272,9 @@ int ring3_umay_calistir(const char *yol) {
     elf_image_t img;
     if (elf_load(elf_tampon, toplam, &img) != 0) {
         serial_write("UMAY-HOST: ELF ayristirilamadi\n");
+        /* Denetim (1.4.6): bayrak basarisizlikta sifirlanmiyordu; bir kez
+         * basarisiz olan UMAY bir daha HIC yuklenemiyordu. */
+        __atomic_store_n(&yukleniyor, 0, __ATOMIC_RELEASE);
         return -1;
     }
 
@@ -253,6 +294,8 @@ int ring3_umay_calistir(const char *yol) {
     serial_write("\n");
 
     uint64_t rsp = UMAY_YIGIN_VIRT + (uint64_t)UMAY_YIGIN_SAYFA * PMM_FRAME_SIZE - 64;
+    ring3_hazirla(TORE_PROFILE_UMAY);
+    { task_t *ben = scheduler_current_task(); if (ben) tore_yazma_koku((uint32_t)ben->id, UMAY_YAZMA_KOKU); }
     enter_ring3(img.entry_point, rsp);
     return 0;   /* buraya ulasilmaz */
 }

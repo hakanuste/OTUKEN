@@ -82,7 +82,10 @@ stack_bottom:
     resb 65536
 stack_top:
 
-section .rodata
+; 1.4.9: GDT .data'da: tss.c TSS tanimlayicisini calisirken yazar, CPU
+; erisim bitlerini isaretler. .rodata'da durmasi TAMGA'nin cekirdek ozetini
+; (kod + salt okunur veri) her acilista degistiriyordu.
+section .data
 align 16
 global gdt64
 gdt64:

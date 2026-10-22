@@ -3,6 +3,7 @@
 #include "tcp.h"
 #include "log.h"
 #include "serial.h"
+#include "ag.h"
 
 #define SOCK_RXBUF 512
 
@@ -27,7 +28,7 @@ void socket_init(void) {
     log_write(LOG_BILGI, "ULAK-SOK", "soket katmani baslatildi");
 }
 
-int socket_create(int type) {
+static int socket_create__ic(int type) {
     for (int i = 0; i < SOCKET_MAX; i++) {
         if (!socks[i].used) {
             socks[i].used = 1;
@@ -43,13 +44,13 @@ int socket_create(int type) {
     return -1;
 }
 
-int socket_bind(int sock, uint16_t local_port) {
+static int socket_bind__ic(int sock, uint16_t local_port) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     socks[sock].local_port = local_port;
     return 0;
 }
 
-int socket_connect(int sock, const uint8_t ip[4], uint16_t port) {
+static int socket_connect__ic(int sock, const uint8_t ip[4], uint16_t port) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     socket_t *s = &socks[sock];
     for (int i = 0; i < 4; i++) s->remote_ip[i] = ip[i];
@@ -62,7 +63,7 @@ int socket_connect(int sock, const uint8_t ip[4], uint16_t port) {
     return 0;   /* UDP'de connect sadece varsayilan hedefi belirler */
 }
 
-int socket_sendto(int sock, const uint8_t ip[4], uint16_t port,
+static int socket_sendto__ic(int sock, const uint8_t ip[4], uint16_t port,
                    const uint8_t *data, uint16_t len) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     socket_t *s = &socks[sock];
@@ -70,7 +71,7 @@ int socket_sendto(int sock, const uint8_t ip[4], uint16_t port,
     return ulak_send_udp(ip, s->local_port, port, data, len);
 }
 
-int socket_send(int sock, const uint8_t *data, uint16_t len) {
+static int socket_send__ic(int sock, const uint8_t *data, uint16_t len) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     socket_t *s = &socks[sock];
     if (s->type == SOCK_UDP) {
@@ -83,7 +84,7 @@ int socket_send(int sock, const uint8_t *data, uint16_t len) {
     return -1;
 }
 
-int socket_recv(int sock, uint8_t *buf, uint16_t max) {
+static int socket_recv__ic(int sock, uint8_t *buf, uint16_t max) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     socket_t *s = &socks[sock];
     if (s->rxlen == 0) return 0;
@@ -94,7 +95,7 @@ int socket_recv(int sock, uint8_t *buf, uint16_t max) {
     return (int)n;
 }
 
-int socket_recvfrom(int sock, uint8_t *buf, uint16_t max,
+static int socket_recvfrom__ic(int sock, uint8_t *buf, uint16_t max,
                      uint8_t out_ip[4], uint16_t *out_port) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     socket_t *s = &socks[sock];
@@ -108,7 +109,7 @@ int socket_recvfrom(int sock, uint8_t *buf, uint16_t max,
     return (int)n;
 }
 
-int socket_close(int sock) {
+static int socket_close__ic(int sock) {
     if (sock < 0 || sock >= SOCKET_MAX || !socks[sock].used) return -1;
     if (socks[sock].type == SOCK_TCP && socks[sock].tcp_conn >= 0)
         tcp_close(socks[sock].tcp_conn);
@@ -116,7 +117,7 @@ int socket_close(int sock) {
     return 0;
 }
 
-void socket_deliver_udp(const uint8_t *src_ip, uint16_t src_port,
+static void socket_deliver_udp__ic(const uint8_t *src_ip, uint16_t src_port,
                          uint16_t dst_port, const uint8_t *data, uint16_t len) {
     for (int i = 0; i < SOCKET_MAX; i++) {
         socket_t *s = &socks[i];
@@ -136,4 +137,62 @@ void socket_deliver_udp(const uint8_t *src_ip, uint16_t src_port,
         serial_write(" bayt UDP verisi teslim edildi\n");
         return;
     }
+}
+
+/* 1.4.9: ag_kilit sarmalayicilari (ozyineli; UDP teslimi zaten kilit altinda) */
+int socket_create(int type) {
+    ozspin_al(&ag_kilit);
+    int r = socket_create__ic(type);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_bind(int sock, uint16_t local_port) {
+    ozspin_al(&ag_kilit);
+    int r = socket_bind__ic(sock, local_port);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_connect(int sock, const uint8_t ip[4], uint16_t port) {
+    ozspin_al(&ag_kilit);
+    int r = socket_connect__ic(sock, ip, port);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_sendto(int sock, const uint8_t ip[4], uint16_t port,
+                   const uint8_t *data, uint16_t len) {
+    ozspin_al(&ag_kilit);
+    int r = socket_sendto__ic(sock, ip, port, data, len);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_send(int sock, const uint8_t *data, uint16_t len) {
+    ozspin_al(&ag_kilit);
+    int r = socket_send__ic(sock, data, len);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_recv(int sock, uint8_t *buf, uint16_t max) {
+    ozspin_al(&ag_kilit);
+    int r = socket_recv__ic(sock, buf, max);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_recvfrom(int sock, uint8_t *buf, uint16_t max,
+                     uint8_t out_ip[4], uint16_t *out_port) {
+    ozspin_al(&ag_kilit);
+    int r = socket_recvfrom__ic(sock, buf, max, out_ip, out_port);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+int socket_close(int sock) {
+    ozspin_al(&ag_kilit);
+    int r = socket_close__ic(sock);
+    ozspin_birak(&ag_kilit);
+    return r;
+}
+void socket_deliver_udp(const uint8_t *src_ip, uint16_t src_port,
+                         uint16_t dst_port, const uint8_t *data, uint16_t len) {
+    ozspin_al(&ag_kilit);
+    socket_deliver_udp__ic(src_ip, src_port, dst_port, data, len);
+    ozspin_birak(&ag_kilit);
 }

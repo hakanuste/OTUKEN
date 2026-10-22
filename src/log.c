@@ -2,6 +2,10 @@
 #include "serial.h"
 #include "timer.h"
 
+/* SMP adim 6: gunluk halkasi ve sayaclari; her baglamdan yazilir. Kisa islemler -> ozyinelemeli donen kilit. */
+#include "spinlock.h"
+static ozspin_t log_kilit = OZSPIN_BASLANGIC;
+
 static log_entry_t ring[LOG_RING_ENTRIES];
 static int ring_head = 0;      /* bir sonraki yazilacak yer */
 static int ring_count = 0;     /* toplam gecerli kayit (max RING_ENTRIES) */
@@ -51,7 +55,7 @@ static void emit_serial(const log_entry_t *e) {
     serial_write("\n");
 }
 
-void log_write(log_level_t level, const char *subsystem, const char *message) {
+static void log_write__ic(log_level_t level, const char *subsystem, const char *message) {
     if (level > current_level) return; /* seviye filtresi */
 
     log_entry_t *e = &ring[ring_head];
@@ -67,7 +71,7 @@ void log_write(log_level_t level, const char *subsystem, const char *message) {
     emit_serial(e);
 }
 
-void log_write_num(log_level_t level, const char *subsystem,
+static void log_write_num__ic(log_level_t level, const char *subsystem,
                     const char *message, uint64_t value) {
     if (level > current_level) return;
 
@@ -104,4 +108,19 @@ const log_entry_t *log_get_entry(int index_from_newest) {
 uint32_t log_count_by_level(log_level_t level) {
     if ((int)level < 0 || (int)level >= 4) return 0;
     return level_counts[level];
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+void log_write(log_level_t level, const char *subsystem, const char *message) {
+    ozspin_al(&log_kilit);
+    log_write__ic(level, subsystem, message);
+    ozspin_birak(&log_kilit);
+}
+
+void log_write_num(log_level_t level, const char *subsystem, const char *message, uint64_t value) {
+    ozspin_al(&log_kilit);
+    log_write_num__ic(level, subsystem, message, value);
+    ozspin_birak(&log_kilit);
 }

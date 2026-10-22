@@ -33,5 +33,8 @@ int fat16_read_file_at(const fat16_dirent_t *entry, uint8_t *buf, uint32_t bufsi
  * arguman tiplerini YANLIS varsaymasina yol acar (64-bit isaretciler
  * icin gercek bir risk). Denetimde yakalandi. */
 int fat16_write_file(const char *name83, const uint8_t *data, uint32_t size);
+/* 1.4.9: kok dizinden dosya sil (0 / -1) ve bos kume sayisi */
+int fat16_sil(const char *name83);
+uint32_t fat16_bos_kume_sayisi(void);
 
 #endif

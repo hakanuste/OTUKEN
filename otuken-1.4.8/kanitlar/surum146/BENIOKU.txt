@@ -1,7 +1,0 @@
-1.4.6 sinama kanitlari
-- *_ozet.txt, kabuk_*.txt, umay_yanitlari_taban_s4.txt, ../uyum/ozet.txt, ../agir/ozet.txt:
-  NIHAI olcum (yeni US1 modeli + UMAY + cekirdek duzeltmeleri; /tmp/nihai kopyasi):
-  US1 15/15, UMAY 274/274, cekirdek 81/81, donanim 43/43, kabuk 4x9/9, uyum 10/10, agir 49/49.
-- agir_ara_ozet.txt: ARA olcumde (UMAY degisiklikleri, cekirdek duzeltmeleri oncesi) 2 TAKILDI -
-  o sirada ayni 2 cekirdekli makinede egitim kosuyordu (CPU yarisi).
-- agir_ara_takildi_tekrar.txt: ayni ISO ile ayni iki yapilandirma sessiz makinede 6/6 GECTI.

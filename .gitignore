@@ -1,22 +1,22 @@
-# --- derleme ciktilari ---
 *.o
-*.a
-*.so
-*.elf
+*.d
+*.uo
 *.iso
-*.img
-kov/
-cik/
+*.elf
+iso/
+iso_uefi/
 __pycache__/
-*.pyc
-.venv/
-
-# --- uretilen ---
-cekirdek/otukenos-mini.*
-cekirdek/iso/
-cekirdek/arm64/*.elf
 umay/kov/
-us1/c/*.o
-
-# --- isletim sistemi ---
-.DS_Store
+us1/us1_sina
+arm64/otuken-arm64.img
+kanitlar/agir/*.log
+kanitlar/uyum/*.log
+us1/us1_uret
+us1/kov/
+tests/us1_conformance/son_rapor.json
+tests/run/
+userprog/bearssl.a
+cekirdek_br/
+anahtarlar/
+ergenekon.krv
+ergenekon_kaynak/

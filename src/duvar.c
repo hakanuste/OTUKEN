@@ -64842,6 +64842,11 @@ const uint8_t duvar_veri[DUVAR_EN * DUVAR_BOY] = {
 };
 #include "fb.h"
 
+/* 1.4.8: kaynak görüntünün sol kenarında eski bir basılı arayüzün
+ * kalıntısı (logo parçası ve "OS / İYETİ / DA" yazısı) var; veri elle
+ * düzenlenmez, o şerit ölçeklemede KIRPILIR. */
+#define DUVAR_SOL_KIRP 64
+
 void duvar_ciz(int x, int y, int en, int boy) {
     if (en <= 0 || boy <= 0) return;
     /* En yakın komşu ölçekleme: tamsayı, bölme satır başına bir kez.
@@ -64852,7 +64857,7 @@ void duvar_ciz(int x, int y, int en, int boy) {
         int sy = (int)(((int64_t)j * DUVAR_BOY) / boy);
         const uint8_t *satir = &duvar_veri[(size_t)sy * DUVAR_EN];
         for (int i = 0; i < en; i++) {
-            int sx = (int)(((int64_t)i * DUVAR_EN) / en);
+            int sx = DUVAR_SOL_KIRP + (int)(((int64_t)i * (DUVAR_EN - DUVAR_SOL_KIRP)) / en);
             gecici[i] = duvar_palet[satir[sx]];
         }
         fb_satir_yaz(x, y + j, gecici, en);

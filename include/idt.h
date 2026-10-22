@@ -15,8 +15,14 @@ struct regs {
 };
 
 void idt_install(void);
+/* SMP: ayni IDT'yi (paylasilan) cagiran cekirdege yukler. */
+void idt_ap_yukle(void);
+void idt_lapic_kapilari_kur(void);
 
 typedef void (*irq_handler_t)(struct regs *r);
 void irq_install_handler(int irq, irq_handler_t handler);
+/* interrupt.asm cagirir */
+void isr_handler(struct regs *r);
+void irq_handler(struct regs *r);
 
 #endif

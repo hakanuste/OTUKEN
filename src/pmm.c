@@ -1,4 +1,5 @@
 #include "pmm.h"
+#include "modul.h"
 #include "spinlock.h"
 #include "serial.h"
 #include "multiboot2.h"
@@ -187,6 +188,12 @@ void pmm_init(multiboot_info_t *mbi) {
      * dagitabilmek icin kimlik haritasinin da genisletilmesi gerekir
      * (vmm tarafinda); bu yapilmadan pmm_alloc_frame o cerceveleri
      * DONDURMEZ - bkz. asagidaki tavan. */
+    /* 1.4.9: onyukleme modulleri (ERGENEKON imaji) cekirdegin hemen
+     * ustunde durur; buyuk bitmap tasinmadan ve ayirma baslamadan AYRILIR. */
+    for (int mi = 0; mi < modul_sayisi(); mi++) {
+        const onyukleme_modul_t *m = modul_al(mi);
+        mark_range(m->bas & ~0xFFFULL, ((m->son + 0xFFF) & ~0xFFFULL) - (m->bas & ~0xFFFULL), 1);
+    }
     if (g_total_frames > bitmap_cerceve_kapasitesi) {
         uint64_t gereken_bayt = (g_total_frames + 7) / 8;
         uint64_t gereken_cerceve = (gereken_bayt + PMM_FRAME_SIZE - 1) / PMM_FRAME_SIZE;
@@ -243,6 +250,17 @@ void pmm_init(multiboot_info_t *mbi) {
 
     uint64_t used = 0;
     for (uint64_t f = 0; f < g_total_frames; f++) if (bit_test(f)) used++;
+    /* 1.4.7 HATA DUZELTMESI: canli sayac bitmap'ten ESITLENIR. bit_set/
+     * bit_clear sayaci yalniz 0<->1 GECISLERINDE degistirir; bitmap ise
+     * bastan tumu-1 baslar. Bellek haritasindaki BOSLUKLAR (ornegin 640 KB -
+     * 1 MB) hic "bos" isaretlenmedigi icin 1 kalir ve HIC sayilmazdi:
+     * g_used_frames eksik sayiyor, pmm_free_frames() hic ayrilamayacak
+     * cerceveleri (-m 128'de 96 tane) "bos" gosteriyordu. Dogru deger
+     * burada zaten hesaplanip yaziliyordu; yalniz sayaca atanmiyordu.
+     * (ASYOK-TEST bunu yakaladi: ayirici "bitti" derken sayac 96 bos
+     * diyordu.) Ayirma dogrulugu etkilenmiyordu; yalniz bildirilen bos
+     * bellek sabit bir payla fazlaydi. */
+    g_used_frames = used;
 
     serial_write("pmm: toplam cerceve="); serial_hex64(g_total_frames);
     serial_write(" kullanilan="); serial_hex64(used);

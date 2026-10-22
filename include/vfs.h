@@ -36,10 +36,19 @@ int vfs_stat(const char *path, uint64_t *boyut, int *dizin_mi);
 /* Dizin olusturur. 0 tamam, -2 zaten var, digerleri surucu hatasi. */
 int vfs_mkdir(const char *path);
 
-/* Basarili: bir dosya tanitici (fd, >=0) doner. Hata: -1. */
+/* Basarili: bir dosya taniticisi (fd, >= 16) doner. Hata: -1.
+ * 1.4.7: tanitici = (kusak << 4) | yuva; yalniz ACAN gorev kullanabilir.
+ * Kapatilmis ya da yuvasi yeniden kullanilmis (BAYAT) tanitici, baska
+ * gorevin taniticisi ve gecersiz deger -1 doner (read/close/lseek). */
 int vfs_open(const char *path);
 int vfs_read(int fd, void *buf, uint64_t size); /* okunan bayt sayisini dondurur */
 int vfs_close(int fd);
 uint64_t vfs_lseek(int fd, uint64_t new_offset);
+
+/* Reap'ten: olen gorevin acik biraktigi dosyalari kapatir (kapatilan sayi).
+ * Yalniz donen kilit alir; uyumaz. */
+int vfs_gorev_bitti(uint32_t gorev_id);
+/* Sinama: sistemde acik tanitici sayisi. */
+int vfs_acik_sayisi(void);
 
 #endif

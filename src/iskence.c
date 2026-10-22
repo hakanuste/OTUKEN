@@ -1,5 +1,6 @@
 #include "iskence.h"
 #include "syscall.h"
+#include "smap.h"
 #include "heap.h"
 #include "pmm.h"
 #include "vmm.h"
@@ -11,6 +12,7 @@
 #include "thread.h"
 #include "serial.h"
 #include "log.h"
+#include "cpu.h"
 #include "vmm.h"
 #include "pmm.h"
 #include "process.h"
@@ -233,18 +235,20 @@ int iskence_ipc(void) {
     if (ipc_port_find("olmayan-servis-xyz") >= 0) hata++;
 
     /* Port tukenme: hepsini ac */
-    int p[IPC_MAX_PORTS + 4];
-    int acilan = 0;
     static const char *adlar[] = {"isk0","isk1","isk2","isk3","isk4",
                                    "isk5","isk6","isk7","isk8","isk9",
                                    "iskA","iskB"};
-    for (int i = 0; i < IPC_MAX_PORTS + 4 && i < 12; i++) {
+    enum { ADSAY = (int)(sizeof adlar / sizeof adlar[0]) };
+    _Static_assert(ADSAY > IPC_MAX_PORTS, "tukenme sinamasi siniri asmali");
+    int p[ADSAY];
+    int acilan = 0;
+    for (int i = 0; i < ADSAY; i++) {
         p[i] = ipc_port_create(adlar[i]);
         if (p[i] >= 0) acilan++;
     }
     /* Sinirdan FAZLA acilamamali */
     if (acilan > IPC_MAX_PORTS) hata++;
-    for (int i = 0; i < 12; i++) if (p[i] >= 0) ipc_port_close(p[i]);
+    for (int i = 0; i < ADSAY; i++) if (p[i] >= 0) ipc_port_close(p[i]);
 
     bildir("ipc (gecersiz port/tukenme/tasma)", hata);
     return hata;
@@ -356,8 +360,10 @@ int iskence_cr3(void) {
 
     /* a) as1'de: adres GECERLI olmali (dize okuma basarili donmeli) */
     vmm_switch_address_space(as1);
+    kullanici_ac();       /* 1.4.9 SMAP: kullanicinin yazacagi diziyi sinama hazirlar */
     *(volatile char *)(uintptr_t)DENEK = 'A';
     *(volatile char *)(uintptr_t)(DENEK + 1) = 0;
+    kullanici_kapat();
     uint64_t r_as1 = syscall_dispatch(SYS_OPEN, DENEK, 0, 0, 0);
     /* Dosya bulunamayacagi icin -1 doner AMA "gecersiz isaretci"
      * nedeniyle degil. Ayrimi anlamak icin dogrudan degil, as2 ile
@@ -389,6 +395,32 @@ int iskence_cr3(void) {
     return hata;
 }
 
+/* --- CEKIRDEK-BASINA VERI --- ayni cekirdekten ardisik cagrilar AYNI
+ * blogu dondurmeli, blok gercek APIC kimligini tasimali, tamponlar
+ * blok ICINDE olmali. */
+int iskence_cpu(void) {
+    int hata = 0;
+    cpu_yerel_t *a = cpu_yerel();
+    cpu_yerel_t *b = cpu_yerel();
+    if (a != b) hata++;
+    if ((cpu_yerel_t *)a->kendi != a) hata++;        /* gs:0 kendini gostermeli */
+    if (a != cpu_indeksle(a->indeks)) hata++;
+    if (a->apic_id != cpu_apic_id()) hata++;
+    if (!a->kullanimda) hata++;
+    /* Gorev-basina syscall tamponu: ayni gorevde ayni tampon, gorev
+     * sinirinin disinda degil (bkz. syscall.c gorev_tamponu). */
+    {
+        task_t *g = scheduler_current_task();
+        if (g && g->sc_tampon && (uintptr_t)g->sc_tampon < 0x100000ULL) hata++;
+    }
+    if (cpu_sayisi() < 1) hata++;
+    serial_write("ISKENCE: cpu apic_id=");
+    serial_write_hex(a->apic_id);
+    serial_write("\n");
+    bildir("cekirdek-basina veri", hata);
+    return hata;
+}
+
 int iskence_tumu(void) {
     serial_write("\n===== ACIMASIZ SINAMA BASLIYOR =====\n");
     int t = 0;
@@ -400,6 +432,7 @@ int iskence_tumu(void) {
     t += iskence_gorev();     if_denetle("gorev");
     t += iskence_isaretci();  if_denetle("isaretci");
     t += iskence_cr3();       if_denetle("cr3");
+    t += iskence_cpu();       if_denetle("cpu");
     t += if_kacak_sayisi;   /* kesme kacagi da bir HATADIR */
     serial_write("===== ACIMASIZ SINAMA SONUCU: ");
     if (t == 0) serial_write("TUM SINAMALAR SAGLAM =====\n\n");

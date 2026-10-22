@@ -2,6 +2,7 @@
 #define OTUKENOS_MSGQUEUE_H
 
 #include <stdint.h>
+#include "spinlock.h"
 #include "sched.h"
 
 /* Asama 31: ipc_message_t (108 bayt) sigacak sekilde buyutuldu */
@@ -19,6 +20,10 @@ typedef struct {
     int head, tail, count;
     task_t *waiting_receivers[MSG_MAX_WAITERS];
     int waiting_receiver_count;
+    /* SMP: her nesne KENDI kilidini tasir. Kuresel tek kilit yerine
+     * nesne basina kilit, farkli kuyruklarin birbirini bloke
+     * etmemesini saglar. */
+    spinlock_t kilit;
 } msgqueue_t;
 
 void msgqueue_init(msgqueue_t *q);
