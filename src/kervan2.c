@@ -408,13 +408,16 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
             yedek_var[i] = 0;
             if (dosya_sahibi(g[i].ad) != eski) continue;
             char yol[16]; yol[0] = '/'; kopya(yol + 1, sizeof yol - 1, g[i].ad);
+            uint64_t gercek = 0; int dz = 0;
+            if (vfs_stat(yol, &gercek, &dz) != 0 || dz) continue;
             int fd = vfs_open(yol);
-            if (fd < 0) continue;
-            uint32_t n = 0; int r2;
-            while (dolu + n < KERVAN2_AZAMI_BOY &&
+            if (fd < 0) { kfree(yedek); neden_yaz(neden, "eski surum yedeklenemedi"); goto son; }
+            uint32_t n = 0; int r2 = 0;
+            while (dolu + n < KERVAN2_AZAMI_BOY && n < gercek &&
                    (r2 = vfs_read(fd, yedek + dolu + n, KERVAN2_AZAMI_BOY - dolu - n > 4096 ? 4096 : KERVAN2_AZAMI_BOY - dolu - n)) > 0)
                 n += (uint32_t)r2;
-            int tam = dolu + n < KERVAN2_AZAMI_BOY;      /* tampon dolduysa kesik olabilir: yükseltme yok */
+            /* yedek TAM olmalı: okunan = dosya boyu, okuma hatası yok, tampon taşmadı */
+            int tam = r2 >= 0 && (uint64_t)n == gercek && dolu + n <= KERVAN2_AZAMI_BOY;
             vfs_close(fd);
             if (!tam) { kfree(yedek); neden_yaz(neden, "eski surum yedeklenemedi"); goto son; }
             yedek_var[i] = 1; yedek_ofs[i] = dolu; yedek_boy[i] = n; dolu += n;

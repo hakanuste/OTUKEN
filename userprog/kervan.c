@@ -45,7 +45,8 @@ typedef struct {
 #define SECILI 0x24424Cu
 
 static int pen;
-static oge_u liste[24];
+#define LISTE_AZAMI 160                 /* çekirdekteki KERVAN2_LISTE_AZAMI */
+static oge_u liste[LISTE_AZAMI];
 static int adet, secili, ust;
 static char durum[160];
 static uint32_u durum_renk = SONUK;
@@ -56,7 +57,7 @@ static uint8_u indirme[2 * 1024 * 1024 + 1];      /* KERVAN2_AZAMI_BOY + 1 */
 static int esit(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
 
 static void yenile(void) {
-    int n = (int)syscall(SYS_KERVAN_LISTE, (long)liste, 24, 0, 0);
+    int n = (int)syscall(SYS_KERVAN_LISTE, (long)liste, LISTE_AZAMI, 0, 0);
     adet = n < 0 ? 0 : n;
     if (n < 0) { durum[0] = 0; dize_ekle(durum, sizeof durum, "Liste alınamadı (yetki?)"); durum_renk = KIRMIZI; }
     if (secili >= adet) secili = adet - 1;

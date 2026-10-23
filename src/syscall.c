@@ -1033,8 +1033,8 @@ static uint64_t sys_zaman_impl(uint64_t cikti, uint64_t a2, uint64_t a3, uint64_
 static uint64_t sys_kervan_liste_impl(uint64_t cikti, uint64_t azami, uint64_t a3, uint64_t a4) {
     (void)a3; (void)a4;
     if (azami == 0) return 0;
-    if (azami > 24) azami = 24;
-    kervan2_oge_t *t = (kervan2_oge_t *)kmalloc(sizeof(kervan2_oge_t) * 24);
+    if (azami > KERVAN2_LISTE_AZAMI) azami = KERVAN2_LISTE_AZAMI;
+    kervan2_oge_t *t = (kervan2_oge_t *)kmalloc(sizeof(kervan2_oge_t) * (uint64_t)azami);
     if (!t) return (uint64_t)-1;
     int n = kervan2_liste(t, (int)azami);
     uint64_t r = (uint64_t)n;

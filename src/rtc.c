@@ -5,11 +5,15 @@
 #include "timer.h"
 #include "serial.h"
 
+#include "spinlock.h"
 static uint8_t cmos_oku(uint8_t r) { outb(0x70, r); return inb(0x71); }
+/* CMOS dizin/veri kapıları paylaşılır: kesme kapatmak yalnız bu çekirdeği
+ * korur, öteki çekirdeklerle sıra için döner kilit */
+static ozspin_t cmos_kilit = OZSPIN_BASLANGIC;
 
 int rtc_oku(sys_zaman_t *z) {
     uint8_t s[7], t[7];
-    uint64_t f = irq_kaydet_kapat();
+    ozspin_al(&cmos_kilit);                 /* kesmeleri de kapatır */
     int deneme = 0;
     do {
         while ((cmos_oku(0x0A) & 0x80) && deneme++ < 100000) ;      /* güncelleme sürüyor */
@@ -21,7 +25,7 @@ int rtc_oku(sys_zaman_t *z) {
     } while ((s[0] != t[0] || s[1] != t[1] || s[2] != t[2] || s[3] != t[3] || s[4] != t[4] ||
               s[5] != t[5]) && deneme++ < 100000);
     uint8_t b = cmos_oku(0x0B);
-    irq_geri_yukle(f);
+    ozspin_birak(&cmos_kilit);
     int ikili = b & 0x04, saat24 = b & 0x02;
     int pm = s[2] & 0x80;
     s[2] &= 0x7F;

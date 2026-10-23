@@ -38,6 +38,8 @@ typedef struct {
 } kervan2_oge_t;
 
 enum { KERVAN2_GECERLI = 0, KERVAN2_GECERSIZ = 1, KERVAN2_YALNIZ_KURULU = 2 };
+/* liste en çok: kök dizinden okunan 128 .KRV + 32 kurulu kayıt (hepsi sığar) */
+#define KERVAN2_LISTE_AZAMI 160
 
 void kervan2_init(void);                    /* /KERVAN.LST okunur */
 /* Paket belleğini doğrular. 0 / -1; neden (64 B) doldurulur. */

@@ -344,7 +344,7 @@ static char     sira[DEDE_SIRA][DEDE_METIN];
 static int      sira_bas, sira_say;
 static volatile int konusuyor;
 static uint32_t dusen;
-static ozspin_t sira_kilit;
+static ozspin_t sira_kilit = OZSPIN_BASLANGIC;   /* sahip -1 olmali */
 static volatile int isci_var;
 
 static void dede_isci(void) {
