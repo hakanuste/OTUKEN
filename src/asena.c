@@ -94,6 +94,7 @@ int asena_tara(int onar, asena_rapor_t *r) {
     uint8_t *sb = 0;
     int sonuc = -1;
     if (fat16_geometri(&g) != 0) { r->hata = 1; goto son; }
+    if (g.sektor_kume == 0 || g.fat_sektor == 0) { r->hata = 1; goto son; }   /* bozuk geometri: bölme yok */
     uint32_t N = g.kume_sayisi, ust_sinir = N + 2;
     uint32_t fat_giris = g.fat_sektor * 256;
     if (ust_sinir > fat_giris) ust_sinir = fat_giris;

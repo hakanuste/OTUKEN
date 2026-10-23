@@ -72,6 +72,15 @@ int fat16_mount(void) {
 
     if (bytes_per_sector != 512) {
         serial_write("fat16: UYARI - 512 disinda sektor boyutu desteklenmiyor\n");
+        fat16_bagli = 0;
+        return -1;
+    }
+    /* bozuk BPB: sıfır küme boyu / FAT yok / veri bölgesi yok -> bağlanmaz
+     * (aksi hâlde küme hesapları sıfıra bölerdi) */
+    if (sectors_per_cluster == 0 || num_fats == 0 || fat_size_sectors == 0 ||
+        total_sectors <= data_start_lba) {
+        serial_write("fat16: UYARI - gecersiz BPB (kume boyu/FAT/veri bolgesi), baglanmadi\n");
+        fat16_bagli = 0;
         return -1;
     }
 
@@ -567,6 +576,8 @@ uint32_t fat16_sectors_per_cluster(void)  { return sectors_per_cluster; }
 uint32_t fat16_kume_lba(uint16_t kume) {
     return data_start_lba + (uint32_t)(kume - 2) * sectors_per_cluster;
 }
+/* küme numarası bu birimin veri bölgesinde mi */
+int fat16_kume_gecerli(uint16_t kume) { return kume >= 2 && (uint32_t)kume < veri_kume_sayisi() + 2; }
 
 uint16_t fat16_sonraki_kume(uint16_t kume) { return fat16_next_cluster(kume); }
 uint16_t fat16_bos_kume_bul(void)          { return fat16_find_free_cluster(); }

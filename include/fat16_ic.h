@@ -19,6 +19,7 @@ uint32_t fat16_root_lba(void);
 uint32_t fat16_root_dir_sectors(void);
 uint32_t fat16_sectors_per_cluster(void);
 uint32_t fat16_kume_lba(uint16_t kume);
+int      fat16_kume_gecerli(uint16_t kume);   /* birimin veri bölgesinde mi */
 uint16_t fat16_sonraki_kume(uint16_t kume);
 uint16_t fat16_bos_kume_bul(void);
 int      fat16_kume_yaz(uint16_t kume, uint16_t deger);

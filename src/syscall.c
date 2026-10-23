@@ -1169,8 +1169,11 @@ static uint64_t sys_asena_denetle_impl(uint64_t tur, uint64_t sira, uint64_t cik
     (void)a4;
     if (tur == 0) {
         asena_rapor_t r;
-        if (asena_tara(0, &r) != 0 && r.hata == 0) return (uint64_t)-1;
-        return kullaniciya_atomik_yaz(cikti, &r, sizeof r) == 0 ? 0 : (uint64_t)-1;
+        int t = asena_tara(0, &r);
+        /* rapor her durumda yazılır (hata kodu arayüzde gösterilir), ama
+         * tarama başarısızsa çağrı da başarısız döner: yarım rapor temiz görünmesin */
+        if (kullaniciya_atomik_yaz(cikti, &r, sizeof r) != 0) return (uint64_t)-1;
+        return (t != 0 || r.hata) ? (uint64_t)-1 : 0;
     }
     if (tur == 1) {
         asena_bulgu_t b;
