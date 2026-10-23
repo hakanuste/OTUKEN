@@ -22,6 +22,7 @@ typedef struct akis {
     uint8_u tam[4096];
     int   bas, son;
     int   bitti;
+    int   tls_kesik;          /* TLS: close_notify gelmeden TCP kapandı */
 } akis_t;
 
 /* TLS katmanı (tls.c ya da tls_yok.c) */

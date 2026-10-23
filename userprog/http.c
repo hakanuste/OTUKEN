@@ -255,7 +255,7 @@ static int tek_istek(const url_t *u, alici_t *al) {
     for (const char *q = u->host; *q; q++)
         if ((unsigned char)*q <= 0x20 || *q == 0x7F) { hata_yaz(y, "Adreste denetim karakteri var", 0); return -1; }
     if (coz(u->host, ip) != 0) { hata_yaz(y, "Ad çözülemedi: ", u->host); return -1; }
-    a.t = ag_baglan(ip, u->port); a.tls = 0; a.bas = a.son = 0; a.bitti = 0;
+    a.t = ag_baglan(ip, u->port); a.tls = 0; a.bas = a.son = 0; a.bitti = 0; a.tls_kesik = 0;
     if (a.t < 0) { hata_yaz(y, "Bağlanılamadı: ", u->host); return -1; }
     if (u->guvenli && guvenli_ac(&a, u->host, y->hata, sizeof y->hata) != 0) {
         ag_kapat(a.t);
@@ -338,6 +338,11 @@ static int tek_istek(const url_t *u, alici_t *al) {
         int g = govdeye(al, &a, uzunluk);
         if (g == -3) { hata_yaz(y, "İptal edildi", 0); goto son; }
         if (g < 0) { hata_yaz(y, g == -2 ? "Zaman aşımı" : "Bağlantı koptu (yanıt eksik)", 0); goto son; }
+        /* boyu belirtilmemiş (bağlantı kapanışıyla biten) HTTPS gövdesi:
+         * close_notify yoksa sonun gerçek olduğu doğrulanamaz -> kabul edilmez */
+        if (uzunluk < 0 && a.tls_kesik && !y->kesik) {
+            hata_yaz(y, "HTTPS yanıtı doğrulanmadan kesildi (close_notify yok)", 0); goto son;
+        }
     }
     r = 0;
 son:

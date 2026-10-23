@@ -426,6 +426,7 @@ static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy,
         /* SONUNA EKLE: yalnız yeni bayt yazılır */
         /* son küme BOYDAN hesaplanır (zincir sonundan değil): yarıda kalmış
          * eski bir eklemeden artakalan küme varsa kesilir */
+        if (!fat16_kume_gecerli(eski.first_cluster)) return -1;   /* birim dışı ilk küme */
         uint32_t gerek = (eski.size + kb - 1) / kb;
         uint16_t son = eski.first_cluster;
         for (uint32_t i = 1; i < gerek; i++) {

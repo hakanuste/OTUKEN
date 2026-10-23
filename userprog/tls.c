@@ -168,14 +168,17 @@ int guvenli_yaz(akis_t *a, const void *v, int n) {
 }
 
 int guvenli_oku(akis_t *a, void *v, int n) {
-    (void)a;
     int r = br_sslio_read(&ioc, v, (size_t)n);
     if (r > 0) return r;
     int e = br_ssl_engine_last_error(&sc.eng);
     /* close_notify ile kapanış (e==0) ya da close_notify'sız TCP kapanışı:
      * ikisi de akış sonu. Gövdenin eksik kalıp kalmadığını HTTP katmanı
      * (Content-Length / parçalı aktarım) ayrıca denetler. */
-    if (e == 0 || (tls_eof && e == BR_ERR_IO)) return AG_SON;
+    if (e == 0) return AG_SON;
+    if (tls_eof && e == BR_ERR_IO) {   /* close_notify'sız kapanış: kesilmiş olabilir */
+        a->tls_kesik = 1;
+        return AG_SON;
+    }
     return -1;
 }
 

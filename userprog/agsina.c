@@ -208,6 +208,9 @@ int main(void) {
         TURL(tp[0], "/eof");
         r = http_al(tu, &y, govde, sizeof govde, 0, 0);
         denetle("TLS: uzunluksuz yanit (close_notify)", r == 0 && y.govde_boy == 200000);
+        TURL(tp[0], "/eof_kesik");
+        r = http_al(tu, &y, govde, sizeof govde, 0, 0);
+        denetle("TLS: close_notify'siz kesilen uzunluksuz yanit REDDEDILDI", r != 0 && icerir_s(y.hata, "close_notify"));
         /* 3) ECDSA sertifika */
         TURL(tp[1], "/kucuk.txt");
         r = http_al(tu, &y, govde, sizeof govde, 0, 0);
