@@ -36,7 +36,8 @@ static void durum_yaz(const char *m, uint32_u r) { durum[0] = 0; dize_ekle(durum
 static void denetle(void) {
     rap_var = syscall(SYS_ASENA_DENETLE, 0, 0, (long)&rap, 0) == 0;
     bul_n = 0;
-    while (rap_var && bul_n < 16 && syscall(SYS_ASENA_DENETLE, 1, bul_n, (long)&bul[bul_n], 0) == 0) bul_n++;
+    /* bulgular BU taramanın kuşağıyla istenir: arada başka tarama olduysa okunmaz */
+    while (rap_var && bul_n < 16 && syscall(SYS_ASENA_DENETLE, 1, bul_n, (long)&bul[bul_n], (long)rap.kusak) == 0) bul_n++;
 }
 
 static void dizge_oku(void) {

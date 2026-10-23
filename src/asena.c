@@ -34,6 +34,7 @@ static giris_t      *gir;        /* 1..n (0 kullanılmaz: sahip=0 "yok") */
 static uint32_t      gir_n;
 static asena_bulgu_t bulgular[AZAMI_BULGU];
 static uint32_t      bulgu_n;
+static uint32_t      tarama_kusak;      /* her taramada artar (0 kullanılmaz) */
 
 static const char *const TUR_ADI[ASENA_TUR_SAYISI] = {
     "FAT kopyalari farkli", "kayip kume", "capraz bagli kume", "kirik zincir",
@@ -87,8 +88,10 @@ static int dizin_topla(uint32_t lba, uint32_t sektor, uint16_t ust, uint8_t *sb)
 
 int asena_tara(int onar, asena_rapor_t *r) {
     for (unsigned i = 0; i < sizeof *r; i++) ((uint8_t *)r)[i] = 0;
-    bulgu_n = 0;
     ozkilit_al(&depo_kilit);
+    bulgu_n = 0;
+    if (++tarama_kusak == 0) tarama_kusak = 1;
+    r->kusak = tarama_kusak;
     fat16_geo_t g;
     uint16_t *fat = 0, *sahip = 0;
     uint8_t *sb = 0;
@@ -245,8 +248,12 @@ son:
     return sonuc;
 }
 
-int asena_bulgu(int i, asena_bulgu_t *b) {
-    if (i < 0 || (uint32_t)i >= bulgu_n) return -1;
-    *b = bulgular[i];
-    return 0;
+int asena_bulgu(int i, uint32_t kusak, asena_bulgu_t *b) {
+    /* kilit altında: başka bir tarama bulguları yeniden yazarken yarım satır
+     * okunmaz; kuşak tutmazsa (arada yeni tarama olmuş) okuma reddedilir */
+    int r = -1;
+    ozkilit_al(&depo_kilit);
+    if ((kusak == 0 || kusak == tarama_kusak) && i >= 0 && (uint32_t)i < bulgu_n) { *b = bulgular[i]; r = 0; }
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

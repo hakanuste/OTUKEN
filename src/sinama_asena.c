@@ -150,7 +150,7 @@ static void mod1(uint32_t hz) {
     for (int t = 0; t < ASENA_TUR_SAYISI; t++) if (r1.sayi[t] != bek[t]) hata |= 1;
     for (int i = 0; ; i++) {
         asena_bulgu_t b;
-        if (asena_bulgu(i, &b) != 0) break;
+        if (asena_bulgu(i, 0, &b) != 0) break;
         serial_write("ASENA-TEST:   "); serial_write(asena_tur_adi(b.tur)); serial_write(" '"); serial_write(b.yol);
         serial_write("' "); yaz_sayi(b.deger); serial_write("\n");
         if (b.tur == ASENA_KAYIP && b.deger != kayip_deger) hata |= 1;

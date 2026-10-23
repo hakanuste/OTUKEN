@@ -394,6 +394,30 @@ int ulak_send_arp_request(const uint8_t target_ip[4]) {
 
 /* Stage 16 tamamlanmasi: herhangi bir ust-katman protokolu (TCP=6,
  * UDP=17, ICMP=1) icin genel IPv4 gonderimi. TCP katmani bunu kullanir. */
+/* hedefin bir sonraki atlamasının MAC'i: alt ağ dışı -> ağ geçidi; yayın ya
+ * da yapılandırma yoksa yayın MAC'i. Önbellekte yoksa ARP sorulur ve bu
+ * paket yayınla gider (bir sonrakinde önbellekte hazır olur). */
+static void sonraki_mac(const uint8_t dest_ip[4], uint8_t dst_mac[6]) {
+    const dhcp_config_t *dc = dhcp_get_config();
+    int yayin = dest_ip[0] == 255 && dest_ip[1] == 255 && dest_ip[2] == 255 && dest_ip[3] == 255;
+    for (int i = 0; i < 6; i++) dst_mac[i] = 0xFF;
+    if (yayin) return;
+    const uint8_t *sonraki = dest_ip;
+    if (dc && dc->configured) {
+        int ayni = 1;
+        for (int i = 0; i < 4; i++)
+            if ((dest_ip[i] & dc->netmask[i]) != (state.ip[i] & dc->netmask[i])) ayni = 0;
+        if (!ayni) sonraki = dc->gateway;
+    }
+    KILIT;
+    int bilinen = arp_cache_get(sonraki, dst_mac);
+    BIRAK;
+    if (!bilinen) {
+        for (int i = 0; i < 6; i++) dst_mac[i] = 0xFF;
+        ulak_send_arp_request(sonraki);
+    }
+}
+
 int ulak_send_ipv4(const uint8_t dest_ip[4], uint8_t protocol,
                     const uint8_t *payload, uint16_t len) {
     if (len > 1400) return -1;
@@ -407,23 +431,8 @@ int ulak_send_ipv4(const uint8_t dest_ip[4], uint8_t protocol,
      * gecidinin MAC'ine gider; eskiden hedef IP'nin kendisi ARP'laniyordu
      * ve alt ag disina hicbir paket cikamiyordu (DNS sunucusu ayni alt
      * agda oldugu icin fark edilmemisti). */
-    const dhcp_config_t *dc = dhcp_get_config();
-    const uint8_t *sonraki = dest_ip;
-    if (dc && dc->configured) {
-        int ayni = 1;
-        for (int i = 0; i < 4; i++)
-            if ((dest_ip[i] & dc->netmask[i]) != (state.ip[i] & dc->netmask[i])) ayni = 0;
-        int yayin = dest_ip[0] == 255 && dest_ip[1] == 255 && dest_ip[2] == 255 && dest_ip[3] == 255;
-        if (!ayni && !yayin) sonraki = dc->gateway;
-    }
     uint8_t dst_mac[6];
-    KILIT;
-    int bilinen = arp_cache_get(sonraki, dst_mac);
-    BIRAK;
-    if (!bilinen) {
-        for (int i = 0; i < 6; i++) dst_mac[i] = 0xFF;
-        ulak_send_arp_request(sonraki);
-    }
+    sonraki_mac(dest_ip, dst_mac);
     for (int i = 0; i < 6; i++) frame[pos++] = dst_mac[i];
     for (int i = 0; i < 6; i++) frame[pos++] = state.mac[i];
     frame[pos++] = 0x08; frame[pos++] = 0x00;                 /* EtherType=IPv4 */
@@ -457,9 +466,11 @@ int ulak_send_udp(const uint8_t dest_ip[4], uint16_t src_port,
     uint8_t frame[1518];
     int pos = 0;
 
-    /* Ethernet: hedef MAC yayin (basit tutuldu - ARP tablosu
-     * cozumlemesi sonraki asamada) */
-    for (int i = 0; i < 6; i++) frame[pos++] = 0xFF;
+    /* 1.4.9: hedef MAC, TCP ile aynı yönlendirmeyle (alt ağ dışı -> ağ
+     * geçidi; DNS sunucusu başka alt ağdaysa sorgu ağ geçidine gider) */
+    uint8_t dst_mac[6];
+    sonraki_mac(dest_ip, dst_mac);
+    for (int i = 0; i < 6; i++) frame[pos++] = dst_mac[i];
     for (int i = 0; i < 6; i++) frame[pos++] = state.mac[i];
     frame[pos++] = 0x08; frame[pos++] = 0x00;   /* EtherType=IPv4 */
 

@@ -1166,7 +1166,6 @@ static uint64_t oku_cr4(void) { uint64_t v; __asm__ volatile ("mov %%cr4, %0" : 
 
 /* ===================== 1.4.9: ASENA, ERGENEKON, TAMGA ===================== */
 static uint64_t sys_asena_denetle_impl(uint64_t tur, uint64_t sira, uint64_t cikti, uint64_t a4) {
-    (void)a4;
     if (tur == 0) {
         asena_rapor_t r;
         int t = asena_tara(0, &r);
@@ -1177,7 +1176,7 @@ static uint64_t sys_asena_denetle_impl(uint64_t tur, uint64_t sira, uint64_t cik
     }
     if (tur == 1) {
         asena_bulgu_t b;
-        if (asena_bulgu((int)sira, &b) != 0) return (uint64_t)-1;
+        if (asena_bulgu((int)sira, (uint32_t)a4, &b) != 0) return (uint64_t)-1;   /* a4: raporun kuşağı */
         return kullaniciya_atomik_yaz(cikti, &b, sizeof b) == 0 ? 0 : (uint64_t)-1;
     }
     if (tur == 2) {

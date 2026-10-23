@@ -92,7 +92,7 @@ static inline int guvenlik_bilgi(int tur, int sira, guvenlik_u *g) {
 #define ASENA_TUR_SAYISI  8
 typedef struct {
     uint32_u sayi[ASENA_TUR_SAYISI];
-    uint32_u dosya, dizin, onarilan, bulgu, bos_kume, kume_sayisi, hata, b;
+    uint32_u dosya, dizin, onarilan, bulgu, bos_kume, kume_sayisi, hata, kusak;
 } asena_rapor_u;
 typedef struct { uint32_u tur, deger; char yol[40]; } asena_bulgu_u;
 typedef struct { char ad[13]; uint8_u durum; unsigned short b; uint32_u boy, disk_boy; } dizge_dosya_u;

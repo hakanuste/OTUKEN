@@ -428,16 +428,24 @@ static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy,
          * eski bir eklemeden artakalan küme varsa kesilir */
         if (!fat16_kume_gecerli(eski.first_cluster)) return -1;   /* birim dışı ilk küme */
         uint32_t gerek = (eski.size + kb - 1) / kb;
+        /* zincirde döngü olursa (bozuk FAT) hiçbir şey değiştirilmez: gezilen
+         * kümeler işaretlenir, tekrar görülen küme hata */
+        static uint8_t gezildi[65536 / 8];
+        for (unsigned i = 0; i < sizeof gezildi; i++) gezildi[i] = 0;
         uint16_t son = eski.first_cluster;
+        gezildi[son >> 3] |= (uint8_t)(1u << (son & 7));
         for (uint32_t i = 1; i < gerek; i++) {
             uint16_t nx = fat16_sonraki_kume(son);
             if (!fat16_kume_gecerli(nx)) return -1;       /* zincir boydan kısa: bozuk */
+            if (gezildi[nx >> 3] & (1u << (nx & 7))) return -1;   /* döngü */
+            gezildi[nx >> 3] |= (uint8_t)(1u << (nx & 7));
             son = nx;
         }
         {
             uint16_t art = fat16_sonraki_kume(son);
             if (art >= 2 && art < 0xFFF8) {
                 if (!fat16_kume_gecerli(art)) return -1;
+                if (gezildi[art >> 3] & (1u << (art & 7))) return -1;   /* artakalan sandığımız küme dosyanın içinde: döngü */
                 if (fat16_kume_yaz(son, 0xFFFF) != 0) return -1;   /* önce kes, sonra bırak */
                 zincir_bosalt(art);
             }

@@ -138,8 +138,14 @@ done:
     return found;
 }
 
+static uint32_t veri_kume_sayisi(void);
+/* küme bu birimin veri bölgesinde mi: FAT erişimleri BUNA bağlı (bozuk
+ * zincir FAT alanının dışına okuma/yazma yaptıramaz) */
+static int kume_icinde(uint16_t k) { return k >= 2 && (uint32_t)k < veri_kume_sayisi() + 2; }
+
 static uint16_t fat16_next_cluster(uint16_t cluster) {
     static uint8_t fat_sector[512];
+    if (!kume_icinde(cluster)) return 0xFFFF;          /* birim dışı: zincir burada biter */
     uint32_t fat_offset = (uint32_t)cluster * 2;
     uint32_t fat_sec = fat_start_lba + (fat_offset / bytes_per_sector);
     uint32_t ent_off = fat_offset % bytes_per_sector;
@@ -244,9 +250,11 @@ static int fat16_read_file_at__ic(const fat16_dirent_t *entry, uint8_t *buf,
  * BOZUK gorur. */
 static int fat16_set_cluster(uint16_t cluster, uint16_t value) {
     static uint8_t fat_sector[512];
+    if (!kume_icinde(cluster)) return -1;              /* birim dışı: FAT alanı dışına yazılmaz */
     uint32_t fat_offset = (uint32_t)cluster * 2;
     uint32_t sec_in_fat = fat_offset / bytes_per_sector;
     uint32_t ent_off    = fat_offset % bytes_per_sector;
+    if (sec_in_fat >= fat_size_sectors) return -1;
 
     for (uint8_t f = 0; f < num_fats; f++) {
         uint32_t lba = fat_start_lba + (uint32_t)f * fat_size_sectors + sec_in_fat;
@@ -368,6 +376,10 @@ static int fat16_write_file__ic(const char *name83, const uint8_t *data, uint32_
             }
             if (ent[11] == 0x0F || (ent[11] & 0x08)) continue;  /* LFN / etiket */
             if (raw83_equal(ent, want)) {
+                if (ent[11] & 0x10) {                /* aynı adlı DİZİN: dosyayla değiştirilmez */
+                    serial_write("BITIG(fat16): ayni adli dizin var - yazma reddedildi\n");
+                    return -1;
+                }
                 found_sec = (int)s; found_idx = e;
                 goto scan_done;
             }
@@ -577,7 +589,7 @@ uint32_t fat16_kume_lba(uint16_t kume) {
     return data_start_lba + (uint32_t)(kume - 2) * sectors_per_cluster;
 }
 /* küme numarası bu birimin veri bölgesinde mi */
-int fat16_kume_gecerli(uint16_t kume) { return kume >= 2 && (uint32_t)kume < veri_kume_sayisi() + 2; }
+int fat16_kume_gecerli(uint16_t kume) { return kume_icinde(kume); }
 
 uint16_t fat16_sonraki_kume(uint16_t kume) { return fat16_next_cluster(kume); }
 uint16_t fat16_bos_kume_bul(void)          { return fat16_find_free_cluster(); }

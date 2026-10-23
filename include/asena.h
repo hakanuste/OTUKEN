@@ -30,7 +30,7 @@ typedef struct {
     uint32_t bos_kume, kume_sayisi;
     uint32_t hata;                    /* 0 tamam; 1 birim bağlı değil; 2 bellek; 3 disk;
                                          4 giriş tablosu doldu (onarım yapılmadı) */
-    uint32_t b;
+    uint32_t kusak;                   /* tarama sayacı: bulgular bu taramaya ait mi */
 } asena_rapor_t;
 _Static_assert(sizeof(asena_rapor_t) == 64, "asena rapor");
 
@@ -43,7 +43,7 @@ _Static_assert(sizeof(asena_bulgu_t) == 48, "asena bulgu");
 
 /* onar=0: yalnız denetle (diske yazmaz). 0 / -1 */
 int asena_tara(int onar, asena_rapor_t *r);
-/* son taramanın i. bulgusu; 0 / -1 */
-int asena_bulgu(int i, asena_bulgu_t *b);
+/* son taramanın i. bulgusu; kusak != 0 ise o taramanın olmalı. 0 / -1 */
+int asena_bulgu(int i, uint32_t kusak, asena_bulgu_t *b);
 const char *asena_tur_adi(uint32_t tur);
 #endif
