@@ -1,4 +1,5 @@
 #include "disk_cache.h"
+#include "depo_kilit.h"
 #include "disk.h"
 #define CACHE_ENTRIES 48
 typedef struct { int valid; uint8_t disk_id; uint64_t lba; uint8_t data[512]; } cache_entry_t;
@@ -13,7 +14,7 @@ static int find_cache(uint8_t disk_id, uint64_t lba) {
         if (cache[i].valid && cache[i].disk_id == disk_id && cache[i].lba == lba) return i;
     return -1;
 }
-int disk_cache_read_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, void *buf) {
+static int disk_cache_read_sectors__ic(uint8_t disk_id, uint64_t lba, uint8_t count, void *buf) {
     uint8_t *out = (uint8_t *)buf;
     for (uint8_t s = 0; s < count; s++) {
         uint64_t this_lba = lba + s;
@@ -44,7 +45,7 @@ void disk_cache_stats(uint32_t *hits, uint32_t *misses) {
 }
 
 
-int disk_cache_write_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, const void *buf) {
+static int disk_cache_write_sectors__ic(uint8_t disk_id, uint64_t lba, uint8_t count, const void *buf) {
     const uint8_t *in = (const uint8_t *)buf;
     if (disk_id != 0) return -1;   /* su an sadece birincil diske yazma */
 
@@ -60,4 +61,21 @@ int disk_cache_write_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, const
         }
     }
     return 0;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int disk_cache_read_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, void *buf) {
+    ozkilit_al(&depo_kilit);
+    int r = disk_cache_read_sectors__ic(disk_id, lba, count, buf);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int disk_cache_write_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, const void *buf) {
+    ozkilit_al(&depo_kilit);
+    int r = disk_cache_write_sectors__ic(disk_id, lba, count, buf);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

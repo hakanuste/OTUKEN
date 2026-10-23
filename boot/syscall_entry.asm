@@ -20,21 +20,21 @@
 
 global syscall_entry
 extern syscall_dispatch
-extern current_kernel_rsp
 
-section .bss
-align 8
-syscall_scratch_rsp: resq 1
-global last_syscall_rip
-last_syscall_rip: resq 1
+; SMP adim 4: tum durum CEKIRDEK-BASINA (gs:). Ofsetler include/cpu.h
+; CPU_OFS_* ile ayni olmalidir (cpu.c'de _Static_assert ile denetlenir).
+%define CPU_CEKIRDEK_RSP 8
+%define CPU_ARA_RSP      16
+%define CPU_SON_RIP      24
 
 section .text
 syscall_entry:
-    mov [rel last_syscall_rip], rcx
-    mov [rel syscall_scratch_rsp], rsp      ; kullanici RSP'sini gecici sakla
-    mov rsp, [rel current_kernel_rsp]        ; GOREVIN kendi cekirdek yiginina gec
+    swapgs                                    ; GS_BASE <- cekirdek blogu
+    mov [gs:CPU_SON_RIP], rcx
+    mov [gs:CPU_ARA_RSP], rsp                 ; kullanici RSP'sini gecici sakla
+    mov rsp, [gs:CPU_CEKIRDEK_RSP]            ; GOREVIN kendi cekirdek yiginina gec
 
-    push qword [rel syscall_scratch_rsp]     ; [15] kullanici RSP
+    push qword [gs:CPU_ARA_RSP]              ; [15] kullanici RSP
     push rcx                                  ; [14] donus RIP
     push r11                                  ; [13] RFLAGS
     ; --- callee-saved ---
@@ -87,6 +87,7 @@ syscall_entry:
     pop r11                                   ; RFLAGS
     pop rcx                                   ; donus RIP
     pop rsp                                   ; kullanici RSP
+    swapgs                                    ; GS_BASE <- kullanici (IF=0, atomik)
     o64 sysret
 
 ; --- Calistirilamaz yigin bildirimi ---

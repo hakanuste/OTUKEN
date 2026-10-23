@@ -17,6 +17,7 @@
 #include "ozan_ses.h"
 #include "ses.h"
 #include "serial.h"
+#include "ses_kilit.h"
 
 /* Kopuz düzeni: La pentatonik (Hz). Karar sesi ilk derecedir. */
 static const uint32_t PERDE[] = {
@@ -48,6 +49,9 @@ static int sesli_mi(const char *s, int *bayt)
      *             ü(0xC3 0xBC) Ü(0xC3 0x9C) â(0xC3 0xA2)              */
     if ((c & 0xE0) == 0xC0) {
         unsigned char d = (unsigned char)s[1];
+        /* Denetim (1.4.6): yarim dizi (s[1] devam bayti degil, ornegin
+         * NUL) iki bayt atlatip dizenin sonunu asiyordu. */
+        if ((d & 0xC0) != 0x80) return 0;             /* *bayt = 1 */
         *bayt = 2;
         if (c == 0xC4 && (d == 0xB1 || d == 0xB0)) return 1;   /* ı İ */
         if (c == 0xC3 && (d == 0xB6 || d == 0x96)) return 1;   /* ö Ö */
@@ -55,7 +59,10 @@ static int sesli_mi(const char *s, int *bayt)
         if (c == 0xC3 && (d == 0xA2 || d == 0x82)) return 1;   /* â Â */
         return 0;
     }
-    if ((c & 0xF0) == 0xE0) { *bayt = 3; return 0; }
+    if ((c & 0xF0) == 0xE0) {
+        if (((unsigned char)s[1] & 0xC0) == 0x80 && ((unsigned char)s[2] & 0xC0) == 0x80) *bayt = 3;
+        return 0;
+    }
     return 0;
 }
 
@@ -79,8 +86,7 @@ static int ayrac_mi(char c)
            c == ';' || c == ':' || c == '\n' || c == '\t';
 }
 
-void ozan_soyle(const char *metin, int hiz)
-{
+static void ozan_soyle__ic(const char *metin, int hiz) {
     if (!metin || !ses_var()) return;
     if (hiz < 1) hiz = 1;
 
@@ -126,8 +132,7 @@ void ozan_soyle(const char *metin, int hiz)
         sayac++;
         p += b;
     }
-    ses_bekle();      /* ezginin sonu kesilmesin */
-    ses_dur();
+    ses_bitir();
 }
 
 void ozan_selam(void)
@@ -142,4 +147,13 @@ void ozan_selam(void)
     for (int i = 0; i < (int)(sizeof(EZGI) / sizeof(EZGI[0])); i++)
         ses_ton(EZGI[i][0], EZGI[i][1]);
     serial_write("ozan: selam ezgisi calindi\n");
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+void ozan_soyle(const char *metin, int hiz) {
+    ozkilit_al(&ses_kilit);
+    ozan_soyle__ic(metin, hiz);
+    ozkilit_birak(&ses_kilit);
 }

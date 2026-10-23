@@ -59,8 +59,10 @@ typedef struct __attribute__((packed)) {
 /* Segment basina azami sayfa. Bu bir GUVENLIK siniri degil, akil
  * saglik siniridir: asil koruma kullanici araligi denetimi ve PMM'dir.
  * UMAY'in .bss'i (bilgi deposu + US1 motoru) 256 sayfayi asti; 512
- * sayfa = 2 MB. Daha buyuk segment yine reddedilir. */
-#define ELF_MAX_PAGES 512
+ * sayfa = 2 MB. Daha buyuk segment yine reddedilir.
+ * 1.4.9: 2048 sayfa = 8 MB. TULPAR'in sayfa ve metin tamponlari .bss'te
+ * (kullanici heap'i gorev basina 4 MB). Geri alma kaydi 256 KB. */
+#define ELF_MAX_PAGES 2048
 
 typedef struct {
     uint64_t entry_point;

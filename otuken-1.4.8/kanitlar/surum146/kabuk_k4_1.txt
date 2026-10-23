@@ -1,9 +1,0 @@
-  [GECTI] kimlik (SYS_GETPID)
-  [GECTI] listele (SYS_LISTDIR, gorev-basina tampon)
-  [GECTI] dosya ogesi
-  [GECTI] umay (SYS_IPC_AL, gorev-basina tampon)
-  [GECTI] odak Tab ile pencereye ve geri gecti
-  [GECTI] pencerede yazilan UMAY'a gitti (selam yaniti)
-  [GECTI] pencerede yazilan kabuga GITMEDI
-  [GECTI] kabuk odak donunce yine calisiyor
-  [GECTI] panik yok (0)

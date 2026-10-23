@@ -3,6 +3,7 @@
 #include "timer.h"
 #include "log.h"
 #include "serial.h"
+#include "spinlock.h"
 
 #define IPC_QUEUE_DEPTH 8
 
@@ -15,6 +16,22 @@ typedef struct {
 } ipc_port_t;
 
 static ipc_port_t ports[IPC_MAX_PORTS];
+
+/* --- SMP: port tablosu ve kuyruklar PAYLASILAN veridir ---
+ * Port acma yuvasi tahsis eder; gonderme/alma kuyruk sayaclarini
+ * degistirir. Iki cekirdek ayni anda girerse ayni yuvayi kapabilir
+ * ya da sayaclar bozulabilir. Islemler kisa oldugu icin modul
+ * duzeyinde TEK kilit yeterli ve basit. */
+static spinlock_t ipc_kilit;
+static int ipc_kilit_hazir = 0;
+
+static inline uint64_t ipc_kilitle(void) {
+    if (!ipc_kilit_hazir) { spinlock_init(&ipc_kilit); ipc_kilit_hazir = 1; }
+    return spin_lock_irqsave(&ipc_kilit);
+}
+static inline void ipc_kilit_ac(uint64_t f) {
+    spin_unlock_irqrestore(&ipc_kilit, f);
+}
 static uint32_t stat_sent = 0, stat_recv = 0;
 static uint32_t seq_counter = 1;
 
@@ -35,10 +52,10 @@ void ipc2_init(void) {
 }
 
 int ipc_port_create(const char *name) {
-    cli();
+    uint64_t _ik = ipc_kilitle();
     for (int i = 0; i < IPC_MAX_PORTS; i++) {
         if (ports[i].used && name_eq(ports[i].name, name)) {
-            sti();
+            ipc_kilit_ac(_ik);
             serial_write("IPC2: port ismi ZATEN kullanimda: ");
             serial_write(name);
             serial_write("\n");
@@ -54,7 +71,7 @@ int ipc_port_create(const char *name) {
         int j = 0;
         while (name[j] && j < IPC_PORT_NAME_LEN - 1) { ports[i].name[j] = name[j]; j++; }
         ports[i].name[j] = 0;
-        sti();
+        ipc_kilit_ac(_ik);
         serial_write("IPC2: port acildi '");
         serial_write(ports[i].name);
         serial_write("' kimlik=");
@@ -62,50 +79,88 @@ int ipc_port_create(const char *name) {
         serial_write("\n");
         return i;
     }
-    sti();
+    ipc_kilit_ac(_ik);
     log_write(LOG_HATA, "IPC2", "bos port yuvasi yok");
     return -1;
 }
 
 int ipc_port_find(const char *name) {
+    /* Denetim (1.4.6): kilitsiz okuma, ayni anda acilan kapinin (used=1,
+     * ad henuz yazilmamis) eski adiyla eslesebiliyordu. */
+    int bulunan = -1;
+    uint64_t _ik = ipc_kilitle();
     for (int i = 0; i < IPC_MAX_PORTS; i++)
-        if (ports[i].used && name_eq(ports[i].name, name)) return i;
-    return -1;
+        if (ports[i].used && name_eq(ports[i].name, name)) { bulunan = i; break; }
+    ipc_kilit_ac(_ik);
+    return bulunan;
+}
+
+int ipc_gorevin_portu(uint32_t gorev_id) {
+    int bulunan = -1;
+    uint64_t _ik = ipc_kilitle();
+    for (int i = 0; i < IPC_MAX_PORTS; i++)
+        if (ports[i].used && ports[i].owner_task == gorev_id) { bulunan = i; break; }
+    ipc_kilit_ac(_ik);
+    return bulunan;
+}
+
+int ipc_port_sahibi(int port, uint32_t *sahip) {
+    if (port < 0 || port >= IPC_MAX_PORTS) return -1;
+    uint64_t _ik = ipc_kilitle();
+    int var = ports[port].used;
+    if (var && sahip) *sahip = ports[port].owner_task;
+    ipc_kilit_ac(_ik);
+    return var ? 0 : -1;
+}
+
+/* UYUM duzeltmesi: olen gorevin portu acik kaliyordu. Tablo 8 yuva;
+ * yeniden baslayan bir servis ayni adi alamiyor ('ZATEN kullanimda')
+ * ve olu porta giden iletiler kimsenin okumadigi kuyrukta birikiyordu. */
+int ipc_gorev_portlarini_kapat(uint32_t gorev_id) {
+    int n = 0;
+    uint64_t _ik = ipc_kilitle();
+    for (int i = 0; i < IPC_MAX_PORTS; i++)
+        if (ports[i].used && ports[i].owner_task == gorev_id) {
+            ports[i].used = 0; ports[i].count = 0; n++;
+        }
+    ipc_kilit_ac(_ik);
+    return n;
 }
 
 int ipc_port_close(int port) {
     if (port < 0 || port >= IPC_MAX_PORTS || !ports[port].used) return -1;
-    cli();
+    uint64_t _ik = ipc_kilitle();
     ports[port].used = 0;
-    sti();
+    ipc_kilit_ac(_ik);
     return 0;
 }
 
 int ipc_send(int dest_port, const ipc_message_t *msg) {
     if (dest_port < 0 || dest_port >= IPC_MAX_PORTS) return -1;
-    cli();
+    uint64_t _ik = ipc_kilitle();
     ipc_port_t *p = &ports[dest_port];
-    if (!p->used || p->count >= IPC_QUEUE_DEPTH) { sti(); return -1; }
+    if (!p->used) { ipc_kilit_ac(_ik); return -1; }
+    if (p->count >= IPC_QUEUE_DEPTH) { ipc_kilit_ac(_ik); return IPC_DOLU; }
 
     p->queue[p->tail] = *msg;
     p->tail = (p->tail + 1) % IPC_QUEUE_DEPTH;
     p->count++;
     stat_sent++;
-    sti();
+    ipc_kilit_ac(_ik);
     return 0;
 }
 
 int ipc_try_receive(int port, ipc_message_t *out) {
     if (port < 0 || port >= IPC_MAX_PORTS) return -1;
-    cli();
+    uint64_t _ik = ipc_kilitle();
     ipc_port_t *p = &ports[port];
-    if (!p->used || p->count == 0) { sti(); return 0; }
+    if (!p->used || p->count == 0) { ipc_kilit_ac(_ik); return 0; }
 
     *out = p->queue[p->head];
     p->head = (p->head + 1) % IPC_QUEUE_DEPTH;
     p->count--;
     stat_recv++;
-    sti();
+    ipc_kilit_ac(_ik);
     return 1;
 }
 

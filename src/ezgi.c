@@ -16,6 +16,7 @@
 #include "ses.h"
 #include "vfs.h"
 #include "serial.h"
+#include "ses_kilit.h"
 
 #define CIKIS_HZ    48000
 #define PARCA       2048          /* tek seferde çalınan çerçeve sayısı */
@@ -87,8 +88,7 @@ static void cerceve_al(const uint8_t *d, const ezgi_bilgi_t *b,
     }
 }
 
-int ezgi_cal_bellekten(const uint8_t *veri, uint32_t boy)
-{
+static int ezgi_cal_bellekten__ic(const uint8_t *veri, uint32_t boy) {
     ezgi_bilgi_t b;
     int r = ezgi_basligi_coz(veri, boy, &b);
     if (r != 0) return r;
@@ -120,8 +120,7 @@ int ezgi_cal_bellekten(const uint8_t *veri, uint32_t boy)
     return 0;
 }
 
-int ezgi_cal(const char *yol)
-{
+static int ezgi_cal__ic(const char *yol) {
     static uint8_t dosya[512 * 1024];
     int fd = vfs_open(yol);
     if (fd < 0) {
@@ -135,4 +134,21 @@ int ezgi_cal(const char *yol)
         return -1;
     }
     return ezgi_cal_bellekten(dosya, (uint32_t)okunan);
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int ezgi_cal(const char *yol) {
+    ozkilit_al(&ses_kilit);
+    int r = ezgi_cal__ic(yol);
+    ozkilit_birak(&ses_kilit);
+    return r;
+}
+
+int ezgi_cal_bellekten(const uint8_t *veri, uint32_t boy) {
+    ozkilit_al(&ses_kilit);
+    int r = ezgi_cal_bellekten__ic(veri, boy);
+    ozkilit_birak(&ses_kilit);
+    return r;
 }

@@ -1,10 +1,15 @@
 #include <stdint.h>
 #include "multiboot.h"
 #include "multiboot2.h"
+#include "ekran_sinama.h"
 #include "serial.h"
+#include "smp.h"
 #include "dede.h"
-#include "ses.h"
+#include "modul.h"
+#include "smap.h"
+#include "ergenekon.h"
 #include "fat16_ic.h"
+#include "cpu.h"
 #include "idt.h"
 #include "fb.h"
 #include "keyboard.h"
@@ -48,6 +53,17 @@
 #include "umay.h"
 #include "kararlilik.h"
 #include "iskence.h"
+#include "sinama147.h"
+#include "sinama148.h"
+#include "sinama149.h"
+#include "sinama_kervan.h"
+#include "sinama_uyg.h"
+#include "sinama_asena.h"
+#include "sinama_dizin.h"
+#include "ses.h"
+#include "ag.h"
+#include "rtc.h"
+#include "kervan2.h"
 #include "surum.h"
 #include "ipc2.h"
 #include "servis.h"
@@ -55,6 +71,7 @@
 #include "kervan.h"
 #include "log.h"
 #include "otukenconf.h"
+#include "spinlock.h"
 #include "elf.h"
 #include "timer.h"
 #include "gui.h"
@@ -62,11 +79,21 @@
 /* Denetim duzeltmesi: oz-sinama ciktilari sadece TANI MODU'nda
  * yazilir. Uretim modunda acilis sessizdir - gercek bir sistem her
  * acilista onlarca test raporu basmaz. */
+/* Tani ciktisi seri katmanin ONEK tamponundan gecer (serial.h:
+ * seri_onek_ekle): "X -> " gibi parcalar gorev basina bekletilir ve
+ * ayni gorevin sonraki serial_write'i ile AYNI kilit tutusunda basilir.
+ * Boylece "onek + sonuc" satiri baska gorevin ciktisiyla bolunmez
+ * (GUVENLIK-5 bu yuzden rastgele KALDI veriyordu; bkz. ders 5). */
 static void tani_yaz(const char *s) {
-    if (OTUKEN_TANI_MODU) serial_write(s);
+    if (OTUKEN_TANI_MODU) seri_onek_ekle(s);
 }
 static void tani_hex(uint32_t v) {
-    if (OTUKEN_TANI_MODU) serial_write_hex(v);
+    if (!OTUKEN_TANI_MODU) return;
+    char t[11]; const char *h = "0123456789ABCDEF";
+    t[0] = '0'; t[1] = 'x';
+    for (int i = 0; i < 8; i++) t[2 + i] = h[(v >> (28 - 4 * i)) & 0xF];
+    t[10] = 0;
+    seri_onek_ekle(t);
 }
 
 
@@ -254,6 +281,10 @@ static void servis_hesapd(void) {
         ipc_message_t msg;
         while (ipc_try_receive(port, &msg) == 1) {
             ipc_message_t yanit;
+            /* Denetim (1.4.6): yanit yiginda ilklenmemisti; IPC_AL tum yapiyi
+             * kullaniciya kopyaladigindan eski cekirdek yigini baytlari Ring3
+             * cagirana sizabiliyordu. Once tamamen sifirla. */
+            for (uint32_t z = 0; z < sizeof yanit; z++) ((volatile uint8_t *)&yanit)[z] = 0;
             yanit.opcode = msg.opcode;
             yanit.sequence = msg.sequence;
             yanit.sender_port = (uint32_t)port;
@@ -319,7 +350,7 @@ static void ipc_istemci_gorev(void) {
 static volatile int g_shell_active = 0;
 
 /* UMAY gorevi: diskteki programi yukleyip Ring3'e gecer. */
-static void __attribute__((unused)) umay_gorev_entry(void) {
+static void umay_gorev_entry(void) {
     if (ring3_umay_calistir("/UMAY.ELF") != 0) {
         serial_write("UMAY-HOST: baslatilamadi\n");
     }
@@ -482,7 +513,495 @@ static int drv_disk2_probe(void) {
     return (disk2_read_sectors(0, 1, tmp) == 0) ? 1 : 0;
 }
 
+
+/* =====================================================================
+ * SMP-YARIS SINAMASI (SMP adim 6) - yalniz TANI MODU
+ * YARIS_GOREV gorev AYNI ANDA: ortak dosyayi okur ve karsilastirir, kendi
+ * dosyasina gorev+tura OZGU desen yazip geri okur (FAT tablosu ve kok
+ * dizin eszamanli degisir), 64 KB ayirip birakir (heap -> VMM), gunluge
+ * yazar ve yetki sorar. Her gorev kostugu cekirdekleri isaretler.
+ * Kontrol grubu: -DDEPO_KILIT_KAPALI ile ayni sinama hata BULMALIDIR.
+ * ===================================================================== */
+#define YARIS_GOREV 6
+#define YARIS_TUR   12
+#define YARIS_BOY   1536
+static volatile int      yaris_sira = 0, yaris_biten = 0, yaris_hata = 0;
+static volatile int      yaris_neden[8];     /* ilk hatanin kodu (gorev basina) */
+static volatile uint64_t yaris_cekirdek = 0;
+static uint8_t  yaris_ref[1024];
+static int      yaris_ref_n = 0;
+
+static int yaris_dosya_oku(const char *yol, uint8_t *buf, int azami) {
+    int fd = vfs_open(yol);
+    if (fd < 0) return -1;
+    int top = 0;
+    for (;;) {
+        int n = vfs_read(fd, buf + top, (uint64_t)((azami - top) > 512 ? 512 : (azami - top)));
+        if (n <= 0) break;
+        top += n;
+        if (top >= azami) break;
+    }
+    vfs_close(fd);
+    return top;
+}
+
+static void yaris_isaretle(void) {
+    __atomic_or_fetch(&yaris_cekirdek, 1ULL << (cpu_bu()->indeks & 63), __ATOMIC_RELAXED);
+}
+
+static void yaris_gorev(void) {
+    int n = __atomic_fetch_add(&yaris_sira, 1, __ATOMIC_SEQ_CST);
+    char ad[16] = "/YARIS0.TXT";
+    ad[6] = (char)('0' + n);
+    uint8_t *yaz = (uint8_t *)kmalloc(YARIS_BOY);
+    uint8_t *oku = (uint8_t *)kmalloc(YARIS_BOY + 16);
+    int hata = 0;
+    if (!yaz || !oku) hata++;
+    for (int tur = 0; tur < YARIS_TUR && !hata; tur++) {
+        yaris_isaretle();
+        /* 1) ortak dosya */
+        int r = yaris_dosya_oku("/OTUKEN.TXT", oku, (int)sizeof(yaris_ref));
+        if (r != yaris_ref_n) { hata++; yaris_neden[n & 7] = 10 + (r < 0 ? 0 : 1); }
+        else for (int i = 0; i < r; i++) if (oku[i] != yaris_ref[i]) { hata++; yaris_neden[n & 7] = 12; break; }
+        yaris_isaretle();
+        /* 2) kendi dosyasi: gorev+tur desenli yaz, geri oku */
+        for (int i = 0; i < YARIS_BOY; i++) yaz[i] = (uint8_t)(n * 37 + tur * 11 + i);
+        if (fat16_write_file(ad + 1, yaz, YARIS_BOY) != YARIS_BOY) { hata++; yaris_neden[n & 7] = 20; }   /* basari: yazilan bayt */
+        r = yaris_dosya_oku(ad, oku, YARIS_BOY + 16);
+        if (!hata && r != YARIS_BOY) { hata++; yaris_neden[n & 7] = 0x2100 + (r & 0xFF); }
+        else if (!hata) for (int i = 0; i < YARIS_BOY; i++) if (oku[i] != yaz[i]) { hata++; yaris_neden[n & 7] = 0x2200 + (i & 0xFF); break; }
+        yaris_isaretle();
+        /* 3) heap buyumesi (VMM), gunluk, yetki */
+        uint8_t *b = (uint8_t *)kmalloc(65536);
+        if (!b) hata++; else { b[0] = 1; b[65535] = 2; kfree(b); }
+        log_write(LOG_AYIKLA, "YARIS", "tur tamam");
+        (void)tore_get_capabilities(1);
+        thread_sleep(1);
+    }
+    if (yaz) kfree(yaz);
+    if (oku) kfree(oku);
+    __atomic_add_fetch(&yaris_hata, hata, __ATOMIC_SEQ_CST);
+    __atomic_add_fetch(&yaris_biten, 1, __ATOMIC_SEQ_CST);
+    thread_exit();
+}
+
+static void smp_yaris_sinamasi(void) {
+    yaris_ref_n = yaris_dosya_oku("/OTUKEN.TXT", yaris_ref, (int)sizeof(yaris_ref));
+    if (yaris_ref_n <= 0) { tani_yaz("SMP-YARIS: [HATA] referans dosya okunamadi\n"); return; }
+    for (int i = 0; i < YARIS_GOREV; i++) thread_create("YarisGorevi", yaris_gorev);
+    uint64_t bas = timer_get_ticks();
+    while (__atomic_load_n(&yaris_biten, __ATOMIC_ACQUIRE) < YARIS_GOREV &&
+           timer_get_ticks() - bas < 50 * 40)          /* <= 40 sn */
+        thread_sleep(5);
+    int biten = __atomic_load_n(&yaris_biten, __ATOMIC_ACQUIRE);
+    int hata = __atomic_load_n(&yaris_hata, __ATOMIC_ACQUIRE);
+    uint64_t maske = __atomic_load_n(&yaris_cekirdek, __ATOMIC_ACQUIRE);
+    int cek = 0; for (int i = 0; i < 64; i++) if (maske & (1ULL << i)) cek++;
+    tani_yaz((biten == YARIS_GOREV && hata == 0) ? "SMP-YARIS: GECTI" : "SMP-YARIS: KALDI");
+    tani_yaz(" gorev="); tani_hex((uint32_t)biten);
+    tani_yaz(" hata="); tani_hex((uint32_t)hata);
+    tani_yaz(" cekirdek_sayisi="); tani_hex((uint32_t)cek);
+    tani_yaz(" maske="); tani_hex((uint32_t)maske);
+    tani_yaz("\n");
+    if (hata) {
+        tani_yaz("SMP-YARIS: ilk hata kodlari");
+        for (int i = 0; i < YARIS_GOREV; i++) { tani_yaz(" "); tani_hex((uint32_t)yaris_neden[i]); }
+        tani_yaz("\n");
+    }
+    tani_yaz("SMP-DAGITIM: is gecisleri");
+    for (int i = 0; i < smp_uyanan() && i < 8; i++) {
+        cpu_yerel_t *c = cpu_indeksle((uint32_t)i);
+        tani_yaz(" c"); tani_hex((uint32_t)i); tani_yaz("="); tani_hex((uint32_t)c->is_gecis);
+    }
+    tani_yaz("\n");
+}
+
+/* =====================================================================
+ * AGIR SINAMA (stres + soak + sizinti) - yalniz TANI + OTUKEN_AGIR_SINAMA
+ *
+ * SMP-YARIS "dogruluk" sinamasidir (kilit calisiyor mu). Bu ise DAYANIKLILIK
+ * sinamasidir: cok gorevli, uzun sureli, degisken boyutlu yuk altinda
+ * cekirdek COKUYOR MU, SIZDIRIYOR MU, kaybediyor mu.
+ *
+ *   - heap: 16..8192 bayt degisken ayirma/birakma, desen dogrulama
+ *   - VFS/FAT: ortak dosya oku + goreve ozel dosya yaz/oku (depo_kilit)
+ *   - boru: yaz/oku gidis-donus (pipe_t)
+ *   - mesaj kuyrugu: gonder/al gidis-donus
+ *   - mutex: ORTAK sayaci kilit altinda artir -> KAYIP GUNCELLEME denetimi
+ *
+ * Her turdan ONCE ve SONRA bos PMM cercevesi + heap kullanimi olculur.
+ * Gorevler bittikten ve reap edildikten sonra bunlar BASA DONMELI; tur
+ * boyunca DUSUYORSA sizinti vardir. Cikti makine-okunur (AGIR-*). */
+#define AGIR_GOREV     8
+#define AGIR_IC_TUR    40      /* her gorev, her dalgada bu kadar dongu doner */
+#define AGIR_MUTEX_ART 200     /* her gorev ortak sayaci bu kadar artirir */
+
+static volatile int      agir_biten = 0;
+static volatile int      agir_hata = 0;
+static volatile uint64_t agir_sayac = 0;       /* mutex korumali ortak sayac */
+static mutex_t           agir_mutex;
+static volatile uint64_t agir_cekirdek = 0;
+static uint8_t           agir_ref[1024];
+static int               agir_ref_n = 0;
+static volatile int      agir_neden[AGIR_GOREV];
+
+static void agir_gorev(void) {
+    /* Kararli bir kimlik: kendi gorevimizin pid'inden turet. */
+    task_t *self = scheduler_current_task();
+    uint32_t kimlik = self ? self->id : 0;
+    int hata = 0, neden = 0;
+    char ad[16] = "/AGIRX.TXT";
+    ad[5] = (char)('A' + (kimlik % 20));
+
+    uint8_t *oku = (uint8_t *)kmalloc(1040);
+    pipe_t  *br  = (pipe_t *)kmalloc(sizeof(pipe_t));
+    msgqueue_t *mq = (msgqueue_t *)kmalloc(sizeof(msgqueue_t));
+    if (!oku || !br || !mq) { hata++; neden = 1; }
+    if (!hata) { pipe_init(br); msgqueue_init(mq); }
+
+    for (int t = 0; t < AGIR_IC_TUR && !hata; t++) {
+        __atomic_or_fetch(&agir_cekirdek, 1ULL << (cpu_bu()->indeks & 63), __ATOMIC_RELAXED);
+
+        /* 1) degisken boyutlu heap: 8 blok, farkli boyut, desen, dogrula, birak */
+        void *blok[8]; int boy[8];
+        for (int i = 0; i < 8; i++) {
+            boy[i] = 16 + ((kimlik * 7 + t * 13 + i * 131) % 8177);
+            blok[i] = kmalloc((uint32_t)boy[i]);
+            if (blok[i]) { uint8_t *p = blok[i];
+                for (int j = 0; j < boy[i]; j++) p[j] = (uint8_t)(i * 37 + j); }
+        }
+        for (int i = 0; i < 8; i++) if (blok[i]) {
+            uint8_t *p = blok[i];
+            for (int j = 0; j < boy[i]; j++) if (p[j] != (uint8_t)(i * 37 + j)) { hata++; neden = 2; break; }
+#ifdef AGIR_KONTROL_SIZINTI
+            /* KONTROL GRUBU: olcutun gercek sizintiyi yakaladigini kanitlar.
+             * Her ic turda bir blok BILEREK birakilmaz. */
+            if (i == 0) continue;
+#endif
+            kfree(blok[i]);
+        }
+
+        /* 2) ortak dosya oku + karsilastir (depo_kilit) */
+        int fd = vfs_open("/OTUKEN.TXT");
+        if (fd >= 0) {
+            int r = vfs_read(fd, oku, 1024);
+            vfs_close(fd);
+            if (r != agir_ref_n) { hata++; neden = 3; }
+            else for (int i = 0; i < r; i++) if (oku[i] != agir_ref[i]) { hata++; neden = 4; break; }
+        } else { hata++; neden = 5; }
+
+        /* 3) goreve ozel dosya yaz + geri oku (FAT tablosu eszamanli degisir) */
+        uint8_t desen[300];
+        for (int i = 0; i < 300; i++) desen[i] = (uint8_t)(kimlik + t + i);
+        if (fat16_write_file(ad + 1, desen, 300) != 300) { hata++; neden = 6; }
+        else {
+            int fd2 = vfs_open(ad);
+            if (fd2 < 0) { hata++; neden = 7; }
+            else { int r = vfs_read(fd2, oku, 1024); vfs_close(fd2);
+                if (r != 300) { hata++; neden = 0x800 | (r & 0xFF); }
+                else for (int i = 0; i < 300; i++) if (oku[i] != desen[i]) { hata++; neden = 9; break; } }
+        }
+
+        /* 4) boru yaz/oku gidis-donus */
+        if (!hata) {
+            uint8_t bd[64]; for (int i = 0; i < 64; i++) bd[i] = (uint8_t)(t * 3 + i);
+            pipe_write(br, bd, 64);
+            uint8_t bo[64];
+            uint32_t rr = pipe_read(br, bo, 64);
+            if (rr != 64) { hata++; neden = 10; }
+            else for (int i = 0; i < 64; i++) if (bo[i] != bd[i]) { hata++; neden = 11; break; }
+        }
+
+        /* 5) mesaj kuyrugu gonder/al */
+        if (!hata) {
+            uint8_t md[32]; for (int i = 0; i < 32; i++) md[i] = (uint8_t)(kimlik ^ (t + i));
+            msgqueue_send(mq, md, 32);
+            uint8_t mo[MSG_MAX_SIZE]; uint32_t mn = 0;
+            msgqueue_receive(mq, mo, &mn);
+            if (mn != 32) { hata++; neden = 12; }
+            else for (int i = 0; i < 32; i++) if (mo[i] != md[i]) { hata++; neden = 13; break; }
+        }
+
+        /* 6) mutex: ORTAK sayaci artir (kayip guncelleme denetimi) */
+        for (int k = 0; k < AGIR_MUTEX_ART / AGIR_IC_TUR + 1; k++) {
+            mutex_lock(&agir_mutex);
+            uint64_t v = agir_sayac;
+            v = v + 1;
+            agir_sayac = v;          /* okuma-degistirme-yazma: kilitsizse kaybolur */
+            mutex_unlock(&agir_mutex);
+        }
+
+        if ((t & 3) == 0) thread_sleep(1);
+    }
+    if (oku) kfree(oku);
+    if (br) kfree(br);
+    if (mq) kfree(mq);
+    if (hata) { agir_neden[kimlik % AGIR_GOREV] = neden; __atomic_add_fetch(&agir_hata, hata, __ATOMIC_SEQ_CST); }
+    __atomic_add_fetch(&agir_biten, 1, __ATOMIC_SEQ_CST);
+    thread_exit();
+}
+
+static void agir_sinama(void) {
+    agir_ref_n = 0;
+    { int fd = vfs_open("/OTUKEN.TXT");
+      if (fd >= 0) { agir_ref_n = vfs_read(fd, agir_ref, (int)sizeof(agir_ref)); vfs_close(fd); } }
+    if (agir_ref_n <= 0) { tani_yaz("AGIR-SINAMA: [HATA] referans dosya okunamadi\n"); return; }
+    mutex_init(&agir_mutex);
+
+    uint64_t ilk_pmm = pmm_free_frames();
+    uint64_t ilk_heap = 0, bosb = 0, blk = 0;
+    heap_get_stats(0, &ilk_heap, &bosb, &blk);
+
+    int turlar = OTUKEN_AGIR_TUR;
+    int sizinti = 0, toplam_hata = 0, kaldi_tur = 0;
+    uint64_t onceki_pmm = ilk_pmm;
+    /* SIZINTI OLCUTU: heap bellegi PMM'e GERI VERMEZ (tasarim): ilk turlarda
+     * en yuksek kullanim duzeyine cikip orada KALIR. Arka planda UMAY ve
+     * kabuk da ayirir. Bu yuzden toplam fark sizinti DEGILDIR; sizinti,
+     * duzey oturduktan SONRA da buyumeye devam etmektir. Olcut: turlarin
+     * YARISINDAN son tura kadar pmm dususu ve heap artisi. (Ilk surum
+     * toplam farka bakiyor ve duzlesen bir egriye yanlislikla SIZINTI
+     * diyordu.) */
+    uint64_t yari_pmm = 0, yari_heap = 0;
+    /* Ikinci duzeltme (matris kosusunda gorulen yanlis alarm): arka planda
+     * UMAY penceresi (ULGEN yuzeyi, ~0xBA cerceve) zamanlamaya bagli olarak
+     * herhangi bir turda BIR KEZ ayrilir. Tek basamak sizinti degildir;
+     * AGIR gorevlerinden gelen gercek bir sizinti HER turda tekrarlar.
+     * Olcut: tur>=2 turlarinin YARISINDAN fazlasinda buyume. */
+    int buyuyen_tur = 0, sayilan_tur = 0;
+    uint64_t onceki_heap = 0;
+
+    for (int tur = 0; tur < turlar; tur++) {
+        agir_biten = 0; agir_hata = 0;
+        uint64_t beklenen_bas = agir_sayac;
+        for (int i = 0; i < AGIR_GOREV; i++) thread_create("AgirGorev", agir_gorev);
+        uint64_t bas = timer_get_ticks();
+        while (__atomic_load_n(&agir_biten, __ATOMIC_ACQUIRE) < AGIR_GOREV &&
+               timer_get_ticks() - bas < 50 * 60)         /* tur basina <= 60 sn */
+            thread_sleep(3);
+        scheduler_reap_terminated();
+        thread_sleep(10);
+        scheduler_reap_terminated();     /* iki tur reap: son gorevler de birakilsin */
+
+        int biten = agir_biten, hata = agir_hata;
+        uint64_t su_pmm = pmm_free_frames(), su_heap = 0;
+        heap_get_stats(0, &su_heap, &bosb, &blk);
+        /* mutex kayip guncelleme: bu turda tam AGIR_GOREV*(art) beklenir */
+        uint64_t art = agir_sayac - beklenen_bas;
+        uint64_t beklenen_art = (uint64_t)AGIR_GOREV * (AGIR_MUTEX_ART / AGIR_IC_TUR + 1) * AGIR_IC_TUR;
+
+        int tur_iyi = (biten == AGIR_GOREV && hata == 0 && art == beklenen_art);
+        toplam_hata += hata;
+        if (!tur_iyi) kaldi_tur++;
+        tani_yaz(tur_iyi ? "AGIR-TUR GECTI" : "AGIR-TUR KALDI");
+        tani_yaz(" tur="); tani_hex((uint32_t)tur);
+        tani_yaz(" biten="); tani_hex((uint32_t)biten);
+        tani_yaz(" hata="); tani_hex((uint32_t)hata);
+        tani_yaz(" mutex_art="); tani_hex((uint32_t)art);
+        tani_yaz("/"); tani_hex((uint32_t)beklenen_art);
+        tani_yaz(" pmm_bos="); tani_hex((uint32_t)su_pmm);
+        tani_yaz(" heap_kul="); tani_hex((uint32_t)su_heap);
+        tani_yaz(" d_pmm="); tani_hex((uint32_t)(onceki_pmm - su_pmm));
+        tani_yaz("\n");
+        if (hata) {
+            tani_yaz("  ilk hata kodlari");
+            for (int i = 0; i < AGIR_GOREV; i++) { tani_yaz(" "); tani_hex((uint32_t)agir_neden[i]); }
+            tani_yaz("\n");
+        }
+        if (tur >= 2) {
+            sayilan_tur++;
+            if (su_pmm + 4 < onceki_pmm || su_heap > onceki_heap + 4096) buyuyen_tur++;
+        }
+        onceki_pmm = su_pmm;
+        onceki_heap = su_heap;
+        if (tur == turlar / 2) { yari_pmm = su_pmm; yari_heap = su_heap; }
+    }
+
+    uint64_t son_pmm = pmm_free_frames(), son_heap = 0;
+    heap_get_stats(0, &son_heap, &bosb, &blk);
+    uint64_t pmm_kayip = (ilk_pmm > son_pmm) ? (ilk_pmm - son_pmm) : 0;      /* bilgi */
+    uint64_t heap_artis = (son_heap > ilk_heap) ? (son_heap - ilk_heap) : 0;  /* bilgi */
+    uint64_t egim_pmm  = (yari_pmm > son_pmm) ? (yari_pmm - son_pmm) : 0;
+    uint64_t egim_heap = (son_heap > yari_heap) ? (son_heap - yari_heap) : 0;
+    sizinti = (sayilan_tur >= 2) && (buyuyen_tur * 2 > sayilan_tur);
+    uint64_t maske = agir_cekirdek; int cek = 0;
+    for (int i = 0; i < 64; i++) if (maske & (1ULL << i)) cek++;
+
+    tani_yaz(sizinti ? "AGIR-SINAMA: SIZINTI VAR" : "AGIR-SINAMA: SIZINTI YOK");
+    tani_yaz(" turlar="); tani_hex((uint32_t)turlar);
+    tani_yaz(" pmm_kayip_cerceve="); tani_hex((uint32_t)pmm_kayip);
+    tani_yaz(" heap_artis_bayt="); tani_hex((uint32_t)heap_artis);
+    tani_yaz(" ikinci_yari_pmm_dusus="); tani_hex((uint32_t)egim_pmm);
+    tani_yaz(" ikinci_yari_heap_artis="); tani_hex((uint32_t)egim_heap);
+    tani_yaz(" buyuyen_tur="); tani_hex((uint32_t)buyuyen_tur);
+    tani_yaz("/"); tani_hex((uint32_t)sayilan_tur);
+    tani_yaz(" cekirdek_sayisi="); tani_hex((uint32_t)cek);
+    tani_yaz(" kaldi_tur="); tani_hex((uint32_t)kaldi_tur);
+    tani_yaz(" toplam_hata="); tani_hex((uint32_t)toplam_hata);
+    tani_yaz("\n");
+    tani_yaz(toplam_hata == 0 && kaldi_tur == 0 && !sizinti ? "AGIR-SINAMA: GECTI\n" : "AGIR-SINAMA: KALDI\n");
+}
+
+/* =====================================================================
+ * UMAY UYUM SINAMASI - yalniz TANI + OTUKEN_UMAY_UYUM
+ *
+ * Cekirdek ile Ring3 UMAY arasindaki sozlesmeyi YUK ALTINDA dener:
+ * UYUM_ISTEMCI gorev ayni anda, her biri kendi IPC portundan, UMAY'a
+ * sirayla soru sorar ve her sorunun TAM yanitini bekler (UMAY uzun
+ * yaniti 96 baytlik parcalara boler: opkod 1 devami var, 0 son).
+ * Her istemcinin ayni anda en fazla BIR acik sorusu vardir; bu yuzden:
+ *   - yanit baska istemciye giderse: soran zaman asimina duser, oteki
+ *     fazladan ileti alir (sondaki bosaltmada 'fazla' sayilir);
+ *   - parca kaybolursa ya da yarim kalirsa: 'eksik' sayilir.
+ * Sorular yalniz OKUYAN turdendir (onay gerektiren yazma/onarim yok).
+ * Cikti makine-okunur: UMAY-UYUM-ISTEMCI ... / UMAY-UYUM: GECTI|KALDI
+ * ===================================================================== */
+#define UYUM_ISTEMCI 3
+#define UYUM_ZAMAN_ASIMI_TIK (50 * 30)     /* soru basina <= 30 sn */
+
+static const char *const uyum_sorular[] = {
+    "durum",
+    "merhaba",
+    "zeytin budama atığından ne yapılır",
+    "kerpiç duvar nasıl sıvanır",
+    "otağ ne durumda",
+    "sarnıç suyu nasıl temiz kalır",
+    "yer altı kileri kaç derece",
+    "güneş panelleri nereye konur",
+    "kiler ve sarnıç harcı araştır",
+    "zeytin budama biyokömür kaynak tara",
+};
+#define UYUM_SORU_CESIDI ((int)(sizeof(uyum_sorular) / sizeof(uyum_sorular[0])))
+
+static volatile int      uyum_biten = 0;
+static volatile uint32_t uyum_tamam[UYUM_ISTEMCI], uyum_asim[UYUM_ISTEMCI],
+                         uyum_eksik[UYUM_ISTEMCI], uyum_fazla[UYUM_ISTEMCI],
+                         uyum_parca[UYUM_ISTEMCI], uyum_bos[UYUM_ISTEMCI];
+static volatile uint64_t uyum_gecikme_top[UYUM_ISTEMCI], uyum_gecikme_en[UYUM_ISTEMCI];
+static volatile uint64_t uyum_cekirdek = 0;
+static volatile int      uyum_sira = 0;
+
+static void uyum_istemci(void) {
+    int no = __atomic_fetch_add(&uyum_sira, 1, __ATOMIC_ACQ_REL);
+    if (no >= UYUM_ISTEMCI) { task_exit(); return; }
+    char ad[8] = "uyum0";
+    ad[4] = (char)('0' + no);
+    int kendi = ipc_port_create(ad);
+    int hedef = ipc_port_find("umay");
+    if (kendi < 0 || hedef < 0) { uyum_asim[no] = OTUKEN_UYUM_SORU; goto bitti; }
+
+    for (int q = 0; q < OTUKEN_UYUM_SORU; q++) {
+        __atomic_or_fetch(&uyum_cekirdek, 1ULL << (cpu_bu()->indeks & 63), __ATOMIC_RELAXED);
+        const char *soru = uyum_sorular[(no * 2 + q) % UYUM_SORU_CESIDI];
+        ipc_message_t m;
+        for (uint32_t i = 0; i < IPC_MAX_PAYLOAD; i++) m.payload[i] = 0;
+        uint32_t n = 0;
+        while (soru[n] && n < IPC_MAX_PAYLOAD) { m.payload[n] = (uint8_t)soru[n]; n++; }
+        m.opcode = 0; m.length = n; m.sender_port = (uint32_t)kendi; m.sequence = (uint32_t)q;
+
+        uint64_t bas = timer_get_ticks();
+        int r;
+        while ((r = ipc_send(hedef, &m)) == IPC_DOLU && timer_get_ticks() - bas < UYUM_ZAMAN_ASIMI_TIK)
+            thread_sleep(1);
+        if (r != 0) { uyum_asim[no]++; continue; }
+
+        /* tam yaniti topla */
+        int son = 0; uint32_t boy = 0, parca = 0;
+        ipc_message_t y;
+        static char metin[UYUM_ISTEMCI][2400];   /* arastirma raporu uzun */
+        uint32_t mb = 0;
+        while (!son && timer_get_ticks() - bas < UYUM_ZAMAN_ASIMI_TIK) {
+            if (ipc_try_receive(kendi, &y) == 1) {
+                parca++; boy += y.length;
+                for (uint32_t i = 0; i < y.length && mb + 1 < sizeof metin[0]; i++) {
+                    char c = (char)y.payload[i];
+                    metin[no][mb++] = (c == '\n') ? '|' : c;   /* tek satir kalsin */
+                }
+                if (y.opcode == 0) son = 1;
+                continue;
+            }
+            thread_sleep(1);
+        }
+        metin[no][mb] = 0;
+        /* kanit: ilk istemci her soru cesidinin yanitini bir kez yazar */
+        if (no == 0 && son && q < UYUM_SORU_CESIDI) {
+            tani_yaz("UMAY-YANIT soru=\""); tani_yaz(soru);
+            tani_yaz("\" yanit=\""); tani_yaz(metin[no]); tani_yaz("\"\n");
+        }
+        uyum_parca[no] += parca;
+        if (!son) { if (parca) uyum_eksik[no]++; else uyum_asim[no]++; continue; }
+        if (boy == 0) uyum_bos[no]++;
+        uint64_t g = timer_get_ticks() - bas;
+        uyum_gecikme_top[no] += g;
+        if (g > uyum_gecikme_en[no]) uyum_gecikme_en[no] = g;
+        uyum_tamam[no]++;
+    }
+    /* Sondaki bosaltma: buraya ait olmayan (baskasinin) yanit var mi?
+     * Diger istemciler hala soruyor olabilir; 3 sn bekle. */
+    {
+        ipc_message_t y;
+        uint64_t bas = timer_get_ticks();
+        while (timer_get_ticks() - bas < 150) {
+            if (ipc_try_receive(kendi, &y) == 1) uyum_fazla[no]++;
+            else thread_sleep(2);
+        }
+    }
+bitti:
+    __atomic_add_fetch(&uyum_biten, 1, __ATOMIC_ACQ_REL);
+    task_exit();
+}
+
+static void umay_uyum_sinamasi(void) {
+    /* Ring3 UMAY'in 'umay' portunu acmasini bekle (<= 60 sn). */
+    uint64_t bas = timer_get_ticks();
+    while (ipc_port_find("umay") < 0 && timer_get_ticks() - bas < 50 * 60) thread_sleep(5);
+    if (ipc_port_find("umay") < 0) {
+        tani_yaz("UMAY-UYUM: KALDI (UMAY 'umay' portunu acmadi)\n");
+        task_exit(); return;
+    }
+    thread_sleep(50);    /* acilis selamini bitirsin */
+    uint64_t t0 = timer_get_ticks();
+    for (int i = 0; i < UYUM_ISTEMCI; i++) thread_create("UyumIstemci", uyum_istemci);
+    while (__atomic_load_n(&uyum_biten, __ATOMIC_ACQUIRE) < UYUM_ISTEMCI &&
+           timer_get_ticks() - t0 < (uint64_t)UYUM_ZAMAN_ASIMI_TIK * (OTUKEN_UYUM_SORU + 2))
+        thread_sleep(10);
+
+    uint32_t tamam = 0, hata = 0;
+    for (int i = 0; i < UYUM_ISTEMCI; i++) {
+        tani_yaz("UMAY-UYUM-ISTEMCI no="); tani_hex((uint32_t)i);
+        tani_yaz(" tamam="); tani_hex(uyum_tamam[i]);
+        tani_yaz("/"); tani_hex(OTUKEN_UYUM_SORU);
+        tani_yaz(" zaman_asimi="); tani_hex(uyum_asim[i]);
+        tani_yaz(" eksik="); tani_hex(uyum_eksik[i]);
+        tani_yaz(" fazla="); tani_hex(uyum_fazla[i]);
+        tani_yaz(" bos="); tani_hex(uyum_bos[i]);
+        tani_yaz(" parca="); tani_hex(uyum_parca[i]);
+        tani_yaz(" ort_gecikme_tik=");
+        tani_hex(uyum_tamam[i] ? (uint32_t)(uyum_gecikme_top[i] / uyum_tamam[i]) : 0);
+        tani_yaz(" en_gecikme_tik="); tani_hex((uint32_t)uyum_gecikme_en[i]);
+        tani_yaz("\n");
+        tamam += uyum_tamam[i];
+        hata += uyum_asim[i] + uyum_eksik[i] + uyum_fazla[i] + uyum_bos[i];
+    }
+    int biten = __atomic_load_n(&uyum_biten, __ATOMIC_ACQUIRE);
+    int gecti = (biten == UYUM_ISTEMCI) && (hata == 0) &&
+                (tamam == (uint32_t)(UYUM_ISTEMCI * OTUKEN_UYUM_SORU));
+    tani_yaz("UMAY-UYUM: "); tani_yaz(gecti ? "GECTI" : "KALDI");
+    tani_yaz(" istemci="); tani_hex(UYUM_ISTEMCI);
+    tani_yaz(" soru="); tani_hex((uint32_t)(UYUM_ISTEMCI * OTUKEN_UYUM_SORU));
+    tani_yaz(" tam_yanit="); tani_hex(tamam);
+    tani_yaz(" hata="); tani_hex(hata);
+    tani_yaz(" cekirdek_maske="); tani_hex((uint32_t)uyum_cekirdek);
+    tani_yaz("\n");
+    task_exit();
+}
+
+/* boot.asm cagirir (tek giris noktasi; baska dosyadan cagrilmaz) */
+void kernel_main(uint32_t magic, multiboot_info_t *mbi);
 void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
+    /* SMP adim 4: GS_BASE -> BSP blogu. cpu_bu()/cpu_yerel() ve
+     * zamanlayici (cekirdek_rsp) bundan sonra gecerlidir; EN BASTA. */
+    cpu_bsp_hazirla();
     serial_init();
     serial_write("\n===============================================\n");
     serial_write("  " OTUKEN_SURUM_ADI "  (x86_64 / AArch64)\n");
@@ -505,6 +1024,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         mbi = &mb2_cevrilen;
     } else if (protokol == 1) {
         serial_write("onyukleme: MULTIBOOT1 (eski BIOS)\n");
+        modul_mb1_oku(mbi);            /* 1.4.9: ERGENEKON imaji (GRUB modulu) */
     } else {
         serial_write("HATA: bilinmeyen onyukleme protokolu, magic=");
         serial_write_hex(magic);
@@ -526,6 +1046,12 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         __asm__ volatile ("mov %0, %%cr0" : : "r"(cr0) : "memory");
         serial_write("guvenlik: CR0.WP etkin (cekirdek salt-okunur sayfalara yazamaz)\n");
     }
+    /* 1.4.9: SMEP + SMAP (islemci destekliyorsa). AP'ler CR4'u BSP'den alir. */
+    {
+        int s = smep_smap_ac();
+        serial_write((s & 1) ? "guvenlik: SMEP etkin" : "guvenlik: SMEP yok (islemci desteklemiyor)");
+        serial_write((s & 2) ? ", SMAP etkin\n" : ", SMAP yok (islemci desteklemiyor)\n");
+    }
 
     if (!(mbi->flags & MULTIBOOT_INFO_FRAMEBUFFER_INFO)) {
         serial_write("HATA: bootloader framebuffer bilgisi vermedi\n");
@@ -540,6 +1066,12 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     serial_write_hex(mbi->framebuffer_height);
     serial_write(" bpp: ");
     serial_write_hex(mbi->framebuffer_bpp);
+    serial_write(" tur: ");
+    serial_write_hex(mbi->framebuffer_type);
+    serial_write(" R/G/B konum: ");
+    serial_write_hex(mbi->color_info[0]); serial_write("/");
+    serial_write_hex(mbi->color_info[2]); serial_write("/");
+    serial_write_hex(mbi->color_info[4]);
     serial_write("\n");
 
     serial_write("64-bit long mode'dayiz (boot.asm GDT'yi zaten kurdu)\n");
@@ -657,14 +1189,27 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
                 serial_write((via_new_phys == 0xCAFEF00D) ? " (DOGRU - bolme calisti)\n"
                                                             : " (YANLIS!)\n");
 
-                vmm_unmap_page(scratch_virt);
+                /* KIMLIGE GERI DON: eskiden unmap ediliyordu ve kimlik
+                 * haritasinda 0x700000'da KALICI DELIK kaliyordu. PMM
+                 * sonradan fiziksel 0x700000'i dagitinca cekirdek ona
+                 * kimlik adresiyle yazip PAGE FAULT veriyordu (UMAY
+                 * paketiyle ikili buyuyunce ortaya cikti; zamanlamaya
+                 * bagli oldugu icin rastgeleydi). */
+                vmm_map_page(scratch_virt, scratch_virt, VMM_PRESENT | VMM_WRITABLE);
                 pmm_free_frame(new_phys);
-                (void)original_identity_value;
+                if (*before != original_identity_value)
+                    serial_write("vmm-split-test: [HATA] kimlik haritasi geri donmedi\n");
             }
         }
     }
 
     heap_init();
+    /* 1.4.8: cift tampon. Bundan sonra cizim bellege yapilir, fb_sun()
+     * ekrana aktarir (titreme ve yarim kare yok). */
+    if (fb_arka_tampon_kur() == 0)
+        serial_write("framebuffer: cift tampon kuruldu\n");
+    else
+        serial_write("framebuffer: cift tampon KURULAMADI - dogrudan cizim\n");
     {
         /* 1) Farkli boyutlarda ayirma + veri butunlugu */
         char *a = (char *)kmalloc(64);
@@ -797,18 +1342,15 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         const pci_device_t *nvme = pci_find_by_class(0x01, 0x08);
         serial_write(nvme ? "pci: NVMe denetleyici VAR (Stage 15 icin hazir)\n"
                            : "pci: NVMe denetleyici yok\n");
+        /* 1.4.9: AC'97 ses. ses_init HIC cagrilmiyordu (docs/KAYNAK-ANALIZI.md
+         * [1]): DEDE/OZAN/ses tonu her cagrida -1 donuyordu. Kart yoksa
+         * sessizce devre disi (ses_var()=0). */
+        if (ses_init() != 0) serial_write("ses: AC97 yok, ses yolu devre disi\n");
     }
 
     /* --- Stage 15: Storage (AHCI / NVMe hazirligi) --- */
     ahci_init();
     nvme_init();
-    /* AC'97 SES DENETLEYICISI
-     * ses_var() yalniz ses_init() basarili olduktan sonra 1 doner ve
-     * ses_cal() ilk satirinda !d.var ise -1 ile cikar. Bu cagri
-     * eksikti: DEDE, OZAN ve EZGI ornek uretiyor, ses yolu onlari
-     * SESSIZCE atiyordu. Formant sentezinin butun olcumleri cikti
-     * hic calinmayan bir zincir uzerinde yapilmisti. */
-    ses_init();
     usb_init();     /* Asama 28: USB denetleyicileri */
     uhci_init();    /* USB aktarim katmani + klavye numaralandirma */
 
@@ -905,8 +1447,13 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     {
         /* W^X politikasini GERCEK bir sayfa uzerinde uygula ve dogrula */
         uint64_t test_phys = pmm_alloc_frame();
-        uint64_t data_virt = 0xC00000000ULL;
-        uint64_t code_virt = 0xC00001000ULL;
+        /* Kimlik haritasinin (0-512GB, 1GB sayfa yolu) DISINDA olmali:
+         * eskiden 0xC00000000 (48 GB) idi; sinama sonunda unmap edilince
+         * kimlik haritasinda delik kaliyordu. 256 GB'lik hedef makinede
+         * PMM 48 GB'daki cerceveyi dagittiginda cekirdek PAGE FAULT
+         * verirdi (sandbox en cok 3 GB ile sinandigi icin gorulmedi). */
+        uint64_t data_virt = 0x00007F0000100000ULL;
+        uint64_t code_virt = 0x00007F0000101000ULL;
         uint64_t code_phys = pmm_alloc_frame();
 
         if (test_phys && code_phys &&
@@ -1184,9 +1731,15 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         if (same && d->state == DRIVER_STATE_ACTIVE) disk2_ok = 1;
     }
 
+    /* SMP adim 3: AP'leri uyandir. sti ONCESI (BSP beklerken araya
+     * gorev girmesin, seri cikti karismasin) ve TIMUR/CR0.WP SONRASI
+     * (AP bu kayitlari BSP'den kopyalar). */
+    smp_baslat();
+
     __asm__ volatile ("sti");
     serial_write("kesmeler acildi (sti)\n");
 
+    zaman_baslat();          /* 1.4.9: gercek saat (RTC) - ust cubuk ondan okur */
     gui_init();
     serial_write("ULGEN (grafik masaustu ortami) baslatildi - otukenOS-mini calisir durumda\n");
 
@@ -1341,6 +1894,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     mutex_init(&counter_mutex);
     thread_create("ThreadE-sleep30", thread_e_entry);
     thread_create("ThreadF-sleep75", thread_f_entry);
+    dede_sira_baslat();   /* 1.4.9: eszamansiz konusma (ses karti varsa) */
     thread_create("HeapStresI", heap_stress_i_entry);
     thread_create("HeapStresJ", heap_stress_j_entry);
     thread_create("ThreadG-sync", thread_g_entry);
@@ -1560,9 +2114,10 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
             __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3v));
             uint64_t *pml4v = (uint64_t *)(uintptr_t)(cr3v & 0x000FFFFFFFFFF000ULL);
             int us511 = (pml4v[511] & VMM_USER) ? 1 : 0;
-            tani_yaz("GUVENLIK-5: PML4[511] (cekirdek) USER biti -> ");
-            if (!us511) { tani_yaz("KAPALI (dogru)\n"); gecti++; }
-            else { tani_yaz("ACIK (ACIK!)\n"); kaldi++; }
+            /* Tek cagri: parcali yazimda diger gorevlerin ciktisi araya
+             * girip "KAPALI" baska satira dusuyordu (test yanlis KALDI). */
+            if (!us511) { tani_yaz("GUVENLIK-5: PML4[511] (cekirdek) USER biti -> KAPALI (dogru)\n"); gecti++; }
+            else { tani_yaz("GUVENLIK-5: PML4[511] (cekirdek) USER biti -> ACIK (ACIK!)\n"); kaldi++; }
         }
 
         tani_yaz("GUVENLIK-OZET: gecen=");
@@ -1625,6 +2180,22 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
 
     /* --- Asama 42: sistem hazir ozeti (silinen blok geri eklendi) --- */
     {
+        /* KIMLIK HARITASI BUTUNLUGU: acilis sinamalari kimlik adreslerini
+         * yeniden haritalayip unmap ederek DELIK birakiyordu (0x700000,
+         * TIMUR 48 GB, TLB 504 GB). Delik, PMM o cerceveyi dagitinca
+         * rastgele PAGE FAULT demektir. Hepsi kendini gostermeli. */
+        uint32_t a_, b_, c_, d_;
+        __asm__ volatile ("cpuid" : "=a"(a_), "=b"(b_), "=c"(c_), "=d"(d_) : "a"(0x80000001u), "c"(0));
+        int gb1 = (d_ >> 26) & 1;
+        const uint64_t adr[3] = { 0x700000ULL, 0xC00000000ULL, 0x7E00000000ULL };
+        int n_adr = gb1 ? 3 : 1;          /* 2MB yolunda kimlik yalniz 4 GB */
+        int delik = 0;
+        for (int i = 0; i < n_adr; i++)
+            if (vmm_get_physical(adr[i]) != adr[i]) delik++;
+        tani_yaz(delik == 0 ? "KIMLIK-TEST: kimlik haritasinda delik yok\n"
+                            : "KIMLIK-TEST: kimlik haritasinda DELIK VAR\n");
+    }
+    {
         /* DEDE: Turkce sesli tanima ve birim sayaci dogru mu. Sesin
          * DUYULUP duyulmadigi burada olculemez (QEMU'da ses arka ucu
          * yok); olculebilen sey cozumlemenin dogrulugudur. */
@@ -1684,19 +2255,29 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
      * cakismadan yan yana calisir ve compositor GERCEK ekranda
      * dogrulanabilir. */
     ulgen_init();
+#ifdef OTUKEN_EKRAN_SINAMA
+    /* Ekran regresyon sinamasi (tests/ulgen_render ile AYNI sahne ve
+     * denetimler), gercek VBE cerceve tamponunda. Kesmeler kapali: baska
+     * gorev sahneye yazamaz. Sonra cekirdek DONAR: ekran goruntusu
+     * (QEMU screendump) ana makine ciktisiyla piksel piksel karsilastirilir. */
+    __asm__ volatile ("cli");
+    ekran_sinamasi(serial_write);
+    serial_write("EKRAN-SINAMA: cekirdek donduruldu (ekran goruntusu icin)\n");
+    for (;;) __asm__ volatile ("cli; hlt");
+#endif
     {
         int y1 = ulgen_yuzey_olustur("ULGEN YUZEY 1", 560, 470, 200, 110);
         int y2 = ulgen_yuzey_olustur("ULGEN YUZEY 2 (ustte)", 640, 520, 200, 110);
         if (y1 >= 0 && y2 >= 0) {
             ulgen_doldur(y1, 0xEDE6D6);
             ulgen_dikdortgen(y1, 0, 0, 200, 22, 0x2E5B4F);
-            ulgen_yazi(y1, 6, 7, "ARKA YUZEY", 0xFFFFFF, 0x2E5B4F);
+            ulgen_yazi(y1, 6, 3, "ARKA YUZEY", 0xFFFFFF, 0x2E5B4F);
             ulgen_yazi(y1, 8, 40, "KENDI TAMPONUNA", 0x1A1A1A, 0xEDE6D6);
             ulgen_yazi(y1, 8, 56, "CIZILDI", 0x1A1A1A, 0xEDE6D6);
 
             ulgen_doldur(y2, 0xDDE8F0);
             ulgen_dikdortgen(y2, 0, 0, 200, 22, 0xB33A3A);
-            ulgen_yazi(y2, 6, 7, "ON YUZEY", 0xFFFFFF, 0xB33A3A);
+            ulgen_yazi(y2, 6, 3, "ON YUZEY", 0xFFFFFF, 0xB33A3A);
             ulgen_yazi(y2, 8, 40, "Z-SIRASI: USTTE", 0x1A1A1A, 0xDDE8F0);
             ulgen_yazi(y2, 8, 56, "ORTUSME DOGRU", 0x1A1A1A, 0xDDE8F0);
             ulgen_one_getir(y2);   /* y2 y1'in UZERINDE olmali */
@@ -1714,12 +2295,29 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
             tani_yaz("ULGEN-TEST: yuzey sayisi=");
             tani_hex((uint32_t)ulgen_yuzey_sayisi());
             serial_write("\n");
+            /* 1.4.8: sinama yuzeyleri uretim kipinde masaustunde kalmaz
+             * (yuzeyler durur, yalniz gizlenir: kimlik numaralari degismez). */
+            if (!OTUKEN_TANI_MODU) {
+                ulgen_gorunurluk(y1, 0);
+                ulgen_gorunurluk(y2, 0);
+            }
         }
     }
 
     /* --- Asama 37: KERVAN paket sistemi --- */
     kervan_init();
-    {
+    kervan2_init();          /* 1.4.9: imzali paketler; /KERVAN.LST */
+    {   /* 1.4.9: ERGENEKON dizge imaji (GRUB modulu) acilista dogrulanir */
+        static ergenekon_durum_t ed;
+        ergenekon_durum(&ed);
+        serial_write(ed.var ? (ed.gecerli ? "ERGENEKON: dizge imaji dogrulandi, dosya=" : "ERGENEKON: dizge imaji GECERSIZ: ")
+                            : "ERGENEKON: dizge imaji yok\n");
+        if (ed.var && ed.gecerli) { serial_write_hex(ed.dosya); serial_write(" anahtar="); serial_write_hex(ed.anahtar_no); serial_write("\n"); }
+        else if (ed.var) { serial_write(ed.neden); serial_write("\n"); }
+    }
+    /* v1 ornek paketi YALNIZ tani kipinde kurulur: uretim acilisi her
+     * seferinde diske OKUBENI.TXT/VERI.DAT yaziyordu (1.4.9'da duzeltildi). */
+    if (OTUKEN_TANI_MODU) {
         extern const unsigned char ornek_paket[];
         extern const unsigned long ornek_paket_boyut;
 
@@ -1761,6 +2359,11 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         serial_write("\n");
     }
 
+    /* 1.4.7 regresyon sinamalari, TEK CEKIRDEK evresi: ULGEN ve VFS hazir,
+     * AP'ler henuz gorev almiyor, UMAY baslamadi (ASYOK sinamasi kesmeler
+     * kapaliyken butun bos cerceveleri alir: bu evre sart). */
+    if (OTUKEN_TANI_MODU) sinama147_tek_cekirdek();
+
     ipc2_init();
     servis_init();
     g_zaman_servis_id = servis_tanimla("zamand", 0, servis_zamand, 3);
@@ -1771,14 +2374,28 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     /* UMAY EN SON baslar: IPC, servisler ve dosya sistemi hazir
      * olmadan bir calisma zamani baslatmak yanlistir (gercekten
      * yasandi: UMAY, IPC katmanindan ONCE calisip portunu acamadi). */
-    if (OTUKEN_UMAY_BAGLI) {
-        thread_create("UMAY", umay_gorev_entry);
-    } else {
-        /* Sessizce atlamak, baslatma HATASI ile karistirilabilirdi.
-         * Bu satir, UMAY'in BILEREK baglanmadigini soyler. */
-        serial_write("UMAY-HOST: baglanti kapali "
-                     "(OTUKEN_UMAY_BAGLI=0) - UMAY yuklenmedi\n");
-    }
+    thread_create("UMAY", umay_gorev_entry);
+
+    /* SMP adim 5: gorevler ve zamanlayici hazir - AP'ler katilsin. */
+    if (OTUKEN_SMP_DAGITIM) smp_dagitimi_ac();
+    if (OTUKEN_TANI_MODU) smp_yaris_sinamasi();
+    /* 1.4.7: surec yasam dongusu, AP'ler gorev ALIRKEN (calisan surecin
+     * baska cekirdekten yok edilmesi). */
+    if (OTUKEN_TANI_MODU) sinama147_surec_smp();
+    /* UMAY uyum sinamasi AYRI gorevde: AGIR sinama aciksa onunla ayni
+     * anda kosar ve UMAY'i yuk altinda dener. */
+    if (OTUKEN_TANI_MODU && OTUKEN_UMAY_UYUM) thread_create("UmayUyum", umay_uyum_sinamasi);
+    if (OTUKEN_TANI_MODU && OTUKEN_AGIR_SINAMA) agir_sinama();
+    /* 1.4.8: masaustu uygulamalari uctan uca (gercek tiklama yolu) */
+    if (OTUKEN_TANI_MODU) sinama148_uygulama_baslat();
+    /* 1.4.9: Ring3 ag sinamasi (yalniz sinama diskinde AGSINA.ELF varsa) */
+    if (OTUKEN_TANI_MODU) sinama149_ag_baslat();
+    /* 1.4.9: KERVAN v2 (yalniz sinama diskinde K2*.KRV varsa) */
+    if (OTUKEN_TANI_MODU) sinama_kervan_baslat();
+    /* 1.4.9: Uygulamalar menusu ve ULAK/DEDE/TORE/TIMUR/KUT */
+    if (OTUKEN_TANI_MODU) sinama_dizin_baslat();    /* 1.4.9: alt dizine yazma + yazma koku */
+    if (OTUKEN_TANI_MODU) sinama_asena_baslat();   /* 1.4.9: ASENA/ERGENEKON (ASENA.SNM varsa) */
+    if (OTUKEN_TANI_MODU) sinama_uyg_baslat();
 
     uint32_t task_d_pid = task_d_proc ? task_d_proc->pid : 0;
     int task_d_killed = 0;
@@ -1815,8 +2432,9 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
          * DISARIDAN sonlandir - process_destroy()'un baska bir sureci
          * gercekten oldurup kaynaklarini geri aldigini kanitlar. */
         if (!task_d_killed && task_d_pid != 0 && timer_get_ticks() > 150) {
-            process_destroy(task_d_pid);
-            task_d_killed = 1;
+            /* process_destroy guvenli olmayan anda (TaskD baska cekirdekte
+             * calisiyor / kilit tutuyor / bloke) reddeder: sonra yeniden. */
+            if (process_destroy(task_d_pid) == 0) task_d_killed = 1;
         }
 
         /* Kendi kendine sonlanmis (TaskC gibi) gorevlerin bellegini
@@ -1938,7 +2556,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
          * bilemez, bu yuzden GUI yenilemesinden sonra yuzeyleri kirli
          * isaretliyoruz. Iki cizim sistemi ayni framebuffer'i paylastigi
          * surece bu koordinasyon SART. */
-        ulgen_birlestir();
+        /* ekran adimi: asagida masaustu_tur() (ULGEN birlestirme dahil) */
 
         /* init: servisleri periyodik izle (cokerse yeniden baslat) */
         static uint64_t son_izleme = 0;
@@ -2013,6 +2631,14 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
             synack[18] = 0x00; synack[19] = 0x00;
 
             uint8_t srv_ip[4] = {10, 0, 2, 100};
+            /* 1.4.9: TCP artik saglama toplamini DOGRULAR (bozuk/sahte segment
+             * dusurulur). Enjekte edilen segment gecerli bir toplam tasir;
+             * eskiden 0 idi ve kabul ediliyordu (bu bir yigin acigiydi). */
+            {
+                uint16_t ck = tcp_saglama(srv_ip, ulak_get_state()->ip, synack, 20);
+                synack[16] = (uint8_t)(ck >> 8);
+                synack[17] = (uint8_t)ck;
+            }
             tcp_handle_segment(srv_ip, synack, 20);
 
             const tcp_connection_t *after = tcp_get_connection(g_tcp_conn);
@@ -2106,12 +2732,10 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         /* Stage 18: gunluk penceresini canli tut (saniyede ~2 kez) */
         static uint64_t last_gui_refresh = 0;
         uint64_t gui_now = timer_get_ticks();
-        if (gui_now - last_gui_refresh > 25) {
-            gui_refresh();
-            ulgen_tam_yenile();   /* GUI ekrani sildi -> yuzeyleri yeniden ciz */
-            ulgen_birlestir();
-            last_gui_refresh = gui_now;
-        }
+        int periyodik = (gui_now - last_gui_refresh > 25);
+        if (periyodik) last_gui_refresh = gui_now;
+        /* Ekran adimi TEK yerde (sinama da ayni islevi cagirir) */
+        masaustu_tur(periyodik);
 
         /* Ag hizmetleri: gelen istekleri karsila */
         aghizmet_isle();
@@ -2120,7 +2744,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         static uint64_t last_net_poll = 0;
         uint64_t net_now = timer_get_ticks();
         if (net_now != last_net_poll) {
-            ulak_poll();
+            ag_yokla();          /* 1.4.9: paketler + TCP zamanlayicisi (kilitli) */
+            zaman_esitle_gerekirse();
             last_net_poll = net_now;
         }
 

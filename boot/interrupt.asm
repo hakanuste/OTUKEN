@@ -22,6 +22,28 @@
     push r15
 %endmacro
 
+; SMP adim 4: kesme ring3'ten geldiyse GS'i cekirdek bloguna cevir.
+; Giriste yigin: [int_no][err][rip][cs]... -> CS = [rsp+24].
+; Cikista (add rsp,16 sonrasi): [rip][cs]... -> CS = [rsp+8].
+extern g_smap_etkin
+%macro GIRIS_SWAPGS 0
+    test qword [rsp+24], 3
+    jz %%atla
+    swapgs
+%%atla:
+    ; 1.4.9 SMAP: kesme kullanicinin AC=1'ini cekirdege tasimasin
+    cmp dword [rel g_smap_etkin], 0
+    je %%smapsiz
+    clac
+%%smapsiz:
+%endmacro
+%macro CIKIS_SWAPGS 0
+    test qword [rsp+8], 3
+    jz %%atla
+    swapgs
+%%atla:
+%endmacro
+
 %macro POP_ALL 0
     pop r15
     pop r14
@@ -120,11 +142,13 @@ extern irq_handler
 ; Toplam (donanim+bizim push'larimiz) = 160 bayt -> call'dan once RSP 16
 ; hizali kalir (on kosul: kesme oncesi RSP zaten 16 hizaliydi).
 isr_common_noerr:
+    GIRIS_SWAPGS
     PUSH_ALL
     mov rdi, rsp
     call isr_handler
     POP_ALL
     add rsp, 16
+    CIKIS_SWAPGS
     iretq
 
 ; ERR yolu: donanim GERCEK err_code'u NOERR'deki sahte err_code ile
@@ -133,22 +157,60 @@ isr_common_noerr:
 ; push edilir, yani bizim sonraki push'umuza -int_no'ya- en yakin olan
 ; odur). Bu yuzden ERR yolu da NOERR ile AYNI temizligi (16 bayt) yapar.
 isr_common_err:
+    GIRIS_SWAPGS
     PUSH_ALL
     mov rdi, rsp
     call isr_handler
     POP_ALL
     add rsp, 16
+    CIKIS_SWAPGS
     iretq
 
 ; IRQ yolu: CPU istisnasi degil, donanim kesmesi - irq_handler cagirir
 ; (PIC'e EOI gonderme mantigi orada). Hic hardware err_code olmadigi
 ; icin duzeni ISR_NOERR ile ayni (160 bayt, cleanup=16).
 irq_common:
+    GIRIS_SWAPGS
     PUSH_ALL
     mov rdi, rsp
     call irq_handler
     POP_ALL
     add rsp, 16
+    CIKIS_SWAPGS
+    iretq
+
+; --- SMP adim 4: yerel APIC vektorleri ---
+global lapic_cagri_stub
+global lapic_sahte_stub
+extern smp_cagri_isle
+lapic_cagri_stub:
+    push qword 0
+    push qword 0xF0
+    GIRIS_SWAPGS
+    PUSH_ALL
+    mov rdi, rsp
+    call smp_cagri_isle
+    POP_ALL
+    add rsp, 16
+    CIKIS_SWAPGS
+    iretq
+
+global lapic_zaman_stub
+extern smp_zaman_isle
+lapic_zaman_stub:
+    push qword 0
+    push qword 0xEF
+    GIRIS_SWAPGS
+    PUSH_ALL
+    mov rdi, rsp
+    call smp_zaman_isle
+    POP_ALL
+    add rsp, 16
+    CIKIS_SWAPGS
+    iretq
+
+; Sahte kesme: APIC bunu EOI beklemeden uretir; hicbir sey yapma.
+lapic_sahte_stub:
     iretq
 
 ; --- Calistirilamaz yigin bildirimi ---

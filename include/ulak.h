@@ -45,5 +45,8 @@ int ulak_send_arp_request(const uint8_t target_ip[4]);
 
 const ulak_state_t *ulak_get_state(void);
 void ulak_set_ip(const uint8_t ip[4]);
+#ifdef OTUKEN_AG_KAYIP
+uint32_t ulak_kayip_sayisi(void);   /* sinama: dusurulen TCP paketi */
+#endif
 
 #endif

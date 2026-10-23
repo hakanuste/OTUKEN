@@ -28,12 +28,16 @@ SECTIONS
 
     .text ALIGN(4K) : AT(ADDR(.text) - KERNEL_VMA)
     {
+        cekirdek_metin_bas = .;
         *(.text)
+        cekirdek_metin_son = .;
     }
 
     .rodata ALIGN(4K) : AT(ADDR(.rodata) - KERNEL_VMA)
     {
+        cekirdek_salt_bas = .;
         *(.rodata)
+        cekirdek_salt_son = .;
     }
 
     .data ALIGN(4K) : AT(ADDR(.data) - KERNEL_VMA)

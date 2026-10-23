@@ -1,1 +1,0 @@
-gradyan denetimi: en kötü göreli hata 1.39e-07; ileri geçiş referans farkı 7.22e-16

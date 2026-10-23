@@ -1,0 +1,8 @@
+KERVAN - OTUKEN paket yoneticisi
+
+Bu dosya "ornek-belgeler" paketiyle kuruldu. Paketler .KRV uzantili
+dosyalardir ve ECDSA P-256 ile imzalidir; cekirdek imzayi ve her
+dosyanin SHA-256 ozetini dogrulamadan hicbir seyi diske yazmaz.
+
+Kaldirmak icin: KERVAN penceresinde paketi sec, "Kaldir".
+Paket hazirlamak icin: araclar/kervan_paketle.py

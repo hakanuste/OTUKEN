@@ -9,6 +9,11 @@
 
 global enter_ring3
 enter_ring3:
+    ; SMP adim 4: cekirdek blogunu KERNEL_GS_BASE'e sakla. 'mov gs' GS_BASE'i
+    ; sifirlar; swapgs ONCE yapilmazsa blok adresi kaybolur. Kesme bu
+    ; pencerede gelmemeli (GS kullanici durumunda, CPL=0) -> cli.
+    cli
+    swapgs
     mov ax, (0x20 | 3)   ; kullanici veri segmenti secici, RPL=3
     mov ds, ax
     mov es, ax
@@ -17,7 +22,8 @@ enter_ring3:
 
     push qword (0x20 | 3)  ; SS (kullanici verisi, RPL=3)
     push rsi                ; RSP (kullanici yigini)
-    pushfq                  ; RFLAGS (mevcut degerler - IF=1 korunur)
+    pushfq                  ; RFLAGS: cli yaptik; ring3'e IF=1 ile
+    or qword [rsp], 0x200   ; gecilir (eskiden de IF=1 ile giriliyordu)
     push qword (0x28 | 3)  ; CS (kullanici kodu, RPL=3)
     push rdi                ; RIP (giris noktasi)
     iretq

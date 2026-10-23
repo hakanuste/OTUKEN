@@ -10,11 +10,13 @@
 /* Donus: tespit edilen HATA sayisi (0 = kusursuz). */
 int iskence_syscall(void);      /* gecersiz numaralar, kotu isaretciler */
 int iskence_bellek(void);       /* tukenme, sinir, sifir, cift free */
-int iskence_dosya(void);        /* olmayan dosya, bos ad, uzun ad */
+int iskence_dosya(void);
+int iskence_isaretci(void);    /* kullanici isaretcisi dogrulamasi */        /* olmayan dosya, bos ad, uzun ad */
 int iskence_ag(void);           /* sifir uzunluk, azami boyut, kotu port */
 int iskence_ipc(void);          /* dolu kuyruk, gecersiz port, tasma */
 int iskence_gorev(void);        /* gorev tukenmesi, cift sonlandirma */
 int iskence_cr3(void);          /* CR3 degisimi altinda isaretci guvenligi */
+int iskence_cpu(void);
 int iskence_tumu(void);         /* hepsini calistirir, toplam hata doner */
 
 #endif

@@ -9,6 +9,7 @@
 #define PIT_BASE_FREQ 1193182
 
 static volatile uint64_t ticks = 0;
+static uint32_t tik_hz = 0;
 
 static void timer_irq_handler(struct regs *r) {
     (void)r;
@@ -18,6 +19,7 @@ static void timer_irq_handler(struct regs *r) {
 
 void timer_init(uint32_t frequency_hz) {
     if (frequency_hz == 0) frequency_hz = 100;
+    tik_hz = frequency_hz;
     uint32_t divisor = PIT_BASE_FREQ / frequency_hz;
     if (divisor == 0) divisor = 1;
     if (divisor > 0xFFFF) divisor = 0xFFFF;
@@ -29,6 +31,8 @@ void timer_init(uint32_t frequency_hz) {
     irq_install_handler(0, timer_irq_handler);
     pic_unmask_irq(0);
 }
+
+uint32_t timer_hz(void) { return tik_hz; }
 
 uint64_t timer_get_ticks(void) {
     return ticks;

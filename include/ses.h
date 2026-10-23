@@ -23,6 +23,8 @@ typedef struct {
 
 int  ses_init(void);
 int  ses_var(void);
+int  ses_bosaldi(void);
+void ses_bitir(void);              /* 1.4.9: kuyruk bitince durdur (keserek degil) */            /* 1.4.9: kuyruk calinip bitti mi */
 const ses_denetleyici_t *ses_durum(void);
 
 /* PCM veriyi (16-bit stereo, 48kHz) calma kuyruguna verir.
@@ -30,12 +32,7 @@ const ses_denetleyici_t *ses_durum(void);
  * Basari: 0, hata: -1 */
 int  ses_cal(const int16_t *pcm, uint32_t kare_sayisi);
 
-/* Kuyruktaki ses BITENE kadar bekler (tavanli dongu).
- * ses_dur() dogrudan cagrilirsa kuyrukta bekleyen ornekler hic
- * duyulmaz; cumlenin sonu kesilir. Susturmadan once bunu cagir. */
-void ses_bekle(void);
-
-/* Calmayi durdurur (ANINDA; kuyrugu bosaltmaz). */
+/* Calmayi durdurur. */
 void ses_dur(void);
 
 /* Ana ses seviyesi 0..100 */

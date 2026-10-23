@@ -23,6 +23,8 @@ process_t *process_create(const char *name, void (*entry)(void));
 /* Su an CALISAN sureci sonlandirir - surecin KENDI kodu tarafindan
  * cagirilmalidir. Asla geri donmez. */
 void process_exit_current(void);
+/* sched reap'inden: gorev serbest birakilmadan once surec kaydini kapatir */
+void process_gorev_bitti(task_t *t);
 
 /* pid'ye sahip, BASKA (calismakta olan degil) bir sureci disaridan
  * sonlandirir ve kaynaklarini hemen geri alir. Basari:0, hata:-1

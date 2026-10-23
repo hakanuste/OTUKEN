@@ -41,6 +41,12 @@ uint64_t vmm_current_address_space(void);
  * birakir. Paylasilan cekirdek tablolarina DOKUNMAZ. */
 void vmm_destroy_address_space(uint64_t pml4_phys);
 
+/* 1.4.7: canli adres alani sayisi (olusturulan - yok edilen). */
+int64_t vmm_canli_alan_sayisi(void);
+/* 1.4.8 (sinama): canli adres alaninin olusturma sira no'su; yok edilmisse 0.
+ * PML4 cercevesi yeniden kullanilirsa YENI sira no doner. */
+uint64_t vmm_alan_kimlik(uint64_t pml4);
+
 /* Belirtilen adres alaninda haritalama yapar (mevcut CR3'u
  * degistirmeden). */
 int vmm_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags);

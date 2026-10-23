@@ -1,6 +1,8 @@
 #include "disk.h"
+#include "depo_kilit.h"
 #include "io.h"
 #include "serial.h"
+#include "gecikme.h"
 
 /* Birincil ATA kanali, master surucu, PIO mod, LBA28 adresleme.
  * Bu, herhangi bir gercek IDE/SATA (AHCI uyumluluk modu) veya QEMU'nun
@@ -39,15 +41,34 @@ static void ata_400ns_delay(void) {
     inb(ATA_CTRL_BASE);
 }
 
+/* Zaman tabanli bekleme. Eskiden salt 1M yineleme sayisina bagliydi:
+ * yuklu bir QEMU'da (8 TB seyrek imaj) veya yavas bir ilk erisimde
+ * sure asiliyor, okuma rastgele basarisiz oluyordu. Once hizli yoklama,
+ * sonra 100 us araliklarla toplam ~5 sn. */
+#define ATA_ZAMANASIMI_US 5000000u
+
 static int ata_wait_ready(void) {
-    int timeout = 1000000;
     uint8_t status;
-    while (timeout--) {
+    for (int i = 0; i < 100000; i++) {
         status = inb(ATA_REG_STATUS);
-        if (!(status & ATA_SR_BSY) && (status & ATA_SR_DRQ))
-            return 0;
-        if (status & ATA_SR_ERR)
-            return -1;
+        if (!(status & ATA_SR_BSY) && (status & ATA_SR_DRQ)) return 0;
+        if (status & ATA_SR_ERR) return -1;
+    }
+    for (uint32_t t = 0; t < ATA_ZAMANASIMI_US; t += 100) {
+        pit2_bekle_us(100);
+        status = inb(ATA_REG_STATUS);
+        if (!(status & ATA_SR_BSY) && (status & ATA_SR_DRQ)) return 0;
+        if (status & ATA_SR_ERR) return -1;
+    }
+    return -1;
+}
+
+static int ata_bsy_bekle(void) {
+    for (int i = 0; i < 100000; i++)
+        if (!(inb(ATA_REG_STATUS) & ATA_SR_BSY)) return 0;
+    for (uint32_t t = 0; t < ATA_ZAMANASIMI_US; t += 100) {
+        pit2_bekle_us(100);
+        if (!(inb(ATA_REG_STATUS) & ATA_SR_BSY)) return 0;
     }
     return -1;
 }
@@ -158,7 +179,7 @@ int disk_init(void) {
     return 0;
 }
 
-int disk_read_sectors(uint64_t lba, uint8_t count, void *buf) {
+static int disk_read_sectors__ic(uint64_t lba, uint8_t count, void *buf) {
     uint16_t *out = (uint16_t *)buf;
     if (count == 0) return -1;
 
@@ -209,7 +230,7 @@ int disk2_init(void) {
     return 0;
 }
 
-int disk2_read_sectors(uint64_t lba, uint8_t count, void *buf) {
+static int disk2_read_sectors__ic(uint64_t lba, uint8_t count, void *buf) {
     uint16_t *out = (uint16_t *)buf;
     if (count == 0) return -1;
 
@@ -246,7 +267,7 @@ int disk2_read_sectors(uint64_t lba, uint8_t count, void *buf) {
  * gonderilmesi ve SONUNDA onbellek bosaltma (FLUSH) komutunun
  * verilmesidir. FLUSH atlanirsa surucu veriyi kendi onbelleginde
  * tutabilir ve guc kesintisinde VERI KAYBI olur. */
-int disk_write_sectors(uint64_t lba, uint8_t count, const void *buf) {
+static int disk_write_sectors__ic(uint64_t lba, uint8_t count, const void *buf) {
     const uint16_t *in = (const uint16_t *)buf;
     if (count == 0) return -1;
 
@@ -276,7 +297,33 @@ int disk_write_sectors(uint64_t lba, uint8_t count, const void *buf) {
     }
 
     outb(ATA_REG_COMMAND, ATA_CMD_FLUSH);
-    int zamanasimi = 1000000;
-    while (zamanasimi--) { if (!(inb(ATA_REG_STATUS) & ATA_SR_BSY)) break; }
+    if (ata_bsy_bekle() != 0) {
+        serial_write("disk: FLUSH zaman asimi\n");
+        return -1;
+    }
     return 0;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int disk_read_sectors(uint64_t lba, uint8_t count, void *buf) {
+    ozkilit_al(&depo_kilit);
+    int r = disk_read_sectors__ic(lba, count, buf);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int disk_write_sectors(uint64_t lba, uint8_t count, const void *buf) {
+    ozkilit_al(&depo_kilit);
+    int r = disk_write_sectors__ic(lba, count, buf);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int disk2_read_sectors(uint64_t lba, uint8_t count, void *buf) {
+    ozkilit_al(&depo_kilit);
+    int r = disk2_read_sectors__ic(lba, count, buf);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

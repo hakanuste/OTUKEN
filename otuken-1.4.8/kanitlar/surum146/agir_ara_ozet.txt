@@ -1,3 +1,0 @@
-m_s8_EPYC_t3                 smp=8  cpu=EPYC   m=512  TAKILDI sure=240s tur_gecti=6 SMP-YARIS: GECTI 
-m_s16_max_t1                 smp=16 cpu=max    m=512  TAKILDI sure=241s tur_gecti=3 SMP-YARIS: GECTI 
-== TOPLAM kosu=49 gecti=47 kaldi=0 takildi=2

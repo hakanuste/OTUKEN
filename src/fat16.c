@@ -1,4 +1,6 @@
 #include "fat16.h"
+#include "fat16_ic.h"   /* 1.4.7: ic arayuz bildirimleri tanimlarla derleyicide eslessin */
+#include "depo_kilit.h"
 #include "disk.h"
 #include "disk_cache.h"
 #include "serial.h"
@@ -70,6 +72,15 @@ int fat16_mount(void) {
 
     if (bytes_per_sector != 512) {
         serial_write("fat16: UYARI - 512 disinda sektor boyutu desteklenmiyor\n");
+        fat16_bagli = 0;
+        return -1;
+    }
+    /* bozuk BPB: sıfır küme boyu / FAT yok / veri bölgesi yok -> bağlanmaz
+     * (aksi hâlde küme hesapları sıfıra bölerdi) */
+    if (sectors_per_cluster == 0 || num_fats == 0 || fat_size_sectors == 0 ||
+        total_sectors <= data_start_lba) {
+        serial_write("fat16: UYARI - gecersiz BPB (kume boyu/FAT/veri bolgesi), baglanmadi\n");
+        fat16_bagli = 0;
         return -1;
     }
 
@@ -92,7 +103,7 @@ static void format_83_name(const uint8_t *raw11, char *out) {
     out[p] = 0;
 }
 
-int fat16_list_root(fat16_dirent_t *out, int max) {
+static int fat16_list_root__ic(fat16_dirent_t *out, int max) {
     /* DAYANIKLILIK: birim bagli degilken bolen degerler sifirdir
      * (sifira bolme -> #DE panigi). */
     if (!fat16_bagli || bytes_per_sector == 0 || sectors_per_cluster == 0) return 0;
@@ -127,8 +138,14 @@ done:
     return found;
 }
 
+static uint32_t veri_kume_sayisi(void);
+/* küme bu birimin veri bölgesinde mi: FAT erişimleri BUNA bağlı (bozuk
+ * zincir FAT alanının dışına okuma/yazma yaptıramaz) */
+static int kume_icinde(uint16_t k) { return k >= 2 && (uint32_t)k < veri_kume_sayisi() + 2; }
+
 static uint16_t fat16_next_cluster(uint16_t cluster) {
     static uint8_t fat_sector[512];
+    if (!kume_icinde(cluster)) return 0xFFFF;          /* birim dışı: zincir burada biter */
     uint32_t fat_offset = (uint32_t)cluster * 2;
     uint32_t fat_sec = fat_start_lba + (fat_offset / bytes_per_sector);
     uint32_t ent_off = fat_offset % bytes_per_sector;
@@ -139,7 +156,7 @@ static uint16_t fat16_next_cluster(uint16_t cluster) {
     return rd_u16(&fat_sector[ent_off]);
 }
 
-int fat16_read_file(const fat16_dirent_t *entry, uint8_t *buf, uint32_t bufsize) {
+static int fat16_read_file__ic(const fat16_dirent_t *entry, uint8_t *buf, uint32_t bufsize) {
     /* DAYANIKLILIK: birim bagli degilken bolen degerler sifirdir
      * (sifira bolme -> #DE panigi). */
     if (!fat16_bagli || bytes_per_sector == 0 || sectors_per_cluster == 0) return -1;
@@ -181,7 +198,7 @@ int fat16_read_file(const fat16_dirent_t *entry, uint8_t *buf, uint32_t bufsize)
 
 /* Stage 12 iyilestirmesi: dosyanin BASINDAN degil, 'offset' baytindan
  * itibaren okur - hedef offset'e kadar olan kumeleri (cluster) atlar. */
-int fat16_read_file_at(const fat16_dirent_t *entry, uint8_t *buf,
+static int fat16_read_file_at__ic(const fat16_dirent_t *entry, uint8_t *buf,
                         uint32_t bufsize, uint32_t offset) {
     static uint8_t cluster_buf[512];
     /* DAYANIKLILIK: birim bagli degilken bolen degerler sifirdir
@@ -233,9 +250,11 @@ int fat16_read_file_at(const fat16_dirent_t *entry, uint8_t *buf,
  * BOZUK gorur. */
 static int fat16_set_cluster(uint16_t cluster, uint16_t value) {
     static uint8_t fat_sector[512];
+    if (!kume_icinde(cluster)) return -1;              /* birim dışı: FAT alanı dışına yazılmaz */
     uint32_t fat_offset = (uint32_t)cluster * 2;
     uint32_t sec_in_fat = fat_offset / bytes_per_sector;
     uint32_t ent_off    = fat_offset % bytes_per_sector;
+    if (sec_in_fat >= fat_size_sectors) return -1;
 
     for (uint8_t f = 0; f < num_fats; f++) {
         uint32_t lba = fat_start_lba + (uint32_t)f * fat_size_sectors + sec_in_fat;
@@ -247,19 +266,29 @@ static int fat16_set_cluster(uint16_t cluster, uint16_t value) {
     return 0;
 }
 
-/* Bos (0x0000) bir kume bulur. Bulamazsa 0 doner. */
+/* Bos (0x0000) bir kume bulur. Bulamazsa 0 doner.
+ * 1.4.9: arama son bulunan sektorden baslar (buyuk dosyada her kume icin
+ * FAT'i bastan taramak karesel suruyordu); bulunamazsa bastan bir tur. */
+static uint32_t bos_ipucu_sektor = 0;
+/* veri bolgesindeki kume sayisi: FAT tablosu bundan UZUN olabilir; sondaki
+ * girdiler diskte olmayan kumelerdir (1.4.9: eskiden onlar da verilebilirdi). */
+static uint32_t veri_kume_sayisi(void) {
+    if (!sectors_per_cluster || total_sectors <= data_start_lba) return 0;
+    return (total_sectors - data_start_lba) / sectors_per_cluster;
+}
 static uint16_t fat16_find_free_cluster(void) {
     static uint8_t fat_sector[512];
     uint32_t entries_per_sector = bytes_per_sector / 2;
 
-    for (uint32_t sec = 0; sec < fat_size_sectors; sec++) {
+    for (uint32_t k = 0; k < fat_size_sectors; k++) {
+        uint32_t sec = (bos_ipucu_sektor + k) % fat_size_sectors;
         if (disk_cache_read_sectors(0, fat_start_lba + sec, 1, fat_sector) != 0)
             return 0;
         for (uint32_t i = 0; i < entries_per_sector; i++) {
             uint32_t cluster = sec * entries_per_sector + i;
             if (cluster < 2) continue;            /* 0 ve 1 ayrilmistir */
             uint16_t val = rd_u16(&fat_sector[i * 2]);
-            if (val == 0x0000) return (uint16_t)cluster;
+            if (val == 0x0000 && cluster < veri_kume_sayisi() + 2) { bos_ipucu_sektor = sec; return (uint16_t)cluster; }
         }
     }
     return 0;
@@ -305,8 +334,16 @@ static void fat16_geri_al(const uint16_t *kumeler, uint32_t adet) {
     }
 }
 
-int fat16_write_file(const char *name83, const uint8_t *data, uint32_t size) {
+/* sınama: >0 ise N. yazım (kök dizin dosyası) başarısız olur. Yalnız
+ * çekirdek içi sınamalar ayarlar; syscall yolu yok. */
+volatile int fat16_sinama_yazim_hatasi;
+
+static int fat16_write_file__ic(const char *name83, const uint8_t *data, uint32_t size) {
     static uint8_t sector[512];
+    if (fat16_sinama_yazim_hatasi > 0 && --fat16_sinama_yazim_hatasi == 0) {
+        serial_write("BITIG(fat16): SINAMA yazim hatasi uretildi\n");
+        return -1;
+    }
 
     /* DAYANIKLILIK: dosya sistemi BAGLI DEGILSE bytes_per_sector ve
      * sectors_per_cluster sifirdir; asagidaki kume boyutu hesabi
@@ -339,6 +376,10 @@ int fat16_write_file(const char *name83, const uint8_t *data, uint32_t size) {
             }
             if (ent[11] == 0x0F || (ent[11] & 0x08)) continue;  /* LFN / etiket */
             if (raw83_equal(ent, want)) {
+                if (ent[11] & 0x10) {                /* aynı adlı DİZİN: dosyayla değiştirilmez */
+                    serial_write("BITIG(fat16): ayni adli dizin var - yazma reddedildi\n");
+                    return -1;
+                }
                 found_sec = (int)s; found_idx = e;
                 goto scan_done;
             }
@@ -354,19 +395,13 @@ scan_done:;
     }
 
     /* --- 2) Kume zinciri kur --- */
-    uint16_t first_cluster = 0;
+    uint16_t eski_zincir = 0;
     if (found_sec >= 0) {
         if (disk_cache_read_sectors(0, root_dir_start_lba + target_sec, 1, sector) != 0)
             return -1;
-        first_cluster = rd_u16(&sector[target_idx * 32 + 26]);
-        /* Var olan zinciri serbest birak - dosyayi BASTAN yaziyoruz */
-        uint16_t cl = first_cluster;
-        while (cl >= 2 && cl < 0xFFF8) {
-            uint16_t next = fat16_next_cluster(cl);
-            if (fat16_set_cluster(cl, 0x0000) != 0) return -1;
-            cl = next;
-        }
-        first_cluster = 0;
+        /* 1.4.9: eski zincir YENİ veri ve dizin girdisi yazıldıktan SONRA
+         * bırakılır; yazma yarıda kalırsa eski dosya yerinde durur. */
+        eski_zincir = rd_u16(&sector[target_idx * 32 + 26]);
     }
 
     /* --- Denetim duzeltmesi (MEDIUM): yazma islemi GERI ALINABILIR ---
@@ -374,8 +409,11 @@ scan_done:;
      * OKSUZ birakiyor ve dizin girdisini tutarsiz hale getiriyordu
      * (disk sizintisi + bozuk dosya sistemi). Artik ayrilan tum
      * kumeler kaydediliyor ve hata durumunda serbest birakiliyor. */
-    #define FAT16_AZAMI_KUME 64
-    uint16_t ayrilan[FAT16_AZAMI_KUME];
+    /* 1.4.9: 64 kume (512 baytlik kumede 32 KB) KERVAN paketleri icin
+     * cok kucuktu. 4096 kume = 2 MB; geri alma listesi yigin yerine
+     * duraganda (depo_kilit altinda tek yazar). */
+    #define FAT16_AZAMI_KUME 4096
+    static uint16_t ayrilan[FAT16_AZAMI_KUME];
     uint32_t ayrilan_adet = 0;
 
     if (needed_clusters > FAT16_AZAMI_KUME) {
@@ -450,6 +488,14 @@ scan_done:;
         return -1;
     }
 
+    {   /* eski zinciri şimdi bırak (bozuk zincire karşı sınırlı) */
+        uint16_t ek = eski_zincir; uint32_t say = 0;
+        while (ek >= 2 && ek < 0xFFF8 && say++ < 65536) {
+            uint16_t next = fat16_next_cluster(ek);
+            if (fat16_set_cluster(ek, 0x0000) != 0) break;
+            ek = next;
+        }
+    }
     serial_write("BITIG(fat16): dosya yazildi '");
     serial_write(name83);
     serial_write("' boyut=");
@@ -460,12 +506,81 @@ scan_done:;
     return (int)written;
 }
 
+/* 1.4.9: kok dizinden dosya siler (KERVAN kaldirma). Dizin girdisi 0xE5
+ * olur, kume zinciri serbest kalir. Sira: ONCE girdi silinir (diske), sonra
+ * kumeler: yarida kesilirse sonuc sahipsiz kume (sizinti) olur, ASLA iki
+ * dosyanin paylastigi kume olmaz. 0 / -1 (yok) */
+static int fat16_sil__ic(const char *name83) {
+    static uint8_t sector[512];
+    if (!fat16_bagli) return -1;
+    uint8_t want[11];
+    make_83_raw(name83, want);
+    for (uint32_t s = 0; s < root_dir_sectors; s++) {
+        if (disk_cache_read_sectors(0, root_dir_start_lba + s, 1, sector) != 0) return -1;
+        for (int e = 0; e < 16; e++) {
+            uint8_t *ent = &sector[e * 32];
+            if (ent[0] == 0x00) return -1;
+            if (ent[0] == 0xE5 || ent[11] == 0x0F || (ent[11] & 0x18)) continue;   /* LFN, etiket, dizin */
+            if (!raw83_equal(ent, want)) continue;
+            uint16_t cl = rd_u16(&ent[26]);
+            ent[0] = 0xE5;
+            if (disk_cache_write_sectors(0, root_dir_start_lba + s, 1, sector) != 0) return -1;
+            uint32_t say = 0;
+            while (cl >= 2 && cl < 0xFFF8 && say++ < 65536) {
+                uint16_t next = fat16_next_cluster(cl);
+                if (fat16_set_cluster(cl, 0x0000) != 0) return -1;
+                cl = next;
+            }
+            serial_write("BITIG(fat16): dosya silindi '");
+            serial_write(name83);
+            serial_write("'\n");
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int fat16_sil(const char *name83) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_sil__ic(name83);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+/* bos kume sayisi (sinama: silme/kurma sizinti denetimi) */
+uint32_t fat16_bos_kume_sayisi(void) {
+    static uint8_t fs[512];
+    uint32_t n = 0, veri = veri_kume_sayisi();
+    ozkilit_al(&depo_kilit);
+    uint32_t eps = bytes_per_sector / 2;
+    for (uint32_t sec = 0; fat16_bagli && sec < fat_size_sectors; sec++) {
+        if (disk_cache_read_sectors(0, fat_start_lba + sec, 1, fs) != 0) break;
+        for (uint32_t i = 0; i < eps; i++) {
+            uint32_t k = sec * eps + i;
+            if (k >= 2 && k < veri + 2 && rd_u16(&fs[i * 2]) == 0) n++;
+        }
+    }
+    ozkilit_birak(&depo_kilit);
+    return n;
+}
+
 /* =====================================================================
  * Asama 42: alt dizin katmani icin IC arayuz.
  * fat16_dizin.c bu islevlerle surucunun ozel durumuna erisir; global
  * degiskenleri disariya acmak yerine daraltilmis bir yuzey verilir.
  * ===================================================================== */
 int      fat16_bagli_mi(void)             { return fat16_bagli; }
+/* 1.4.9: ASENA/ERGENEKON için birim geometrisi */
+int fat16_geometri(fat16_geo_t *g) {
+    if (!fat16_bagli || !g) return -1;
+    g->bayt_sektor = bytes_per_sector; g->sektor_kume = sectors_per_cluster;
+    g->fat_sayisi = num_fats; g->fat_lba = fat_start_lba; g->fat_sektor = fat_size_sectors;
+    g->kok_lba = root_dir_start_lba; g->kok_sektor = root_dir_sectors; g->kok_giris = root_entry_count;
+    g->veri_lba = data_start_lba; g->toplam_sektor = total_sectors; g->kume_sayisi = veri_kume_sayisi();
+    return 0;
+}
+/* bos kume arama ipucunu sifirla (biçimleme/onarım sonrası) */
+void fat16_ipucu_sifirla(void) { bos_ipucu_sektor = 0; }
 uint32_t fat16_root_lba(void)             { return root_dir_start_lba; }
 uint32_t fat16_root_dir_sectors(void)     { return root_dir_sectors; }
 uint32_t fat16_sectors_per_cluster(void)  { return sectors_per_cluster; }
@@ -473,6 +588,8 @@ uint32_t fat16_sectors_per_cluster(void)  { return sectors_per_cluster; }
 uint32_t fat16_kume_lba(uint16_t kume) {
     return data_start_lba + (uint32_t)(kume - 2) * sectors_per_cluster;
 }
+/* küme numarası bu birimin veri bölgesinde mi */
+int fat16_kume_gecerli(uint16_t kume) { return kume_icinde(kume); }
 
 uint16_t fat16_sonraki_kume(uint16_t kume) { return fat16_next_cluster(kume); }
 uint16_t fat16_bos_kume_bul(void)          { return fat16_find_free_cluster(); }
@@ -492,4 +609,35 @@ void fat16_yaz32(uint8_t *p, uint32_t v) {
     p[1] = (uint8_t)((v >> 8) & 0xFF);
     p[2] = (uint8_t)((v >> 16) & 0xFF);
     p[3] = (uint8_t)((v >> 24) & 0xFF);
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int fat16_list_root(fat16_dirent_t *out, int max) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_list_root__ic(out, max);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int fat16_read_file(const fat16_dirent_t *entry, uint8_t *buf, uint32_t bufsize) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_read_file__ic(entry, buf, bufsize);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int fat16_read_file_at(const fat16_dirent_t *entry, uint8_t *buf, uint32_t bufsize, uint32_t offset) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_read_file_at__ic(entry, buf, bufsize, offset);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int fat16_write_file(const char *name83, const uint8_t *data, uint32_t size) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_write_file__ic(name83, data, size);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

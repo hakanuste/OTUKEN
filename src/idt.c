@@ -60,6 +60,20 @@ void irq_install_handler(int irq, irq_handler_t handler) {
         irq_routines[irq] = handler;
 }
 
+void idt_ap_yukle(void) { idt_flush((uint64_t)&ip); }
+
+/* SMP adim 4: yerel APIC vektorleri. 0xF0 cekirdekler arasi cagri,
+ * 0xFF sahte (spurious) kesme - EOI GEREKTIRMEZ, yalniz iretq. */
+extern void lapic_cagri_stub(void);
+extern void lapic_sahte_stub(void);
+extern void lapic_zaman_stub(void);
+static void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags);
+void idt_lapic_kapilari_kur(void) {
+    idt_set_gate(0xF0, (uint64_t)lapic_cagri_stub, 0x08, 0x8E);
+    idt_set_gate(0xFF, (uint64_t)lapic_sahte_stub, 0x08, 0x8E);
+    idt_set_gate(0xEF, (uint64_t)lapic_zaman_stub, 0x08, 0x8E);
+}
+
 void idt_install(void) {
     ip.limit = sizeof(struct idt_entry) * 256 - 1;
     ip.base  = (uint64_t)&idt;
@@ -156,6 +170,9 @@ static void page_fault_handler(struct regs *r) {
     serial_write("hatali adres (CR2): ");
     serial_write_hex((uint32_t)(fault_addr >> 32));
     serial_write_hex((uint32_t)fault_addr);
+    serial_write("\nRIP: ");
+    serial_write_hex((uint32_t)(((uint64_t *)r)[17] >> 32));
+    serial_write_hex((uint32_t)((uint64_t *)r)[17]);
     serial_write("\nhata kodu: ");
     serial_write_hex((uint32_t)err);
     serial_write("\n  ");

@@ -2,6 +2,7 @@
 #define OTUKENOS_PIPE_H
 
 #include <stdint.h>
+#include "spinlock.h"
 #include "sched.h"
 
 #define PIPE_BUFFER_SIZE 1024
@@ -14,6 +15,10 @@ typedef struct {
     int waiting_reader_count;
     task_t *waiting_writers[PIPE_MAX_WAITERS];
     int waiting_writer_count;
+    /* SMP: her nesne KENDI kilidini tasir. Kuresel tek kilit yerine
+     * nesne basina kilit, farkli kuyruklarin birbirini bloke
+     * etmemesini saglar. */
+    spinlock_t kilit;
 } pipe_t;
 
 void pipe_init(pipe_t *p);

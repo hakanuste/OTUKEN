@@ -8,9 +8,10 @@
 #include "mouse.h"
 #include "orbitron.h"
 #include "timer.h"
+#include "rtc.h"
 
-/* gui.c ile aynı olmalı: görev çubuğu yüksekliği */
-#define TASKBAR_YUKSEK 86
+#include "gui.h"
+#include "kervan2.h"
 
 #define TAMGA_N 15
 #define RIHTIM_KARO 42
@@ -57,201 +58,233 @@ static void __attribute__((unused)) daire_dolu(int cx, int cy, int r, uint32_t c
 }
 
 /* =====================================================================
- * MASAÜSTÜ ÖNBELLEĞİ
- * Duvar kâğıdı + masaüstü simgeleri + üst bar her yeniden çizimde
- * baştan besteleniyordu: 786 bin piksel ölçekleme, üstüne alfa
- * harmanlı simgeler. Yeniden çizim sık olduğu için ekranda YIRTILMA
- * (yarım çizilmiş kare) görülüyordu. Durağan katman bir kez besteleyip
- * saklanır; her karede yalnız kopyalanır ve üstüne dinamik rıhtım
- * çizilir. .bss'te 3 MB tutar, dosya boyutunu artırmaz. */
-#define MASA_EN  1280
-#define MASA_BOY 1024
-/* Tam ekran önbelleği KALDIRILDI: 1280x1024x4 = 5 MB .bss, çekirdeğin
- * haritalı bölgesini aşıp sayfa hatasına yol açıyordu. Hızlı satır
- * kopyası (fb_satir_yaz) geldikten sonra zaten gereksiz. */
+ * 1.4.8: TEMA ARTIK BAĞLI. Birleştirici (src/ekran.c) iki katman ister:
+ *   ulgen_theme_arka_ciz()   DURAĞAN masaüstü: duvar kâğıdı, simgeler,
+ *                            rıhtım. Açılışta ve tema değişince bir kez
+ *                            çizilir, bellekte tutulur; pencereler bunun
+ *                            ÜSTÜNDE birleştirilir.
+ *   ulgen_theme_ust_bar_ciz() üst çubuk: HER ZAMAN üstte (görev çubuğu
+ *                            gibi); çalışma süresi saniyede bir yenilenir.
+ * Çizim ve tıklama AYNI yerleşim işlevlerini kullanır (rihtim_geo,
+ * simge_konum): eskiden tıklama 15 tamganın hepsine göre ve farklı
+ * payla hesaplanıyor, yanlış tamga dönüyordu.
+ * Küçük harfli yazılar DejaVu (fb yazısı) ile çizilir: Orbitron'un küçük
+ * harfleri bozuk ("Belgeler" -> "Beloeler"); Orbitron büyük harf başlıklarda.
+ * ===================================================================== */
 
-static void masa_beste(int sw, int sh);
-
-void ulgen_theme_init(void) { }
-
-void ulgen_theme_tazele(void) { }
-
-/* Uygulamalar ızgarası: rıhtımda yer bulamayan tamgalar buradadır.
- * Düğmeye basılınca açılır, tekrar basılınca ya da bir tamgaya
- * tıklanınca kapanır. */
 static int g_izgara_acik = 0;
-
+void ulgen_theme_init(void) { }
+void ulgen_theme_tazele(void) { }
 void ulgen_theme_izgara_degis(void) { g_izgara_acik = !g_izgara_acik; }
 int  ulgen_theme_izgara_acik(void)  { return g_izgara_acik; }
 
-/* Durağan masaüstü katmanını çerçeve arabelleğine çizip önbelleğe alır. */
-static void masa_beste(int sw, int sh) {
-    const tema_t *tm = tema_simdiki(); (void)tm;
-    duvar_ciz(0, 0, sw, sh);
+/* RIHTIM: günlük kullanımda en sık gerekenler (tamga kimlikleri) */
+static const int RIHTIM[] = {
+    1,   /* UMAY   — yapay us          */
+    9,   /* BİTİG  — dosya sistemi     */
+    14,  /* ORKUN  — geliştirici       */
+    3,   /* ÜLGEN  — grafik ortamı     */
+    4,   /* TULPAR — web tarayıcı      */
+    11,  /* KERVAN — paket yönetimi    */
+    13   /* TAMGA  — dijital kimlik    */
+};
+#define RIHTIM_ADET ((int)(sizeof(RIHTIM) / sizeof(RIHTIM[0])))
+#define RIHTIM_ARA   10
+#define RIHTIM_IC    16
+#define RIHTIM_UST   12
 
-    /* --- üst bar sağı: çalışma süresi göstergesi ---
-     * Gerçek zaman saati (RTC) sürücüsü yok; zamanlayıcı tiklerinden
-     * hesaplanan ÇALIŞMA SÜRESİ gösterilir. Bunu "saat" diye sunmak
-     * yanıltıcı olurdu. */
-    {
-        uint64_t tik = timer_get_ticks();
-        uint32_t sn = (uint32_t)(tik / 100);
-        char s[32];
-        int i = 0;
-        s[i++] = 'A'; s[i++] = 'C'; s[i++] = 'I'; s[i++] = 'K'; s[i++] = ' ';
-        uint32_t dk = sn / 60, ss = sn % 60;
-        if (dk >= 10) s[i++] = (char)('0' + (dk / 10) % 10);
-        s[i++] = (char)('0' + dk % 10);
-        s[i++] = ':';
-        s[i++] = (char)('0' + ss / 10);
-        s[i++] = (char)('0' + ss % 10);
-        s[i] = 0;
-        orb_yaz(sw - orb_en(s, 1) - 18, 12, s, tm->gorev_yazi, 0, 1);
-    }
+typedef struct { int simge, cubuk_en, rx0, cubuk_boy, dy; } rihtim_geo_t;
 
-    /* --- masaüstü simgeleri (sol sütun) --- */
-    {
-        static const struct { simge_id_t id; const char *ad; } MASA[] = {
-            { SIMGE_DISK,   "ÖTÜKENOS" },
-            { SIMGE_KLASOR, "Belgeler" },
-            { SIMGE_KLASOR, "Projeler" },
-            { SIMGE_KLASOR, "Arşiv"    },
-            { SIMGE_COP,    "Çöp Kutusu" }
-        };
-        int n = (int)(sizeof(MASA) / sizeof(MASA[0]));
-        int sx = 28, sy = ULGEN_UST_BAR + 26;
-        for (int i = 0; i < n; i++) {
-            int y = sy + i * 96;
-            simge_ciz(sx, y, MASA[i].id, 64);
-            orb_yaz_ortali(sx + 32, y + 68, MASA[i].ad, tm->beyaz_yerine_krem, 1, 1);
-        }
-    }
-
-    /* --- üst bar --- */
-    fb_fill_rect(0, 0, sw, ULGEN_UST_BAR, tm->gorev_cubugu);
-    /* Sol üstte ÖTÜKEN tamgası — "ÖTÜKENOS" yazısının yerine.
-     * Bu yüzden rıhtımda 14 tamga kalır (UMAY..ORKUN). */
-    tamga_gorsel_ciz(14, 3, 0, 48, 0);
-    orb_yaz(74, 11, "Dosya    Düzen    Görünüm    Uygulamalar    Sistem    Yardım",
-            tm->gorev_yazi, 0, 0);
-
-
+static void rihtim_geo(int sw, int sh, rihtim_geo_t *g) {
+    int azami = sw - 24;
+    g->simge = (azami - 2 * RIHTIM_IC - (RIHTIM_ADET - 1) * RIHTIM_ARA) / RIHTIM_ADET;
+    if (g->simge > 180) g->simge = 180;
+    if (g->simge < 48)  g->simge = 48;
+    g->cubuk_en  = RIHTIM_ADET * g->simge + (RIHTIM_ADET - 1) * RIHTIM_ARA + 2 * RIHTIM_IC;
+    g->rx0       = (sw - g->cubuk_en) / 2;
+    g->cubuk_boy = g->simge + 2 * RIHTIM_UST;
+    g->dy        = sh - GUI_GOREV_CUBUGU_H - 8 - g->cubuk_boy;   /* görev çubuğunun hemen üstü */
 }
 
-void ulgen_theme_draw(void) {
-    const tema_t *tm = tema_simdiki(); (void)tm;
+/* k. rıhtım simgesinin sol-üst köşesi */
+static void rihtim_simge(const rihtim_geo_t *g, int k, int *x, int *y) {
+    *x = g->rx0 + RIHTIM_IC + k * (g->simge + RIHTIM_ARA);
+    *y = g->dy + RIHTIM_UST;
+}
+
+int ulgen_theme_rihtim_konum(int k, int *x, int *y, int *boy) {
+    if (k < 0 || k >= RIHTIM_ADET) return -1;
+    rihtim_geo_t g;
+    rihtim_geo(fb_width(), fb_height(), &g);
+    rihtim_simge(&g, k, x, y);
+    *boy = g.simge;
+    return RIHTIM[k];
+}
+
+/* Masaüstü simgeleri (sol sütun) */
+static const struct { simge_id_t id; const char *ad; } MASA[] = {
+    { SIMGE_DISK,   "ÖTÜKENOS" },
+    { SIMGE_KLASOR, "Belgeler" },
+    { SIMGE_KLASOR, "Projeler" },
+    { SIMGE_KLASOR, "Arşiv"    },
+    { SIMGE_COP,    "Çöp Kutusu" }
+};
+#define MASA_ADET ((int)(sizeof(MASA) / sizeof(MASA[0])))
+#define MASA_X    28
+#define MASA_ARA  96
+static int masa_y(int i) { return ULGEN_UST_BAR + 26 + i * MASA_ARA; }
+
+/* Gölgeli, ortalanmış DejaVu yazısı */
+static void golgeli_ortali(int orta_x, int y, const char *s, uint32_t renk) {
+    int x = orta_x - fb_yazi_en(s) / 2;
+    fb_yazi_saydam(x + 1, y + 1, s, 0x000000u);
+    fb_yazi_saydam(x, y, s, renk);
+}
+
+void ulgen_theme_arka_ciz(void) {
+    const tema_t *tm = tema_simdiki();
     int sw = fb_width(), sh = fb_height();
+    duvar_ciz(0, 0, sw, sh);
 
-    masa_beste(sw, sh);
-
-    /* --- Uygulamalar ızgarası (açıksa) --- */
-    if (g_izgara_acik) {
-        int gen = 5 * 150 + 60, yuk = 3 * 170 + 70;
-        int gx = (sw - gen) / 2, gy = (sh - yuk) / 2;
-        for (int j = 0; j < yuk; j++) {
-            static uint32_t sat[2048];
-            int en = gen < 2048 ? gen : 2048;
-            fb_satir_oku(gx, gy + j, sat, en);
-            for (int i = 0; i < en; i++) {
-                uint32_t z = sat[i];
-                int zr=(int)((z>>16)&0xFF), zg=(int)((z>>8)&0xFF), zb=(int)(z&0xFF);
-                sat[i] = ((uint32_t)(zr*22/100 + 10) << 16)
-                       | ((uint32_t)(zg*22/100 + 16) << 8)
-                       |  (uint32_t)(zb*22/100 + 24);
-            }
-            fb_satir_yaz(gx, gy + j, sat, en);
-        }
-        orb_yaz_ortali(sw / 2, gy + 16, "UYGULAMALAR", 0xFFFFFFu, 1, 0);
-        for (int i = 0; i < TAMGA_N; i++) {
-            int r = i / 5, c2 = i % 5;
-            int x = gx + 30 + c2 * 150, y = gy + 46 + r * 170;
-            tamga_gorsel_ciz(x, y, i, 128, 0);
-        }
+    for (int i = 0; i < MASA_ADET; i++) {
+        int y = masa_y(i);
+        if (y + 84 > sh - GUI_GOREV_CUBUGU_H) break;
+        simge_ciz(MASA_X, y, MASA[i].id, 64);
+        golgeli_ortali(MASA_X + 32, y + 66, MASA[i].ad, tm->beyaz_yerine_krem);
     }
 
-    /* --- rıhtım: İKİ SIRA, 180 piksel simge ---
-     * Üst sıra 8, alt sıra 7 tamga. Simge boyu ekran genişliğinden
-     * türetilir; 180 tavandır, sığmazsa küçülür. */
-    const int ara = 10, ic_pay = 16;
-    /* RIHTIM SEÇİMİ: günlük kullanımda en sık gerekenler tek sırada.
-     * ÖTÜKEN üst barda; kurtarma (ASENA), yeniden kurulum (ERGENEKON),
-     * yetki (KUT), politika (TÖRE), güvenlik (TİMUR), ağ (ULAK) ve
-     * DEDE KORKUT nadir kullanılır, rıhtımda yer tutmaz. */
-    static const int RIHTIM[] = {
-        1,   /* UMAY   — yapay us          */
-        9,   /* BİTİG  — dosya sistemi     */
-        14,  /* ORKUN  — geliştirici       */
-        3,   /* ÜLGEN  — grafik ortamı     */
-        4,   /* TULPAR — web tarayıcı      */
-        11,  /* KERVAN — paket yönetimi    */
-        13   /* TAMGA  — dijital kimlik    */
-    };
-    const int rihtim_adet = (int)(sizeof(RIHTIM) / sizeof(RIHTIM[0]));
-    const int ust_adet = rihtim_adet, alt_adet = 0;
-    int azami = sw - 24;
-    int simge = (azami - 2 * ic_pay - (ust_adet - 1) * ara) / ust_adet;
-    if (simge > 180) simge = 180;   /* 200x185 hücreye sığan logo */
-    if (simge < 48)  simge = 48;
-    int cubuk_en = ust_adet * simge + (ust_adet - 1) * ara + 2 * ic_pay;
-    int rx0 = (sw - cubuk_en) / 2, rx1 = rx0 + cubuk_en;
-    int cubuk_boy = simge + 2 * 12;
-    int dy = sh - 86 - cubuk_boy;   /* görev çubuğu 86 piksel */
-
-    for (int j = 0; j < cubuk_boy; j++) {
+    /* rıhtım: yarı saydam koyu şerit + tamgalar (üzerine gelme parlaması
+     * yok: rıhtım pencerelerin ALTINDA, durağan katmandadır) */
+    rihtim_geo_t g;
+    rihtim_geo(sw, sh, &g);
+    int rx1 = g.rx0 + g.cubuk_en;
+    for (int j = 0; j < g.cubuk_boy; j++) {
         static uint32_t satir[2048];
-        int en = rx1 - rx0;
+        int en = rx1 - g.rx0;
         if (en > 2048) en = 2048;
-        /* Satırı toplu oku, yerinde karıştır, toplu yaz: piksel başına
-         * iki fonksiyon çağrısı çizimi yetişemez hale getiriyordu. */
-        fb_satir_oku(rx0, dy + j, satir, en);
+        fb_satir_oku(g.rx0, g.dy + j, satir, en);
         int kat = (j < 2) ? 60 : 16;
         for (int i = 0; i < en; i++) {
             uint32_t z = satir[i];
-            int zr=(int)((z>>16)&0xFF), zg=(int)((z>>8)&0xFF), zb=(int)(z&0xFF);
-            satir[i] = ((uint32_t)(zr*30/100 + kat) << 16)
-                     | ((uint32_t)(zg*30/100 + kat + 4) << 8)
-                     |  (uint32_t)(zb*30/100 + kat + 10);
+            int zr = (int)((z >> 16) & 0xFF), zg = (int)((z >> 8) & 0xFF), zb = (int)(z & 0xFF);
+            satir[i] = ((uint32_t)(zr * 30 / 100 + kat) << 16)
+                     | ((uint32_t)(zg * 30 / 100 + kat + 4) << 8)
+                     |  (uint32_t)(zb * 30 / 100 + kat + 10);
         }
         int r = 18;
-        int dyk = (j < r) ? (r - j) : (j >= cubuk_boy - r ? j - (cubuk_boy - r - 1) : 0);
+        int dyk = (j < r) ? (r - j) : (j >= g.cubuk_boy - r ? j - (g.cubuk_boy - r - 1) : 0);
         int bas_i = 0, son_i = en;
         if (dyk) {
             int k = 0;
             while (k < r && (r - k) * (r - k) + dyk * dyk > r * r) k++;
             bas_i = k; son_i = en - k;
         }
-        if (son_i > bas_i) fb_satir_yaz(rx0 + bas_i, dy + j, &satir[bas_i], son_i - bas_i);
+        if (son_i > bas_i) fb_satir_yaz(g.rx0 + bas_i, g.dy + j, &satir[bas_i], son_i - bas_i);
     }
-
-        int fx, fy, fb_dugme;
-    mouse_get_state(&fx, &fy, &fb_dugme);
-    (void)fb_dugme;
-
-    int ustunde = -1, u_x = 0, u_y = 0;
-    for (int k = 0; k < rihtim_adet; k++) {
-        int i = RIHTIM[k];
-        int sira = 0;
-        int sut  = k;
-        int adet = ust_adet; (void)alt_adet;
-        int sira_en = adet * simge + (adet - 1) * ara;
-        int x = rx0 + (cubuk_en - sira_en) / 2 + sut * (simge + ara);
-        int y = dy + 12 + sira * (simge + 12);
-        int uzerinde = (fx >= x && fx < x + simge && fy >= y && fy < y + simge);
-        if (uzerinde) { ustunde = i; u_x = x; u_y = y; }
-        tamga_gorsel_ciz(x, y, i, simge, uzerinde ? 50 : 0);
+    for (int k = 0; k < RIHTIM_ADET; k++) {
+        int x, y;
+        rihtim_simge(&g, k, &x, &y);
+        tamga_gorsel_ciz(x, y, RIHTIM[k], g.simge, 0);
     }
+}
 
-    if (ustunde >= 0) {
-        const char *ad = tamga_al((tamga_id_t)ustunde)->ad;
-        int en = orb_en(ad, 0) + 24;
-        int x = u_x + simge / 2 - en / 2;
-        if (x < 8) x = 8;
-        if (x + en > sw - 8) x = sw - 8 - en;
-        int y = u_y - 32;
-        if (y < 4) y = u_y + simge + 6;
-        tamga_yuvarlak_kutu(x, y, en, 28, 8, 0x0A1B24u);
-        orb_yaz_ortali(x + en / 2, y + 6, ad, 0xFFFFFFu, 0, 0);
+/* Çalışma süresi: sınamada sabitlenebilir (belirlenimci ekran) */
+static int g_saat_sabit = -1;
+void ulgen_theme_saat_sabitle(int saniye) { g_saat_sabit = saniye; }
+
+/* Üst çubuk menüsü: çizim ve tıklama AYNI dizeden (tek geometri). */
+#define UST_MENU_X 60
+static const char UST_MENU[] = "Dosya   Düzen   Görünüm   Uygulamalar   Sistem   Yardım";
+
+/* (x,y) üst çubukta: ÖTÜKEN tamgası -> ULGEN_MENU_TAMGA, menü sözcüğü ->
+ * sırası (0 Dosya .. 5 Yardım), boşluk -> -1. */
+int ulgen_theme_menu_hit(int x, int y) {
+    if (y < 0 || y >= ULGEN_UST_BAR) return -1;
+    if (x >= 14 && x < 14 + 34) return ULGEN_MENU_TAMGA;
+    char on[sizeof(UST_MENU)];
+    int sira = 0, i = 0;
+    while (UST_MENU[i]) {
+        while (UST_MENU[i] == ' ') i++;
+        int bas = i;
+        while (UST_MENU[i] && UST_MENU[i] != ' ') i++;
+        for (int k = 0; k < bas; k++) on[k] = UST_MENU[k];
+        on[bas] = 0;
+        int x0 = UST_MENU_X + fb_yazi_en(on);
+        for (int k = 0; k < i; k++) on[k] = UST_MENU[k];
+        on[i] = 0;
+        int x1 = UST_MENU_X + fb_yazi_en(on);
+        if (x >= x0 - 4 && x < x1 + 4) return sira;
+        sira++;
     }
+    return -1;
+}
+
+void ulgen_theme_ust_bar_ciz(void) {
+    const tema_t *tm = tema_simdiki();
+    int sw = fb_width();
+    fb_fill_rect(0, 0, sw, ULGEN_UST_BAR, tm->gorev_cubugu);
+    tamga_gorsel_ciz(14, 3, 0, 34, 0);                      /* ÖTÜKEN tamgası */
+    fb_yazi_saydam(UST_MENU_X, 12, UST_MENU, tm->gorev_yazi);
+    /* 1.4.9: gerçek saat (RTC, yerel dilim). RTC yoksa çalışma süresi. */
+    char s[48];
+    int i = 0;
+    int64_t e = g_saat_sabit >= 0 ? (int64_t)g_saat_sabit : zaman_epoch();
+    if (e >= 0) {
+        static const char *const GUN[7] = {"Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"};
+        static const char *const AY[12] = {"Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+                                           "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"};
+        sys_zaman_t z; int hg;
+        zaman_coz(e, OTUKEN_ZAMAN_DILIMI_DK, &z, &hg);
+        for (const char *p = GUN[hg]; *p; p++) s[i++] = *p;
+        s[i++] = ' ';
+        if (z.gun >= 10) s[i++] = (char)('0' + z.gun / 10);
+        s[i++] = (char)('0' + z.gun % 10);
+        s[i++] = ' ';
+        for (const char *p = AY[(z.ay - 1) % 12]; *p; p++) s[i++] = *p;
+        s[i++] = ' '; s[i++] = ' ';
+        s[i++] = (char)('0' + z.saat / 10); s[i++] = (char)('0' + z.saat % 10);
+        s[i++] = ':';
+        s[i++] = (char)('0' + z.dakika / 10); s[i++] = (char)('0' + z.dakika % 10);
+        s[i] = 0;
+    } else {
+        uint32_t sn = (uint32_t)(timer_get_ticks() / (timer_hz() ? timer_hz() : 100));
+        const char *on = "Açık ";
+        while (*on) s[i++] = *on++;
+        uint32_t sa = sn / 3600, dk = (sn / 60) % 60, ss = sn % 60;
+        if (sa) { if (sa >= 10) s[i++] = (char)('0' + (sa / 10) % 10); s[i++] = (char)('0' + sa % 10); s[i++] = ':'; }
+        s[i++] = (char)('0' + dk / 10); s[i++] = (char)('0' + dk % 10);
+        s[i++] = ':';
+        s[i++] = (char)('0' + ss / 10); s[i++] = (char)('0' + ss % 10);
+        s[i] = 0;
+    }
+    fb_yazi_saydam(sw - fb_yazi_en(s) - 16, 12, s, tm->gorev_yazi);
+}
+
+/* Eski tek parça çizim (tema komutu önizlemesi vb. için): arka + üst çubuk */
+void ulgen_theme_draw(void) {
+    ulgen_theme_arka_ciz();
+    ulgen_theme_ust_bar_ciz();
+}
+
+/* Tıklanan rıhtım simgesinin TAMGA kimliği; yoksa -1 */
+int ulgen_theme_dock_hit(int x, int y) {
+    rihtim_geo_t g;
+    rihtim_geo(fb_width(), fb_height(), &g);
+    for (int k = 0; k < RIHTIM_ADET; k++) {
+        int gx, gy;
+        rihtim_simge(&g, k, &gx, &gy);
+        if (x >= gx && x < gx + g.simge && y >= gy && y < gy + g.simge) return RIHTIM[k];
+    }
+    return -1;
+}
+
+/* Tıklanan masaüstü simgesinin sırası (0..); yoksa -1 */
+int ulgen_theme_simge_hit(int x, int y) {
+    for (int i = 0; i < MASA_ADET; i++) {
+        int sy = masa_y(i);
+        if (x >= MASA_X && x < MASA_X + 64 && y >= sy && y < sy + 84) return i;
+    }
+    return -1;
 }
 
 int ulgen_theme_izgara_hit(int x, int y) {
@@ -264,46 +297,86 @@ int ulgen_theme_izgara_hit(int x, int y) {
         int ix = gx + 30 + c2 * 150, iy = gy + 46 + r * 170;
         if (x >= ix && x < ix + 128 && y >= iy && y < iy + 128) return i;
     }
-    return -2;   /* ızgara içinde ama tamga değil */
+    return -2;
 }
 
-int ulgen_theme_dock_hit(int x, int y) {
-    int sw = fb_width(), sh = fb_height();
-    const int ara = 10, ic_pay = 16;
-    /* RIHTIM SEÇİMİ: günlük kullanımda en sık gerekenler tek sırada.
-     * ÖTÜKEN üst barda; kurtarma (ASENA), yeniden kurulum (ERGENEKON),
-     * yetki (KUT), politika (TÖRE), güvenlik (TİMUR), ağ (ULAK) ve
-     * DEDE KORKUT nadir kullanılır, rıhtımda yer tutmaz. */
-    static const int RIHTIM[] = {
-        1,   /* UMAY   — yapay us          */
-        9,   /* BİTİG  — dosya sistemi     */
-        14,  /* ORKUN  — geliştirici       */
-        3,   /* ÜLGEN  — grafik ortamı     */
-        4,   /* TULPAR — web tarayıcı      */
-        11,  /* KERVAN — paket yönetimi    */
-        13   /* TAMGA  — dijital kimlik    */
-    };
-    const int rihtim_adet = (int)(sizeof(RIHTIM) / sizeof(RIHTIM[0]));
-    const int ust_adet = rihtim_adet, alt_adet = 0;
-    int azami = sw - 24;
-    int simge = (azami - 2 * ic_pay - (ust_adet - 1) * ara) / ust_adet;
-    if (simge > 180) simge = 180;   /* 200x185 hücreye sığan logo */
-    if (simge < 48)  simge = 48;
-    int cubuk_en = ust_adet * simge + (ust_adet - 1) * ara + 2 * ic_pay;
-    int rx0 = (sw - cubuk_en) / 2;
-    int cubuk_boy = simge + 2 * 12;
-    int dy = sh - 86 - cubuk_boy;   /* görev çubuğu 86 piksel */
+/* =====================================================================
+ * 1.4.9: "Uygulamalar" açılır menüsü. 15 tamganın hepsi sırayla listelenir;
+ * uygulaması olmayanlar (ASENA, ERGENEKON, TAMGA) sönük çizilir ve
+ * tıklanınca hiçbir şey açmaz. Çizim ve tıklama AYNI yerleşimi kullanır.
+ * ===================================================================== */
+#define UM_SATIR 26
+#define UM_EN    300
+static int g_uyg_menu = 0;
+/* tamga -> uygulaması var mı (gui.c rihtim_ac ile aynı küme) */
+static const uint8_t UM_VAR[TAMGA_N] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 };   /* 1.4.9: hepsi */
 
-    for (int i = 0; i < TAMGA_N; i++) {
-        int sira = (i < ust_adet) ? 0 : 1;
-        int sut  = (i < ust_adet) ? i : i - ust_adet;
-        int adet = ust_adet; (void)alt_adet;
-        int sira_en = adet * simge + (adet - 1) * ara;
-        int gx = rx0 + (cubuk_en - sira_en) / 2 + sut * (simge + ara);
-        int gy = dy + 10 + sira * (simge + 10);
-        if (x >= gx && x < gx + simge && y >= gy && y < gy + simge) return i;
+int  ulgen_theme_uyg_menu_acik(void) { return g_uyg_menu; }
+void ulgen_theme_uyg_menu_ata(int acik) { g_uyg_menu = acik ? 1 : 0; }
+int  ulgen_theme_uyg_var(int id) { return id >= 0 && id < TAMGA_N && UM_VAR[id]; }
+
+void ulgen_theme_uyg_menu_kutu(int *x, int *y, int *w, int *h) {
+    /* "Uygulamalar" sözcüğünün altı (menü sırası 3) */
+    char on[sizeof(UST_MENU)];
+    int sira = 0, i = 0, x0 = UST_MENU_X;
+    while (UST_MENU[i]) {
+        while (UST_MENU[i] == ' ') i++;
+        if (sira == 3) {
+            for (int k = 0; k < i; k++) on[k] = UST_MENU[k];
+            on[i] = 0;
+            x0 = UST_MENU_X + fb_yazi_en(on);
+            break;
+        }
+        while (UST_MENU[i] && UST_MENU[i] != ' ') i++;
+        sira++;
     }
-    return -1;
+    int pn = kervan2_uygulama_sayisi();               /* 1.4.9: kurulu paket uygulamaları */
+    *x = x0 - 8; *y = ULGEN_UST_BAR; *w = UM_EN; *h = (TAMGA_N + (pn ? pn + 1 : 0)) * UM_SATIR + 8;
+}
+
+int ulgen_theme_uyg_menu_hit(int x, int y) {
+    if (!g_uyg_menu) return -1;
+    int mx, my, mw, mh;
+    ulgen_theme_uyg_menu_kutu(&mx, &my, &mw, &mh);
+    if (x < mx || x >= mx + mw || y < my || y >= my + mh) return -1;
+    int r = (y - my - 4) / UM_SATIR;
+    if (y - my < 4 || r < 0) return -2;
+    if (r < TAMGA_N) return r;
+    int pi = r - TAMGA_N - 1;                         /* ayraç satırı: -2 */
+    if (pi >= 0 && pi < kervan2_uygulama_sayisi()) return ULGEN_MENU_PAKET + pi;
+    return -2;
+}
+
+void ulgen_theme_uyg_menu_ciz(void) {
+    if (!g_uyg_menu) return;
+    const tema_t *tm = tema_simdiki();
+    int mx, my, mw, mh;
+    ulgen_theme_uyg_menu_kutu(&mx, &my, &mw, &mh);
+    fb_fill_rect(mx, my, mw, mh, tm->gorev_cubugu);
+    fb_fill_rect(mx, my + mh - 1, mw, 1, tm->kenar);
+    fb_fill_rect(mx, my, 1, mh, tm->kenar);
+    fb_fill_rect(mx + mw - 1, my, 1, mh, tm->kenar);
+    uint32_t sonuk = ((tm->gorev_yazi >> 1) & 0x7F7F7Fu) + ((tm->gorev_cubugu >> 1) & 0x7F7F7Fu);
+    for (int i = 0; i < TAMGA_N; i++) {
+        int y = my + 4 + i * UM_SATIR;
+        const tamga_t *t = tamga_al((tamga_id_t)i);
+        uint32_t c = UM_VAR[i] ? tm->gorev_yazi : sonuk;
+        fb_yazi_saydam(mx + 14, y + 5, t ? t->ad : "?", c);
+        fb_yazi_saydam(mx + 150, y + 5, ROLLER[i], UM_VAR[i] ? tm->vurgu : sonuk);
+    }
+    int pn = kervan2_uygulama_sayisi();
+    if (pn) {
+        int y = my + 4 + TAMGA_N * UM_SATIR;
+        fb_fill_rect(mx + 10, y + 12, mw - 20, 1, sonuk);
+        fb_yazi_saydam(mx + 14, y + 5, "KURULU PAKETLER", sonuk);
+        for (int i = 0; i < pn; i++) {
+            char dosya[13], paket[24];
+            if (kervan2_uygulama_al(i, dosya, paket) != 0) continue;
+            int yy = y + (i + 1) * UM_SATIR;
+            fb_yazi_saydam(mx + 14, yy + 5, dosya, tm->gorev_yazi);
+            fb_yazi_saydam(mx + 150, yy + 5, paket, sonuk);
+        }
+    }
 }
 
 const char *ulgen_theme_name(int id) {

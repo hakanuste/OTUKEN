@@ -50,4 +50,21 @@ static inline void irq_geri_yukle(uint64_t f) {
     __asm__ volatile ("push %0; popfq" : : "r"(f) : "memory", "cc");
 }
 
+/* --- OZYINELEMELI DONEN KILIT (SMP adim 6) ---
+ * Cekirdek-sahipli: ayni CEKIRDEK ic ice alabilir (orn. log_write ->
+ * log_write_num, ya da istisna isleyicisi ayni kilidi isterse). Kisa
+ * islemler icindir; kesmeler kapali tutulur. Beklerken bekleyen IPI'ler
+ * (TLB vurusu) islenir. Sifirla baslatilmis statik degisken hazirdir
+ * ANCAK sahip alani -1 olmalidir: bu yuzden OZSPIN_BASLANGIC kullanin. */
+typedef struct {
+    volatile int kilit;
+    volatile int sahip;       /* cekirdek indeksi, -1 = bos */
+    int          derinlik;
+    uint64_t     bayrak;      /* ilk alistaki RFLAGS */
+} ozspin_t;
+#define OZSPIN_BASLANGIC { 0, -1, 0, 0 }
+
+void ozspin_al(ozspin_t *k);
+void ozspin_birak(ozspin_t *k);
+
 #endif

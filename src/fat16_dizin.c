@@ -14,11 +14,16 @@
  *     üst dizine ATTR_DIRECTORY girdisi eklenir.
  *   - 8.3 adlar, büyük/küçük harf duyarsız. Uzun ad (LFN) YOK.
  *
- * SINIR: dizin silme yok; bir dizin tek kümeye sığdığı kadar girdi
- * alır (512 baytlık kümede 16 girdi). Taşma sessizce yutulmaz, hata
- * döner.
+ * 1.4.9: alt dizine YAZMA (fat16_yol_yaz), SONUNA EKLEME (fat16_yol_ekle:
+ * yalnız yeni veri yazılır, dosya baştan yazılmaz) ve SİLME (fat16_yol_sil;
+ * dizin yalnız boşsa). Alt dizin dolunca zincirine yeni küme eklenir
+ * (kök dizin sabit boydadır, dolarsa hata). Yazma sırası: önce yeni
+ * kümeler ve veri, sonra dizin girdisi, EN SON eski zincir bırakılır;
+ * yarıda kesilirse sonuç sahipsiz küme olur, iki dosyanın paylaştığı küme
+ * olmaz (ASENA onarır).
  * ===================================================================== */
 #include "fat16.h"
+#include "depo_kilit.h"
 #include "fat16_ic.h"
 #include "disk_cache.h"
 #include "serial.h"
@@ -60,7 +65,10 @@ static int dizin_gez(uint16_t kume, girdi_gez_t geri, void *baglam)
     }
 
     uint16_t k = kume;
+    uint32_t say = 0;
     while (k >= 2 && k < 0xFFF8) {
+        if (say++ >= 65536) return -1;     /* bozuk zincir döngüsü: kilidi bırak */
+        if (!fat16_kume_gecerli(k)) return -1;   /* birim dışı küme: o LBA'ya dokunulmaz */
         uint32_t taban = fat16_kume_lba(k);
         for (uint32_t s = 0; s < fat16_sectors_per_cluster(); s++) {
             uint32_t lba = taban + s;
@@ -114,8 +122,8 @@ static int dizinde_ara(uint16_t kume, const char *ad, fat16_dirent_t *cikti,
     ara_baglam_t a;
     a.aranan = ad; a.cikti = cikti; a.bulundu = 0;
     a.bulundu_lba = 0; a.bulundu_indeks = 0;
-    dizin_gez(kume, ara_geri, &a);
-    if (!a.bulundu) return -1;
+    int gr = dizin_gez(kume, ara_geri, &a);
+    if (!a.bulundu) return gr < 0 ? -2 : -1;      /* -2: okunamadı (yok sayılmaz) */
     if (lba)    *lba = a.bulundu_lba;
     if (indeks) *indeks = a.bulundu_indeks;
     return 0;
@@ -156,8 +164,7 @@ static int yol_coz(const char *yol, uint16_t *ust_kume, char *son, int son_boy)
     }
 }
 
-int fat16_yol_bul(const char *yol, fat16_dirent_t *cikti)
-{
+static int fat16_yol_bul__ic(const char *yol, fat16_dirent_t *cikti) {
     uint16_t ust;
     char ad[13];
     if (yol_coz(yol, &ust, ad, sizeof ad) != 0) return -1;
@@ -188,8 +195,7 @@ static int liste_geri(const uint8_t *g, uint32_t lba, int indeks, void *b)
     return 0;
 }
 
-int fat16_listele_yol(const char *yol, fat16_dirent_t *out, int max)
-{
+static int fat16_listele_yol__ic(const char *yol, fat16_dirent_t *out, int max) {
     if (!yol || !out || max <= 0) return 0;
     uint16_t kume = 0;
     if (!(yol[0] == '/' && yol[1] == 0)) {
@@ -216,8 +222,9 @@ static int bos_geri(const uint8_t *g, uint32_t lba, int indeks, void *b)
     return 0;
 }
 
-int fat16_dizin_yarat(const char *yol)
-{
+static int dizin_yuva(uint16_t ust, const char *ad, uint32_t *lba, int *indeks,
+                      int *var_mi, fat16_dirent_t *eski);
+static int fat16_dizin_yarat__ic(const char *yol) {
     if (!fat16_bagli_mi()) return -1;
 
     uint16_t ust;
@@ -226,7 +233,9 @@ int fat16_dizin_yarat(const char *yol)
 
     /* Zaten var mı: sessizce başarılı DÖNMEYİZ, açıkça hata veririz. */
     fat16_dirent_t varolan;
-    if (dizinde_ara(ust, ad, &varolan, 0, 0) == 0) return -2;
+    int ar = dizinde_ara(ust, ad, &varolan, 0, 0);
+    if (ar == 0) return -2;
+    if (ar == -2) return -1;                       /* üst dizin okunamadı */
 
     uint16_t kume = fat16_bos_kume_bul();
     if (kume == 0) return -3;
@@ -263,12 +272,14 @@ int fat16_dizin_yarat(const char *yol)
         }
     }
 
-    /* Üst dizine girdiyi ekle. */
+    /* Üst dizine girdiyi ekle (1.4.9: alt dizin doluysa zinciri uzar). */
     bos_baglam_t bos = { 0, 0, 0 };
-    dizin_gez(ust, bos_geri, &bos);
-    if (!bos.bulundu) {
-        fat16_kume_yaz(kume, 0x0000);
-        return -6;                            /* dizin dolu: sessiz kabul YOK */
+    {
+        int var; fat16_dirent_t e;
+        if (dizin_yuva(ust, ad, &bos.lba, &bos.indeks, &var, &e) != 0 || var) {
+            fat16_kume_yaz(kume, 0x0000);
+            return -6;                        /* dizin dolu: sessiz kabul YOK */
+        }
     }
 
     static uint8_t sektor[512];
@@ -288,4 +299,264 @@ int fat16_dizin_yarat(const char *yol)
         return -8;
     }
     return 0;
+}
+
+/* ===================== 1.4.9: alt dizine yazma ===================== */
+#define AZAMI_KUME 4096
+static uint32_t kume_bayt(void) { return fat16_sectors_per_cluster() * 512u; }
+
+static void zincir_bosalt(uint16_t k) {
+    uint32_t say = 0;
+    while (k >= 2 && k < 0xFFF8 && say++ < 65536 && fat16_kume_gecerli(k)) {
+        uint16_t n = fat16_sonraki_kume(k);
+        fat16_kume_yaz(k, 0x0000);
+        k = n;
+    }
+}
+
+/* n küme ayırıp zincirler (onceki != 0 ise ona eklenir). İlk küme; 0 hata
+ * (bu çağrıda ayrılanlar geri alınır, onceki yine zincir sonu olur). */
+static uint16_t zincir_ayir(uint32_t n, uint16_t onceki) {
+    static uint16_t liste[AZAMI_KUME];
+    if (n == 0 || n > AZAMI_KUME) return 0;
+    uint16_t ilk = 0, son = onceki;
+    uint32_t a = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        uint16_t k = fat16_bos_kume_bul();
+        if (k == 0 || fat16_kume_yaz(k, 0xFFFF) != 0) goto geri;
+        liste[a++] = k;
+        if (son && fat16_kume_yaz(son, k) != 0) goto geri;
+        if (!ilk) ilk = k;
+        son = k;
+    }
+    return ilk;
+geri:
+    for (uint32_t i = 0; i < a; i++) fat16_kume_yaz(liste[i], 0x0000);
+    if (onceki) fat16_kume_yaz(onceki, 0xFFFF);
+    return 0;
+}
+
+/* k kümesinin 'ofs' baytından başlayarak zincir boyunca n bayt yaz */
+static int veri_yaz(uint16_t k, uint32_t ofs, const uint8_t *d, uint32_t n) {
+    static uint8_t s[512];
+    uint32_t kb = kume_bayt();
+    while (n > 0) {
+        if (k < 2 || k >= 0xFFF8) return -1;
+        while (ofs < kb && n > 0) {
+            uint32_t lba = fat16_kume_lba(k) + ofs / 512, so = ofs % 512;
+            uint32_t parca = 512 - so; if (parca > n) parca = n;
+            if (so != 0 || parca != 512) { if (disk_cache_read_sectors(0, lba, 1, s) != 0) return -1; }
+            for (uint32_t i = 0; i < parca; i++) s[so + i] = d[i];
+            if (disk_cache_write_sectors(0, lba, 1, s) != 0) return -1;
+            d += parca; n -= parca; ofs += parca;
+        }
+        if (n == 0) break;
+        k = fat16_sonraki_kume(k); ofs = 0;
+    }
+    return 0;
+}
+
+static int kume_sifirla(uint16_t k) {
+    static uint8_t z[512];
+    for (int i = 0; i < 512; i++) z[i] = 0;
+    for (uint32_t s = 0; s < fat16_sectors_per_cluster(); s++)
+        if (disk_cache_write_sectors(0, fat16_kume_lba(k) + s, 1, z) != 0) return -1;
+    return 0;
+}
+
+/* girdinin yeri: var olan ya da boş yuva; alt dizin doluysa zincir uzar */
+static int dizin_yuva(uint16_t ust, const char *ad, uint32_t *lba, int *indeks,
+                      int *var_mi, fat16_dirent_t *eski) {
+    int ar = dizinde_ara(ust, ad, eski, lba, indeks);
+    if (ar == 0) { *var_mi = 1; return 0; }
+    if (ar == -2) return -1;                      /* dizin okunamadı: aynı adlı ikinci girdi yaratılmaz */
+    *var_mi = 0;
+    bos_baglam_t b = { 0, 0, 0 };
+    if (dizin_gez(ust, bos_geri, &b) < 0) return -1;
+    if (b.bulundu) { *lba = b.lba; *indeks = b.indeks; return 0; }
+    if (ust == 0) return -1;                      /* kök sabit boyda */
+    uint16_t k = ust, son = 0;
+    uint32_t say = 0;
+    while (k >= 2 && k < 0xFFF8 && say++ < 65536) {
+        if (!fat16_kume_gecerli(k)) return -1;    /* birim dışı küme: zincire eklenmez */
+        son = k; k = fat16_sonraki_kume(k);
+    }
+    uint16_t yeni = zincir_ayir(1, son);
+    if (!yeni) return -1;
+    if (kume_sifirla(yeni) != 0) { fat16_kume_yaz(yeni, 0); fat16_kume_yaz(son, 0xFFFF); return -1; }
+    *lba = fat16_kume_lba(yeni); *indeks = 0;
+    return 0;
+}
+
+static int girdi_yaz(uint32_t lba, int indeks, const char *ad, uint8_t attr, uint16_t ilk, uint32_t boy) {
+    static uint8_t s[512];
+    if (disk_cache_read_sectors(0, lba, 1, s) != 0) return -1;
+    uint8_t *g = &s[indeks * GIRDI_BOY];
+    for (int i = 0; i < GIRDI_BOY; i++) g[i] = 0;
+    fat16_ad_83_yap(ad, g);
+    g[11] = attr;
+    fat16_yaz16(&g[26], ilk);
+    fat16_yaz32(&g[28], boy);
+    return disk_cache_write_sectors(0, lba, 1, s);
+}
+
+static int ad83_gecerli(const char *a) {
+    int ana = 0, uz = 0, nokta = 0;
+    for (; *a; a++) {
+        char c = *a;
+        if (c == '.') { if (nokta || !ana) return 0; nokta = 1; continue; }
+        if (c >= 'a' && c <= 'z') c = (char)(c - 32);
+        if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) return 0;
+        if (nokta) { if (++uz > 3) return 0; } else if (++ana > 8) return 0;
+    }
+    return ana > 0 && (!nokta || uz > 0);
+}
+
+static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy, int ekle) {
+    if (!fat16_bagli_mi() || !fat16_sectors_per_cluster()) return -1;
+    uint16_t ust; char ad[13];
+    if (yol_coz(yol, &ust, ad, sizeof ad) != 0 || !ad83_gecerli(ad)) return -1;
+    if (!ekle && ust == 0) return fat16_write_file(ad, veri, boy);   /* kök: eski, sınanmış yol */
+    uint32_t lba; int indeks, var;
+    fat16_dirent_t eski;
+    if (dizin_yuva(ust, ad, &lba, &indeks, &var, &eski) != 0) return -1;
+    if (var && eski.is_dir) return -1;
+    uint32_t kb = kume_bayt();
+    if (ekle && var && eski.first_cluster >= 2 && eski.size > 0) {
+        /* SONUNA EKLE: yalnız yeni bayt yazılır */
+        /* son küme BOYDAN hesaplanır (zincir sonundan değil): yarıda kalmış
+         * eski bir eklemeden artakalan küme varsa kesilir */
+        if (!fat16_kume_gecerli(eski.first_cluster)) return -1;   /* birim dışı ilk küme */
+        uint32_t gerek = (eski.size + kb - 1) / kb;
+        /* zincirde döngü olursa (bozuk FAT) hiçbir şey değiştirilmez: gezilen
+         * kümeler işaretlenir, tekrar görülen küme hata */
+        static uint8_t gezildi[65536 / 8];
+        for (unsigned i = 0; i < sizeof gezildi; i++) gezildi[i] = 0;
+        uint16_t son = eski.first_cluster;
+        gezildi[son >> 3] |= (uint8_t)(1u << (son & 7));
+        for (uint32_t i = 1; i < gerek; i++) {
+            uint16_t nx = fat16_sonraki_kume(son);
+            if (!fat16_kume_gecerli(nx)) return -1;       /* zincir boydan kısa: bozuk */
+            if (gezildi[nx >> 3] & (1u << (nx & 7))) return -1;   /* döngü */
+            gezildi[nx >> 3] |= (uint8_t)(1u << (nx & 7));
+            son = nx;
+        }
+        {
+            uint16_t art = fat16_sonraki_kume(son);
+            if (art >= 2 && art < 0xFFF8) {
+                if (!fat16_kume_gecerli(art)) return -1;
+                if (gezildi[art >> 3] & (1u << (art & 7))) return -1;   /* artakalan sandığımız küme dosyanın içinde: döngü */
+                if (fat16_kume_yaz(son, 0xFFFF) != 0) return -1;   /* önce kes, sonra bırak */
+                zincir_bosalt(art);
+            }
+        }
+        uint32_t dolu = eski.size % kb; if (dolu == 0) dolu = kb;
+        uint32_t bosluk = kb - dolu;
+        uint32_t ilk_parca = boy < bosluk ? boy : bosluk;
+        if (ilk_parca && veri_yaz(son, dolu, veri, ilk_parca) != 0) return -1;
+        uint32_t kalan = boy - ilk_parca;
+        uint16_t ek = 0;
+        if (kalan) {
+            uint32_t n = (kalan + kb - 1) / kb;
+            ek = zincir_ayir(n, son);
+            if (!ek) return -1;
+            if (veri_yaz(ek, 0, veri + ilk_parca, kalan) != 0) { zincir_bosalt(ek); fat16_kume_yaz(son, 0xFFFF); return -1; }
+        }
+        if (girdi_yaz(lba, indeks, ad, 0x20, eski.first_cluster, eski.size + boy) != 0) {
+            /* boy güncellenemedi: eklenen kümeler ayrılıp bırakılır (eski
+             * kuyruğa yazılan baytlar boyun dışında kalır, görünmez) */
+            if (ek) { zincir_bosalt(ek); fat16_kume_yaz(son, 0xFFFF); }
+            return -1;
+        }
+        return (int)boy;
+    }
+    /* YENİ ya da BAŞTAN: önce yeni zincir + veri, sonra girdi, en son eski zincir */
+    uint16_t yeni = 0;
+    if (boy > 0) {
+        uint32_t n = (boy + kb - 1) / kb;
+        yeni = zincir_ayir(n, 0);
+        if (!yeni) return -1;
+        if (veri_yaz(yeni, 0, veri, boy) != 0) { zincir_bosalt(yeni); return -1; }
+    }
+    if (girdi_yaz(lba, indeks, ad, 0x20, yeni, boy) != 0) { if (yeni) zincir_bosalt(yeni); return -1; }
+    if (var && eski.first_cluster >= 2) zincir_bosalt(eski.first_cluster);
+    serial_write("BITIG(fat16): yazildi '"); serial_write(yol); serial_write("'\n");
+    return (int)boy;
+}
+
+typedef struct { int dolu; } bos_mu_t;
+static int bos_mu_geri(const uint8_t *g, uint32_t lba, int indeks, void *b) {
+    (void)lba; (void)indeks;
+    if (g[0] == 0x00) return 1;
+    if (g[0] == 0xE5 || g[11] == 0x0F || (g[11] & 0x08) || g[0] == '.') return 0;
+    ((bos_mu_t *)b)->dolu = 1;
+    return 1;
+}
+
+static int fat16_yol_sil__ic(const char *yol) {
+    if (!fat16_bagli_mi()) return -1;
+    uint16_t ust; char ad[13];
+    if (yol_coz(yol, &ust, ad, sizeof ad) != 0) return -1;
+    if (ust == 0) {
+        fat16_dirent_t d;
+        if (dizinde_ara(0, ad, &d, 0, 0) != 0) return -1;
+        if (!d.is_dir) return fat16_sil(ad);
+    }
+    fat16_dirent_t d; uint32_t lba; int indeks;
+    if (dizinde_ara(ust, ad, &d, &lba, &indeks) != 0) return -1;
+    if (d.is_dir) {
+        bos_mu_t b = { 0 };
+        int gr = dizin_gez(d.first_cluster, bos_mu_geri, &b);
+        if (b.dolu) return -2;                       /* boş olmayan dizin silinmez */
+        if (gr < 0) return -1;                       /* okunamadı: boş olduğu doğrulanmadı, silinmez */
+    }
+    static uint8_t s[512];
+    if (disk_cache_read_sectors(0, lba, 1, s) != 0) return -1;
+    s[indeks * GIRDI_BOY] = 0xE5;
+    if (disk_cache_write_sectors(0, lba, 1, s) != 0) return -1;
+    if (d.first_cluster >= 2) zincir_bosalt(d.first_cluster);
+    return 0;
+}
+
+int fat16_yol_yaz(const char *yol, const uint8_t *veri, uint32_t boy) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_yol_yaz__ic(yol, veri, boy, 0);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+int fat16_yol_ekle(const char *yol, const uint8_t *veri, uint32_t boy) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_yol_yaz__ic(yol, veri, boy, 1);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+int fat16_yol_sil(const char *yol) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_yol_sil__ic(yol);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int fat16_yol_bul(const char *yol, fat16_dirent_t *cikti) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_yol_bul__ic(yol, cikti);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int fat16_listele_yol(const char *yol, fat16_dirent_t *out, int max) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_listele_yol__ic(yol, out, max);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int fat16_dizin_yarat(const char *yol) {
+    ozkilit_al(&depo_kilit);
+    int r = fat16_dizin_yarat__ic(yol);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

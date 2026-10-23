@@ -1,4 +1,5 @@
 #include "ahci.h"
+#include "depo_kilit.h"
 #include "pci.h"
 #include "vmm.h"
 #include "serial.h"
@@ -257,7 +258,7 @@ int ahci_port_hazirla(int port) {
     return 0;
 }
 
-int ahci_oku(int port, uint64_t lba, uint32_t sayi, void *tampon) {
+static int ahci_oku__ic(int port, uint64_t lba, uint32_t sayi, void *tampon) {
     if (port < 0 || port >= AHCI_MAX_PORTS) return -1;
     if (sayi == 0 || sayi > 8) return -1;          /* tek sayfa siniri */
     const ahci_controller_t *c = ahci_get_controller();
@@ -326,4 +327,14 @@ int ahci_oku(int port, uint64_t lba, uint32_t sayi, void *tampon) {
     uint8_t *cikti = (uint8_t *)tampon;
     for (uint32_t i = 0; i < sayi * 512; i++) cikti[i] = y->veri[i];
     return 0;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int ahci_oku(int port, uint64_t lba, uint32_t sayi, void *tampon) {
+    ozkilit_al(&depo_kilit);
+    int r = ahci_oku__ic(port, lba, sayi, tampon);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

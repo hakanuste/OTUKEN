@@ -1,4 +1,5 @@
 #include "multiboot2.h"
+#include "modul.h"
 #include "serial.h"
 
 int onyukleme_protokolu(uint32_t magic) {
@@ -29,6 +30,12 @@ static uint32_t cevrilen_mmap_uzunluk = 0;
 uint64_t multiboot2_mmap_adresi(void) { return cevrilen_mmap_adres64; }
 uint32_t multiboot2_mmap_uzunlugu(void) { return cevrilen_mmap_uzunluk; }
 
+/* RSDP kopyasi: v2 (36 bayt) en genis bicim. mbi dusuk bellekte
+ * olabilir ve ileride ezilebilir; bu yuzden icerik kopyalanir. */
+static uint8_t rsdp_kopya[36];
+static int     rsdp_var = 0;
+const uint8_t *multiboot2_rsdp(void) { return rsdp_var ? rsdp_kopya : 0; }
+
 int multiboot2_cevir(uint64_t mb2_adres, multiboot_info_t *cikti) {
     if (mb2_adres == 0 || cikti == 0) return -1;
 
@@ -52,7 +59,30 @@ int multiboot2_cevir(uint64_t mb2_adres, multiboot_info_t *cikti) {
             cikti->framebuffer_width  = *(const uint32_t *)(f + 12);
             cikti->framebuffer_height = *(const uint32_t *)(f + 16);
             cikti->framebuffer_bpp    = *(const uint8_t  *)(f + 20);
+            /* bpp(1) tur(1) ayrilmis(2), ardindan RGB renk alanlari:
+             * kirmizi konum/boy, yesil konum/boy, mavi konum/boy.
+             * Eskiden OKUNMUYORDU: UEFI'de hepsi 0 kalir, renkler bozulurdu. */
+            cikti->framebuffer_type   = *(const uint8_t  *)(f + 21);
+            if (e->boyut >= 8 + 30)
+                for (int ci = 0; ci < 6; ci++)
+                    cikti->color_info[ci] = *(const uint8_t *)(f + 24 + ci);
             cikti->flags |= MULTIBOOT_INFO_FRAMEBUFFER_INFO;
+
+        } else if (e->tur == MB2_TAG_ACPI_ESKI || e->tur == MB2_TAG_ACPI_YENI) {
+            /* Yeni (v2) etiket eskisine ustun gelir. */
+            if (e->tur == MB2_TAG_ACPI_YENI || !rsdp_var) {
+                uint32_t n = e->boyut - 8;
+                if (n > sizeof(rsdp_kopya)) n = sizeof(rsdp_kopya);
+                const uint8_t *k = (const uint8_t *)e + 8;
+                for (uint32_t i = 0; i < sizeof(rsdp_kopya); i++)
+                    rsdp_kopya[i] = (i < n) ? k[i] : 0;
+                rsdp_var = 1;
+            }
+
+        } else if (e->tur == MB2_TAG_MODUL) {
+            /* tur(4) boyut(4) mod_start(4) mod_end(4) dize */
+            const uint8_t *m = (const uint8_t *)e + 8;
+            modul_ekle(*(const uint32_t *)m, *(const uint32_t *)(m + 4), (const char *)(m + 8));
 
         } else if (e->tur == MB2_TAG_MMAP) {
             /* etiket: tur(4) boyut(4) giris_boyutu(4) surum(4) sonra girisler */

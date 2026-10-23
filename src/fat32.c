@@ -1,4 +1,5 @@
 #include "fat32.h"
+#include "depo_kilit.h"
 #include "disk.h"
 #include "disk_cache.h"
 #include "serial.h"
@@ -69,7 +70,7 @@ static void format_83_name(const uint8_t *raw11, char *out) {
     out[p] = 0;
 }
 
-int fat32_list_root(fat32_dirent_t *out, int max) {
+static int fat32_list_root__ic(fat32_dirent_t *out, int max) {
     /* DAYANIKLILIK: birim bagli degilse sifira bolme olurdu. */
     if (!fat32_bagli || bytes_per_sector == 0 || sectors_per_cluster == 0) return 0;
 
@@ -105,7 +106,7 @@ int fat32_list_root(fat32_dirent_t *out, int max) {
     return found;
 }
 
-int fat32_read_file_at(const fat32_dirent_t *entry, uint8_t *buf, uint32_t bufsize, uint32_t offset) {
+static int fat32_read_file_at__ic(const fat32_dirent_t *entry, uint8_t *buf, uint32_t bufsize, uint32_t offset) {
     /* DAYANIKLILIK: birim bagli degilse sifira bolme olurdu. */
     if (!fat32_bagli || bytes_per_sector == 0 || sectors_per_cluster == 0) return -1;
 
@@ -138,4 +139,21 @@ int fat32_read_file_at(const fat32_dirent_t *entry, uint8_t *buf, uint32_t bufsi
         cluster = fat32_next_cluster(cluster);
     }
     return (int)total_read;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+int fat32_list_root(fat32_dirent_t *out, int max) {
+    ozkilit_al(&depo_kilit);
+    int r = fat32_list_root__ic(out, max);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+int fat32_read_file_at(const fat32_dirent_t *entry, uint8_t *buf, uint32_t bufsize, uint32_t offset) {
+    ozkilit_al(&depo_kilit);
+    int r = fat32_read_file_at__ic(entry, buf, bufsize, offset);
+    ozkilit_birak(&depo_kilit);
+    return r;
 }

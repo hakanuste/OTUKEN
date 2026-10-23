@@ -75,15 +75,18 @@ int dhcp_discover(void) {
 /* Secenek (option) alanindan bir degeri cikarir. */
 static const uint8_t *find_option(const uint8_t *p, uint16_t len,
                                    uint8_t code, uint8_t *out_len) {
-    uint16_t i = 240;
+    /* Denetim (1.4.6): uint16_t sayac 65535 yakininda sarmalayabiliyordu;
+     * secenegin degeri paket disina tasiyorsa da donduruluyordu. */
+    uint32_t i = 240;
     while (i < len) {
         uint8_t c = p[i];
         if (c == 255) break;           /* son */
         if (c == 0) { i++; continue; } /* dolgu */
         if (i + 1 >= len) break;
         uint8_t l = p[i + 1];
+        if (i + 2 + (uint32_t)l > len) break;   /* deger paketin disinda */
         if (c == code) { *out_len = l; return &p[i + 2]; }
-        i += 2 + l;
+        i += 2u + l;
     }
     return 0;
 }

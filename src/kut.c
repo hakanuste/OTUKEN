@@ -2,6 +2,10 @@
 #include "log.h"
 #include "serial.h"
 
+/* SMP adim 6: kullanici ve surec-sahip tablosu. Kisa islemler -> ozyinelemeli donen kilit. */
+#include "spinlock.h"
+static ozspin_t kut_kilit = OZSPIN_BASLANGIC;
+
 #define KUT_MAX_BINDINGS 16
 
 typedef struct { int used; uint32_t pid; uint32_t uid; } kut_binding_t;
@@ -35,7 +39,7 @@ uint32_t kut_capabilities_for_role(kut_rol_t r) {
     }
 }
 
-uint32_t kut_add_user(const char *name, kut_rol_t rol) {
+static uint32_t kut_add_user__ic(const char *name, kut_rol_t rol) {
     for (int i = 0; i < KUT_MAX_USERS; i++) {
         if (users[i].used) continue;
         users[i].used = 1;
@@ -64,7 +68,7 @@ const kut_user_t *kut_find_user(uint32_t uid) {
     return 0;
 }
 
-int kut_bind_process(uint32_t pid, uint32_t uid) {
+static int kut_bind_process__ic(uint32_t pid, uint32_t uid) {
     const kut_user_t *u = kut_find_user(uid);
     if (!u) return -1;
 
@@ -93,9 +97,51 @@ int kut_bind_process(uint32_t pid, uint32_t uid) {
     return 0;
 }
 
-const kut_user_t *kut_owner_of(uint32_t pid) {
+static const kut_user_t *kut_owner_of__ic(uint32_t pid) {
     for (int i = 0; i < KUT_MAX_BINDINGS; i++)
         if (bindings[i].used && bindings[i].pid == pid)
             return kut_find_user(bindings[i].uid);
     return 0;
+}
+
+/* --- SMP adim 6: kilit sarmalayicilari (sarmala.py uretti) ---
+ * Ic isleve (ad__ic) yalniz kilit altinda girilir; erken donusler
+ * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
+uint32_t kut_add_user(const char *name, kut_rol_t rol) {
+    ozspin_al(&kut_kilit);
+    uint32_t r = kut_add_user__ic(name, rol);
+    ozspin_birak(&kut_kilit);
+    return r;
+}
+
+int kut_bind_process(uint32_t pid, uint32_t uid) {
+    ozspin_al(&kut_kilit);
+    int r = kut_bind_process__ic(pid, uid);
+    ozspin_birak(&kut_kilit);
+    return r;
+}
+
+const kut_user_t *kut_owner_of(uint32_t pid) {
+    ozspin_al(&kut_kilit);
+    const kut_user_t *r = kut_owner_of__ic(pid);
+    ozspin_birak(&kut_kilit);
+    return r;
+}
+
+/* 1.4.9: KUT uygulamasi icin salt-okunur doku (i. kullanici / i. bag). 0 / -1 */
+int kut_kullanici_al(int i, kut_user_t *out) {
+    int n = 0, r = -1;
+    ozspin_al(&kut_kilit);
+    for (int k = 0; k < KUT_MAX_USERS; k++)
+        if (users[k].used) { if (n++ == i) { *out = users[k]; r = 0; break; } }
+    ozspin_birak(&kut_kilit);
+    return r;
+}
+int kut_bag_al(int i, uint32_t *pid, uint32_t *uid) {
+    int n = 0, r = -1;
+    ozspin_al(&kut_kilit);
+    for (int k = 0; k < KUT_MAX_BINDINGS; k++)
+        if (bindings[k].used) { if (n++ == i) { *pid = bindings[k].pid; *uid = bindings[k].uid; r = 0; break; } }
+    ozspin_birak(&kut_kilit);
+    return r;
 }

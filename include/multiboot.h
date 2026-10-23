@@ -34,6 +34,12 @@ typedef struct multiboot_info {
     uint32_t framebuffer_height;
     uint8_t  framebuffer_bpp;
     uint8_t  framebuffer_type;
+    /* GRUB'un kendi yapisinda renk bilgisi bir BIRLIKtir (union: palet
+     * icin uint32 + uint16); bu birlik 4 bayta hizalanir. Belirtim 110.
+     * bayti yazar ama GRUB alanlari 112'den baslatir (olculdu: ham
+     * baytlar 110-111 = 0, 112 = kirmizi konumu 16). Bu dolgu olmadan
+     * kirmizi/yesil/mavi konumlari kayar ve renkler bozuk cikar. */
+    uint8_t  framebuffer_dolgu[2];
     uint8_t  color_info[6];
 } __attribute__((packed)) multiboot_info_t;
 
