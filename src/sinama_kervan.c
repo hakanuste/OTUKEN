@@ -162,6 +162,17 @@ static void gorev(void) {
         hata |= 8; serial_write("KERVAN-TEST:   geri alma eksik (surum karisik)\n");
     }
 
+    /* 4b) dosyalar yazıldı ama /KERVAN.LST yazılamadı (K2IYI2: 2 dosya, 3.
+     * yazım kayıt): dosyalar ve kayıt eski sürüme dönmeli, IYI3.DAT durmalı */
+    fat16_sinama_yazim_hatasi = 3;
+    if (kervan2_kur("K2IYI2.KRV", neden) == 0) hata |= 8;
+    fat16_sinama_yazim_hatasi = 0;
+    serial_write("KERVAN-TEST:   kayit yazilamayan yukseltme: "); serial_write(neden); serial_write("\n");
+    ih = icerik_denetle('1', &adet);
+    if (ih != 0 || adet != 3 || !dosya_var("IYI3.DAT") || !kervan2_kurulu_mu("sinama-iyi", sur) || !esit(sur, "1.0.0")) {
+        hata |= 8; serial_write("KERVAN-TEST:   kayit hatasinda geri alma eksik\n");
+    }
+
     /* 4) yükseltme */
     if (kervan2_kur("K2IYI2.KRV", neden) != 0) hata |= 8;
     ih = icerik_denetle('2', &adet);

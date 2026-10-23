@@ -34,7 +34,7 @@ enum {
 };
 
 /* öğe türleri (bag[] 1'den başlar: 0 = öğe yok) */
-enum { OGE_BAG = 0, OGE_METIN_ALANI, OGE_GONDER, OGE_ISARET };
+enum { OGE_BAG = 0, OGE_METIN_ALANI, OGE_GONDER, OGE_ISARET, OGE_SECENEK /* radio: ayni ad+formda tek secili */ };
 
 typedef struct {
     uint8_u  tur;

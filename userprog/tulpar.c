@@ -120,6 +120,16 @@ static uint32_u stil_renk(int st) {
     }
 }
 
+static int esit_dize(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
+
+/* o. öğenin görünen [x]/[ ] ya da (x)/( ) hücresini güncelle */
+static void isaret_ciz(int o) {
+    int sec = sayfa.ogeler[o].secili;
+    for (uint32_u j = 0; j < sayfa.kar_adet; j++)
+        if (sayfa.oge[j] == o + 1 && (H_KOD(sayfa.kar[j]) == 'x' || H_KOD(sayfa.kar[j]) == ' '))
+            sayfa.kar[j] = (sayfa.kar[j] & ~0x1FFFFFu) | (sec ? 'x' : ' ');
+}
+
 /* düzenlenen alanın metnini sakla (Enter ya da başka yere tıklama) */
 static void alan_sakla(int o) {
     int i;
@@ -505,10 +515,19 @@ static void oge_ac(int o) {
         form_gonder(g->form, o);
     } else if (g->tur == OGE_ISARET) {
         g->secili = !g->secili;
-        /* görünen [x]/[ ] hücresini güncelle */
-        for (uint32_u j = 0; j < sayfa.kar_adet; j++)
-            if (sayfa.oge[j] == o + 1 && (H_KOD(sayfa.kar[j]) == 'x' || H_KOD(sayfa.kar[j]) == ' '))
-                sayfa.kar[j] = (sayfa.kar[j] & ~0x1FFFFFu) | (g->secili ? 'x' : ' ');
+        isaret_ciz(o);
+        ciz();
+    } else if (g->tur == OGE_SECENEK) {
+        /* radyo: bu seçilir, aynı form ve addaki ötekiler bırakılır */
+        const char *ad = h_metin(&sayfa, g->ad);
+        for (int k = 0; k < sayfa.oge_adet; k++) {
+            h_oge_t *q = &sayfa.ogeler[k];
+            if (k != o && q->tur == OGE_SECENEK && q->form == g->form && q->secili && esit_dize(h_metin(&sayfa, q->ad), ad)) {
+                q->secili = 0; isaret_ciz(k);
+            }
+        }
+        g->secili = 1;
+        isaret_ciz(o);
         ciz();
     }
 }
@@ -543,7 +562,7 @@ static void form_gonder(int form, int dugme) {
         if (g->tur == OGE_METIN_ALANI) {
             const char *dg = alan_degeri(o + 1);
             EKLE(ad, dg ? dg : h_metin(&sayfa, g->deger));
-        } else if (g->tur == OGE_ISARET && g->secili) EKLE(ad, h_metin(&sayfa, g->deger));
+        } else if ((g->tur == OGE_ISARET || g->tur == OGE_SECENEK) && g->secili) EKLE(ad, h_metin(&sayfa, g->deger));
         else if (g->tur == OGE_GONDER && o == dugme) EKLE(ad, h_metin(&sayfa, g->deger));
     }
 #undef EKLE

@@ -353,6 +353,16 @@ int kervan2_kur_bellek(const uint8_t *v, uint32_t boy, char *neden) {
     return r;
 }
 
+/* yazılmış ilk n dosyayı geri al: eski sürümde olan yedekten geri yazılır,
+ * olmayan silinir */
+static void geri_al(const k2_girdi_t *g, uint32_t n, const uint8_t *yedek, const uint8_t *var,
+                    const uint32_t *ofs, const uint32_t *boy) {
+    for (uint32_t i = 0; i < n; i++) {
+        if (yedek && var[i]) fat16_write_file(g[i].ad, yedek + ofs[i], boy[i]);
+        else fat16_sil(g[i].ad);
+    }
+}
+
 static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
     int r = -1;
     if (boy > KERVAN2_AZAMI_BOY) { neden_yaz(neden, "paket 2 MB sinirini asiyor"); goto son; }
@@ -418,29 +428,36 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
     if (yazilan != b->girdi) {
         /* yazılamayan dosya (yazilan. sıradaki) yerinde durur: fat16_write_file
          * eski zinciri ancak başarıdan sonra bırakır */
-        for (uint32_t i = 0; i < yazilan; i++) {
-            if (yedek && yedek_var[i]) fat16_write_file(g[i].ad, yedek + yedek_ofs[i], yedek_boy[i]);
-            else fat16_sil(g[i].ad);
-        }
+        geri_al(g, yazilan, yedek, yedek_var, yedek_ofs, yedek_boy);
         if (yedek) kfree(yedek);
         neden_yaz(neden, eski ? "diske yazilamadi; eski surum geri yazildi" : "diske yazilamadi (yer yok?)");
         goto son;
     }
-    if (yedek) kfree(yedek);
-    /* yükseltme: yeni sürümde olmayan eski dosyalar silinir */
-    if (eski) {
-        for (int d = 0; d < eski->dosya_adet; d++) {
-            int kaldi = 0;
-            for (uint32_t i = 0; i < b->girdi; i++) if (esit(eski->dosyalar[d], g[i].ad)) kaldi = 1;
-            if (!kaldi) fat16_sil(eski->dosyalar[d]);
-        }
-    }
+    /* kayıt: önce bellekte, sonra /KERVAN.LST. Kayıt yazılamazsa dosyalar ve
+     * bellekteki kayıt eski hâline döner (yedek o ana dek tutulur); yeni
+     * sürümde olmayan eski dosyalar ANCAK kayıt yazıldıktan sonra silinir. */
+    static k2_kurulu_t onceki;
+    onceki = *yer;
     yer->var = 1;
     kopya(yer->ad, sizeof yer->ad, b->ad);
     kopya(yer->surum, sizeof yer->surum, b->paket_surum);
     yer->dosya_adet = 0;
     for (uint32_t i = 0; i < b->girdi; i++) kopya(yer->dosyalar[yer->dosya_adet++], 13, g[i].ad);
-    if (kayit_yaz() != 0) { neden_yaz(neden, "kayit yazilamadi"); goto son; }
+    if (kayit_yaz() != 0) {
+        *yer = onceki;
+        geri_al(g, b->girdi, yedek, yedek_var, yedek_ofs, yedek_boy);
+        if (yedek) kfree(yedek);
+        neden_yaz(neden, eski ? "kayit yazilamadi; eski surum geri yazildi" : "kayit yazilamadi; paket geri alindi");
+        goto son;
+    }
+    if (yedek) kfree(yedek);
+    if (eski) {
+        for (int d = 0; d < onceki.dosya_adet; d++) {
+            int kaldi = 0;
+            for (uint32_t i = 0; i < b->girdi; i++) if (esit(onceki.dosyalar[d], g[i].ad)) kaldi = 1;
+            if (!kaldi) fat16_sil(onceki.dosyalar[d]);
+        }
+    }
     serial_write("KERVAN2: kurulum TAMAM\n");
     log_write(LOG_BILGI, "KERVAN", "imzali paket kuruldu");
     neden_yaz(neden, "kuruldu");

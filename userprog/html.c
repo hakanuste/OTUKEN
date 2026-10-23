@@ -667,14 +667,28 @@ static void etiket_isle(dizgi_t *d, baglam_t *b, const etiket_t *e, sayfa_t *s) 
             sozcuk_bosalt(d);
             d->stil = st; d->oge = og;
         } else if (esit(tur, "checkbox") || esit(tur, "radio")) {
-            int o = oge_ekle(s, OGE_ISARET, f, depo(s, ad ? ad : "", -1), depo(s, deger ? deger : "on", -1));
-            if (o && nitelik(e, "checked")) s->ogeler[o - 1].secili = 1;
+            int radyo = esit(tur, "radio");
+            int o = oge_ekle(s, radyo ? OGE_SECENEK : OGE_ISARET, f, depo(s, ad ? ad : "", -1), depo(s, deger ? deger : "on", -1));
+            if (o && nitelik(e, "checked")) {
+                s->ogeler[o - 1].secili = 1;
+                /* radyo grubunda tek seçili: önceki seçili (aynı form + ad)
+                 * bırakılır ve işareti silinir (tarayıcılarda son "checked" kazanır) */
+                if (radyo) for (int k = 0; k < o - 1; k++) {
+                    h_oge_t *q = &s->ogeler[k];
+                    if (q->tur == OGE_SECENEK && q->form == s->ogeler[o - 1].form && q->secili &&
+                        esit(h_metin(s, q->ad), h_metin(s, s->ogeler[o - 1].ad))) {
+                        q->secili = 0;
+                        for (uint32_u j = 0; j < s->kar_adet; j++)
+                            if (s->oge[j] == k + 1 && H_KOD(s->kar[j]) == 'x') s->kar[j] = (s->kar[j] & ~0x1FFFFFu) | ' ';
+                    }
+                }
+            }
             sozcuk_bosalt(d);
             int st = d->stil, og = d->oge;
             d->stil = ST_ALAN; d->oge = o;
-            metin_kod(d, '[');
+            metin_kod(d, radyo ? '(' : '[');
             metin_kod(d, (o && s->ogeler[o - 1].secili) ? 'x' : ' ');
-            metin_kod(d, ']');
+            metin_kod(d, radyo ? ')' : ']');
             sozcuk_bosalt(d);
             d->stil = st; d->oge = og;
         }

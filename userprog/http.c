@@ -29,6 +29,7 @@ int url_coz(const char *s, url_t *u) {
     int i = 0;
     while (*s && *s != '/' && *s != ':' && *s != '?' && *s != '#') {
         if (i >= 255) return -1;
+        if ((unsigned char)*s <= 0x20 || *s == 0x7F) return -1;     /* ad içinde boşluk/denetim karakteri yok */
         u->host[i++] = (char)buyut((unsigned char)*s++);
     }
     u->host[i] = 0;
@@ -45,9 +46,10 @@ int url_coz(const char *s, url_t *u) {
         if (*s == '?') u->yol[j++] = '/';
         while (*s && *s != '#' && j < (int)sizeof(u->yol) - 1) {
             unsigned char c = (unsigned char)*s++;
-            if (c == ' ') {                                  /* boşluk kodlanır */
+            if (c <= 0x20 || c == 0x7F) {                   /* boşluk ve denetim karakterleri (CR/LF dahil) kodlanır: istek satırına başlık sokulamaz */
+                static const char H[] = "0123456789ABCDEF";
                 if (j + 3 >= (int)sizeof(u->yol)) break;
-                u->yol[j++] = '%'; u->yol[j++] = '2'; u->yol[j++] = '0';
+                u->yol[j++] = '%'; u->yol[j++] = H[c >> 4]; u->yol[j++] = H[c & 15];
             } else u->yol[j++] = (char)c;
         }
         u->yol[j] = 0;
@@ -117,6 +119,19 @@ int url_birlestir(const url_t *taban, const char *bag, char *c, int boy) {
     norm[n] = 0;
     if (norm[0] != '/') { kopya(yol, sizeof yol, "/"); dize_ekle(yol, sizeof yol, norm); }
     else kopya(yol, sizeof yol, norm);
+    {   /* boşluk ve denetim karakterleri (CR/LF dahil) kodlanır: istek satırına başlık sokulamaz */
+        static const char H[] = "0123456789ABCDEF";
+        int j = 0;
+        kopya(norm, sizeof norm, yol);
+        for (int k = 0; norm[k]; k++) {
+            unsigned char c = (unsigned char)norm[k];
+            if (c <= 0x20 || c == 0x7F) {
+                if (j + 3 >= (int)sizeof(yol)) break;
+                yol[j++] = '%'; yol[j++] = H[c >> 4]; yol[j++] = H[c & 15];
+            } else { if (j + 1 >= (int)sizeof(yol)) break; yol[j++] = (char)c; }
+        }
+        yol[j] = 0;
+    }
     kopya(u.yol, sizeof u.yol, yol);
     url_yaz(&u, c, boy);
     return 0;
@@ -235,6 +250,10 @@ static int tek_istek(const url_t *u, alici_t *al) {
     static akis_t a;                                  /* 4 KB tampon: yığında değil */
     uint8_u ip[4];
     y->durum = 0; y->tur[0] = 0; y->konum[0] = 0; y->govde_boy = 0; y->kesik = 0;
+    for (const char *q = u->yol; *q; q++)          /* son savunma: istek satırını bölecek karakter yok */
+        if ((unsigned char)*q < 0x20 || *q == 0x7F) { hata_yaz(y, "Adreste denetim karakteri var", 0); return -1; }
+    for (const char *q = u->host; *q; q++)
+        if ((unsigned char)*q <= 0x20 || *q == 0x7F) { hata_yaz(y, "Adreste denetim karakteri var", 0); return -1; }
     if (coz(u->host, ip) != 0) { hata_yaz(y, "Ad çözülemedi: ", u->host); return -1; }
     a.t = ag_baglan(ip, u->port); a.tls = 0; a.bas = a.son = 0; a.bitti = 0;
     if (a.t < 0) { hata_yaz(y, "Bağlanılamadı: ", u->host); return -1; }
