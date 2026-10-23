@@ -656,7 +656,18 @@ static void etiket_isle(dizgi_t *d, baglam_t *b, const etiket_t *e, sayfa_t *s) 
                 s->gizli[s->gizli_adet][2] = depo(s, deger ? deger : "", -1);
                 s->gizli_adet++;
             }
-        } else if (esit(tur, "submit") || esit(tur, "button") || esit(tur, "image")) {
+        } else if (esit(tur, "button")) {
+            /* type=button betikle çalışır; burada formu GÖNDERMEZ: yalnız
+             * etiketi soluk metin olarak gösterilir, öğe yok */
+            if (deger && *deger) {
+                sozcuk_bosalt(d);
+                int st = d->stil;
+                d->stil = ST_SONUK;
+                metin_kod(d, '['); metin_ascii(d, deger); metin_kod(d, ']');
+                sozcuk_bosalt(d);
+                d->stil = st;
+            }
+        } else if (esit(tur, "submit") || esit(tur, "image")) {
             int o = oge_ekle(s, OGE_GONDER, f, depo(s, ad ? ad : "", -1), depo(s, deger ? deger : "", -1));
             sozcuk_bosalt(d);
             int st = d->stil, og = d->oge;

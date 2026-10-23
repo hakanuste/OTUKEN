@@ -492,13 +492,23 @@ static void adres_git(void) {
 
 /* bağlantıyı (ya da form düğmesini) aç */
 static void form_gonder(int form, int dugme);
+/* sayfanın <base href>'i: göreli olabilir (/docs/, assets/), önce şimdiki
+ * sayfaya göre çözülür; çözülemezse şimdiki sayfa taban kalır */
+static void taban_coz(url_t *t) {
+    *t = simdiki;
+    if (!sayfa.taban[0]) return;
+    static char tam[2400];
+    url_t u;
+    if (url_birlestir(&simdiki, sayfa.taban, tam, sizeof tam) == 0 && url_coz(tam, &u) == 0) *t = u;
+}
+
 static void oge_ac(int o) {
     if (o < 0 || o >= sayfa.oge_adet) return;
     h_oge_t *g = &sayfa.ogeler[o];
     if (g->tur == OGE_BAG) {
         static char hedef[2400];
         url_t taban = simdiki;
-        if (sayfa.taban[0]) url_coz(sayfa.taban, &taban);
+        taban_coz(&taban);
         if (url_birlestir(&taban, h_metin(&sayfa, g->ad), hedef, sizeof hedef) != 0) {
             durum_yaz("Bu bağlantı türü açılamaz: ", h_metin(&sayfa, g->ad), R_HATA);
             ciz();
@@ -568,7 +578,7 @@ static void form_gonder(int form, int dugme) {
 #undef EKLE
     static char hedef[2400], eylem[2400];
     url_t taban = simdiki;
-    if (sayfa.taban[0]) url_coz(sayfa.taban, &taban);
+    taban_coz(&taban);
     const char *act = h_metin(&sayfa, sayfa.formlar[form].eylem);
     if (!act[0]) url_yaz(&taban, eylem, sizeof eylem);
     else if (url_birlestir(&taban, act, eylem, sizeof eylem) != 0) return;

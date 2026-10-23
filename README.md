@@ -8,7 +8,6 @@ ve üzerinde Ring3'te koşan yapay us uygulaması UMAY.
 ```sh
 bash kur.sh              # araçları denetle, çekirdek + UMAY + US1'i derle
 bash kur.sh --calistir   # QEMU'da başlat (-smp 4, AC'97)
-bash kur.sh --sina       # tüm sınama takımları
 ```
 
 Elle:
@@ -33,19 +32,10 @@ qemu-system-aarch64 -M virt -cpu cortex-a72 -m 256 -nographic \
 
 ### Testler
 
-```sh
-./testler.sh            # çekirdek takımı (tanı kipi -smp 1 ve -smp 4 dahil)
-./donanim_testleri.sh   # donanım + SMP
-python3 kabuk_testi.py  # gerçek klavyeyle kabuk oturumu (Tab ile klavye odağı dahil)
-./uyum_sinama.sh 2      # UMAY IPC uyumu: 1-8 çekirdek, ağır yükle birlikte, kontrol grubu
-./agir_sinama.sh 3 64   # ağır SMP yarış / sızıntı / soak
-make -C umay sina       # UMAY mantık takımı (ana makinede)
-cd us1 && ./us1_sina    # US1 motoru öz-sınaması (KV önbelleği = tam geçiş, bit bit)
-tests/us1_conformance/calistir.sh    # Python <-> C US1 uyumu, işlem düzeyinde
-tests/us1_fuzz/calistir.sh 20000     # US1 model ayrıştırıcısı bulandırma (ASan+UBSan)
-tests/umay_kanit/calistir.sh         # kanıt katmanı: alan içi / alan dışı (geliştirme + sınama)
-python3 tests/belge/umay_olculer.py denetle   # aşağıdaki UMAY ölçüleri koddan mı
-```
+Bu depo yalnız yazılımı içerir; sınama takımları (`testler.sh`, `tests/`,
+`kanitlar/` ve benzerleri) dağıtıma konmadı. `bash kur.sh --sina` bu yüzden
+"sınama yapılmadı" diyerek başarısız döner. Çekirdeğin öz-sınamaları
+kaynakta durur ve `OTUKEN_TANI_MODU=1` ile derlenince açılışta çalışır.
 
 ### Kullanıcı programları
 
@@ -73,6 +63,8 @@ katmanı. Kabuktan `umay <soru>` ile IPC üzerinden konuşulur
 <!-- UMAY-OLCULER-BASLA (tests/belge/umay_olculer.py yazar; elle düzenleme) -->
 **UMAY nedir:** ÖTÜKEN içinde Ring3'te çalışan **deneysel** bir sistem: küçük bir dil modeli (US1) + kalıcı hafıza (BENGİ) + yerel kütüphane araştırması + ajan meclisi (OTAĞ). Genel amaçlı bir dil modeli DEĞİLDİR; bildikleri yalnız kütüphanesindeki kayıtlardır.
 
+Ölçülerin bir kısmı bu depoda olmayan sınamalarla alındı (kaynak sütununda *dağıtımda yok*).
+
 | Ölçü | Değer | Kaynak |
 |---|---|---|
 | US1 modeli | d=96, 4 katman, 4 baş, ffn=256, bağlam 96, **459.168 parametre** (464 KB, biçim v1) | `us1/umay.us1` başlığı |
@@ -81,12 +73,12 @@ katmanı. Kabuktan `umay <soru>` ile IPC üzerinden konuşulur
 | Motor sınırları | d ≤ 96, katman ≤ 4, ffn ≤ 256, sözlük ≤ 128, bağlam ≤ 96 | `us1/c/us1.h` |
 | Eğitim derlemi | 180 KB (1462 soru-yanıt çifti + düzyazı), 21 doktrin kaydından | `us1/arac/derlem.py` |
 | Sabit sınama kümesi | 85 soru; hiçbir yazım biçimi eğitimde yok | `us1/derlem/sinama_kumesi.tsv` |
-| Model, sınama kümesi | ilk cümle doğru %12, sözcük F1 0,20; alan dışında kendi başına ret %9 | `kanitlar/us1/olcum.json` (`us1/arac/olc.py`) |
-| Kanıt katmanı, sınama kümesi | alan içi doğru dayanakla yanıt %95 (yüklemli soru %81); alan dışı ret ≥ %99,5; yönerge örnekleri 5/5 ret; dağınık kanıt (terimler ayrı kayıtlarda) 398 soruda yanlış kabul 0 | `tests/umay_kanit` |
+| Model, sınama kümesi | ilk cümle doğru %12, sözcük F1 0,20; alan dışında kendi başına ret %9 | `kanitlar/us1/olcum.json` (`us1/arac/olc.py`), *dağıtımda yok* |
+| Kanıt katmanı, sınama kümesi | alan içi doğru dayanakla yanıt %95 (yüklemli soru %81); alan dışı ret ≥ %99,5; yönerge örnekleri 5/5 ret; dağınık kanıt (terimler ayrı kayıtlarda) 398 soruda yanlış kabul 0 | `tests/umay_kanit`, *dağıtımda yok* |
 | Kanıt eşikleri | kapsama ≥ %85, söz bağlılığı ≥ %60, yüklem ağırlığı 40 | `umay/include/umay_kanit.h` |
 | UMAY ikilisi | 145 KB | `umay/kov/umay` |
-| UMAY mantık sınaması | 279 geçti, 0 kaldı | `make -C umay sina` |
-| US1 motor sınaması | 15 geçti, 0 kaldı | `us1/us1_sina` |
+| UMAY mantık sınaması | 279 geçti, 0 kaldı | `make -C umay sina`, *dağıtımda yok* |
+| US1 motor sınaması | 15 geçti, 0 kaldı | `us1/us1_sina`, *dağıtımda yok* |
 
 Model küçüktür ve genellemesi zayıftır: yanıtın doğruluğunu model değil **kanıt katmanı** korur. Soru kütüphanede yeterli kanıtla karşılanmıyorsa motor hiç çağrılmaz ve UMAY "Bunu doğrulayacak yeterli bilgim yok." der; modelin sözü dayanağa bağlı değilse atılır ve kaynaktaki cümle aynen verilir (`docs/UMAY-KANIT.md`).
 <!-- UMAY-OLCULER-BITIS -->
@@ -173,14 +165,12 @@ boot/        x86_64 önyükleme + kesme + syscall assembly
 src/         çekirdek kaynağı
 include/     başlıklar
 userprog/    kullanıcı programları (kabuk, ulib, hello)
-umay/        UMAY yapay us uygulaması (core, alp, us, ses, gui, port, sina)
+umay/        UMAY yapay us uygulaması (core, alp, us, ses, gui, port)
 us1/         US1 çıkarım motoru (c/, UMAY de bunu derler), eğitici (arac/), model, sözlük
 belge/       ses örnekleri
-kanitlar/    son test koşularının çıktıları (kanıt)
 docs/        KAYNAK-ANALIZI.md (dosya sınıfları, bağımlılıklar, ölü kod) + kaynak-envanteri.txt
 arm64/       AArch64 portu (ayrı derleme)
-kur.sh       kurulum / derleme / sınama betiği
-testler.sh   otomatik regresyon takımı
+kur.sh       kurulum / derleme betiği
 ```
 
 ## Bilinen sınırlar
