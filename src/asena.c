@@ -73,7 +73,7 @@ static int dizin_topla(uint32_t lba, uint32_t sektor, uint16_t ust, uint8_t *sb)
             if (d[0] == 0x00) return 1;                  /* dizin sonu */
             if (d[0] == 0xE5 || d[11] == 0x0F || (d[11] & 0x08)) continue;
             if (d[0] == '.') continue;                    /* . ve .. */
-            if (gir_n + 1 >= AZAMI_GIRIS) return 0;
+            if (gir_n + 1 >= AZAMI_GIRIS) return -2;     /* tablo doldu: onarım yapılmaz */
             giris_t *g = &gir[++gir_n];
             g->lba = lba + s; g->ofs = (uint16_t)(e * 32); g->ust = ust;
             g->ilk = fat16_oku16(d + 26); g->boy = fat16_oku32(d + 28);
@@ -120,7 +120,8 @@ int asena_tara(int onar, asena_rapor_t *r) {
 
     /* 2) girişler: kök, sonra her alt dizin (genişlik önce) */
     gir_n = 0;
-    if (dizin_topla(g.kok_lba, g.kok_sektor, 0, sb) < 0) { r->hata = 3; goto son; }
+    { int t0 = dizin_topla(g.kok_lba, g.kok_sektor, 0, sb);
+      if (t0 < 0) { r->hata = t0 == -2 ? 4 : 3; goto son; } }
     for (uint32_t k = 1; k <= gir_n; k++) {
         giris_t *e = &gir[k];
         uint32_t c = e->ilk, onceki = 0, uzunluk = 0;
@@ -166,7 +167,7 @@ int asena_tara(int onar, asena_rapor_t *r) {
             uint32_t d = e->ilk, adim = 0;
             while (d >= 2 && d < ust_sinir && adim++ < uzunluk) {
                 int t = dizin_topla(g.veri_lba + (d - 2) * g.sektor_kume, g.sektor_kume, (uint16_t)k, sb);
-                if (t < 0) { r->hata = 3; goto son; }
+                if (t < 0) { r->hata = t == -2 ? 4 : 3; goto son; }
                 if (t > 0) break;
                 if (fat[d] >= 0xFFF8) break;
                 d = fat[d];

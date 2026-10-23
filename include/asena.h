@@ -28,7 +28,8 @@ typedef struct {
     uint32_t onarilan;                /* onarımda yazılan düzeltme */
     uint32_t bulgu;                   /* toplam bulgu */
     uint32_t bos_kume, kume_sayisi;
-    uint32_t hata;                    /* 0 tamam; 1 birim bağlı değil; 2 bellek; 3 disk */
+    uint32_t hata;                    /* 0 tamam; 1 birim bağlı değil; 2 bellek; 3 disk;
+                                         4 giriş tablosu doldu (onarım yapılmadı) */
     uint32_t b;
 } asena_rapor_t;
 _Static_assert(sizeof(asena_rapor_t) == 64, "asena rapor");

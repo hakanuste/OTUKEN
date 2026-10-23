@@ -26,6 +26,7 @@
 #include "dhcp.h"
 #include "dns.h"
 #include "vfs.h"
+#include "sinama_dizin.h"
 #include "thread.h"
 #include "timer.h"
 #include "serial.h"
@@ -374,6 +375,7 @@ static void kervan_ag_sinamasi(const char *sunucu, const char *port) {
     BEKLE(uygulama_penceresi(UYG_KERVAN) >= 0, 10 * hz);
     int id = uygulama_penceresi(UYG_KERVAN);
     const ulgen_yuzey_t *ys = id >= 0 ? ulgen_yuzey_al(id) : 0;
+    sinama_umay_gunluk_durgun(60);      /* UMAY'in acilis yazimlari olcumu bozmasin */
     uint32_t bos0 = fat16_bos_kume_sayisi();
     if (!ys) hata |= 1;
     else {

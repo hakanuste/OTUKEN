@@ -261,6 +261,12 @@ static int tek_istek(const url_t *u, alici_t *al) {
     if (akis_yaz(&a, istek, uzun(istek)) != 0) { hata_yaz(y, "İstek gönderilemedi", 0); goto son; }
 
     char satir[2200];
+    long uzunluk = -1;
+    int parcali = 0;
+    /* 1xx (100 Continue, 103 Early Hints) ara yanıttır: başlıkları atlanır,
+     * asıl yanıt aynı bağlantıda arkasından gelir. */
+    for (int ara = 0; ; ara++) {
+    uzunluk = -1; parcali = 0; y->tur[0] = 0; y->konum[0] = 0;
     if (satir_oku(&a, satir, sizeof satir) < 0 || !bas_esit(satir, "HTTP/")) {
         hata_yaz(y, "Sunucu HTTP yanıtı vermedi", 0); goto son;
     }
@@ -272,8 +278,6 @@ static int tek_istek(const url_t *u, alici_t *al) {
         for (int k = 0; k < 3 && *p >= '0' && *p <= '9'; k++) d = d * 10 + (*p++ - '0');
         y->durum = d;
     }
-    long uzunluk = -1;
-    int parcali = 0;
     for (int say = 0; ; say++) {
         int n = satir_oku(&a, satir, sizeof satir);
         if (n < 0) { hata_yaz(y, "Yanıt başlığı yarım kaldı", 0); goto son; }
@@ -293,7 +297,13 @@ static int tek_istek(const url_t *u, alici_t *al) {
         } else if (bas_esit(satir, "location:")) kopya(y->konum, sizeof y->konum, deger);
         else if (bas_esit(satir, "content-type:")) kopya(y->tur, sizeof y->tur, deger);
     }
-    if (y->durum == 204 || y->durum == 304 || (y->durum >= 100 && y->durum < 200)) { r = 0; goto son; }
+    if (y->durum >= 100 && y->durum < 200) {
+        if (ara < 8) continue;
+        hata_yaz(y, "Sunucu son yanıtı vermedi", 0); goto son;
+    }
+    break;
+    }
+    if (y->durum == 204 || y->durum == 304) { r = 0; goto son; }
     if (parcali) {
         for (;;) {
             if (satir_oku(&a, satir, sizeof satir) < 0) { hata_yaz(y, "Parçalı aktarım yarım kaldı", 0); goto son; }

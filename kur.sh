@@ -156,6 +156,10 @@ calistir() {
 }
 
 sina() {
+    if [ ! -f "$CEK/testler.sh" ]; then
+        kirmizi "Sınama takımı bu dağıtımda yok (yalnız yazılım). Sınama yapılmadı."
+        return 1
+    fi
     mavi "3) Sınama takımı"
     sinama_imaji
     ( cd "$CEK" && bash testler.sh )
@@ -186,7 +190,7 @@ printf 'kök dizin: %s\n\n' "$KOK"
 case "${1:-}" in
     --arac)     arac_denetle ;;
     --derle)    derle ;;
-    --sina)     derle && sina ;;
+    --sina)     derle && sina || exit 1 ;;
     --calistir) derle && calistir ;;
     *)
         arac_denetle || exit 1

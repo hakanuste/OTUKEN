@@ -115,8 +115,10 @@ static void onar(void) {
     }
     onay_zaman = 0;
     asena_rapor_u r;
+    r.hata = 0;
     long s = syscall(SYS_ASENA_ONAR, 0, 0, (long)&r, SYS_ONAY);
     char m[120], t[16]; m[0] = 0;
+    if (s != 0 && r.hata == 4) { durum_yaz("Dosya sayısı ASENA'nın sınırını (2047) aşıyor; güvenli onarım yapılamaz, hiçbir şey yazılmadı.", R_KIRMIZI); return; }
     if (s != 0) { durum_yaz("Onarım başarısız (disk yazılamadı ya da yetki yok).", R_KIRMIZI); return; }
     sayi_yaz(t, r.bulgu, 1); dize_ekle(m, sizeof m, t);
     dize_ekle(m, sizeof m, " sorun onarıldı, "); sayi_yaz(t, r.onarilan, 1); dize_ekle(m, sizeof m, t);

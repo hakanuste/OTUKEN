@@ -65,7 +65,9 @@ static int dizin_gez(uint16_t kume, girdi_gez_t geri, void *baglam)
     }
 
     uint16_t k = kume;
+    uint32_t say = 0;
     while (k >= 2 && k < 0xFFF8) {
+        if (say++ >= 65536) return -1;     /* bozuk zincir döngüsü: kilidi bırak */
         uint32_t taban = fat16_kume_lba(k);
         for (uint32_t s = 0; s < fat16_sectors_per_cluster(); s++) {
             uint32_t lba = taban + s;

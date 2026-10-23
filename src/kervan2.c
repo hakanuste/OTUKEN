@@ -3,6 +3,7 @@
  * ===================================================================== */
 #include "kervan2.h"
 #include "fat16.h"
+#include "fat16_ic.h"
 #include "vfs.h"
 #include "heap.h"
 #include "log.h"
@@ -368,6 +369,18 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
     if (!yer) { neden_yaz(neden, "kurulu paket tablosu dolu"); goto son; }
     serial_write("KERVAN2: '"); serial_write(b->ad); serial_write("' "); serial_write(b->paket_surum);
     serial_write(eski ? " (yukseltme) kuruluyor\n" : " kuruluyor\n");
+    /* 1.4.9: yer önceden denetlenir. fat16_write_file eski zinciri yeni
+     * veri yazıldıktan sonra bıraktığı için yükseltmede eski ve yeni
+     * dosyalar bir an birlikte yer kaplar; bütün paket sığmıyorsa HİÇBİR
+     * dosyaya dokunulmaz (eski sürüm sağlam kalır). */
+    {
+        uint32_t kb = fat16_sectors_per_cluster() * 512u, gereken = 0;
+        for (uint32_t i = 0; i < b->girdi; i++) {
+            uint32_t n = kb ? (g[i].boy + kb - 1) / kb : 1;
+            gereken += n ? n : 1;
+        }
+        if (!kb || gereken > fat16_bos_kume_sayisi()) { neden_yaz(neden, "diskte yer yok (paket sigmiyor)"); goto son; }
+    }
     /* yaz; hata olursa bu kurulumda yazılanlar silinir */
     uint32_t yazilan = 0;
     for (; yazilan < b->girdi; yazilan++) {

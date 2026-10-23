@@ -24,6 +24,7 @@
  *       yeniden baslar (QEMU -no-reboot ile cikar; calistir.sh denetler)
  * ===================================================================== */
 #include "sinama_asena.h"
+#include "sinama_dizin.h"
 #include "sinama148.h"
 #include "sinama149.h"
 #include "sinama_uyg.h"
@@ -142,6 +143,7 @@ static void rapor_yaz(const asena_rapor_t *r) {
 static void mod1(uint32_t hz) {
     int hata = 0;
     asena_rapor_t r1, r2;
+    sinama_umay_gunluk_durgun(60);      /* UMAY'in acilis yazimlari olcumu bozmasin */
     uint32_t bos0 = fat16_bos_kume_sayisi();
     asena_tara(0, &r1);
     serial_write("ASENA-TEST: denetim:"); rapor_yaz(&r1); serial_write("\n");

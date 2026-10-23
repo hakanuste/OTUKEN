@@ -366,19 +366,13 @@ scan_done:;
     }
 
     /* --- 2) Kume zinciri kur --- */
-    uint16_t first_cluster = 0;
+    uint16_t eski_zincir = 0;
     if (found_sec >= 0) {
         if (disk_cache_read_sectors(0, root_dir_start_lba + target_sec, 1, sector) != 0)
             return -1;
-        first_cluster = rd_u16(&sector[target_idx * 32 + 26]);
-        /* Var olan zinciri serbest birak - dosyayi BASTAN yaziyoruz */
-        uint16_t cl = first_cluster;
-        while (cl >= 2 && cl < 0xFFF8) {
-            uint16_t next = fat16_next_cluster(cl);
-            if (fat16_set_cluster(cl, 0x0000) != 0) return -1;
-            cl = next;
-        }
-        first_cluster = 0;
+        /* 1.4.9: eski zincir YENİ veri ve dizin girdisi yazıldıktan SONRA
+         * bırakılır; yazma yarıda kalırsa eski dosya yerinde durur. */
+        eski_zincir = rd_u16(&sector[target_idx * 32 + 26]);
     }
 
     /* --- Denetim duzeltmesi (MEDIUM): yazma islemi GERI ALINABILIR ---
@@ -465,6 +459,14 @@ scan_done:;
         return -1;
     }
 
+    {   /* eski zinciri şimdi bırak (bozuk zincire karşı sınırlı) */
+        uint16_t ek = eski_zincir; uint32_t say = 0;
+        while (ek >= 2 && ek < 0xFFF8 && say++ < 65536) {
+            uint16_t next = fat16_next_cluster(ek);
+            if (fat16_set_cluster(ek, 0x0000) != 0) break;
+            ek = next;
+        }
+    }
     serial_write("BITIG(fat16): dosya yazildi '");
     serial_write(name83);
     serial_write("' boyut=");

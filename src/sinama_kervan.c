@@ -15,6 +15,7 @@
 #include "uygulama.h"
 #include "fat16.h"
 #include "vfs.h"
+#include "sinama_dizin.h"
 #include "heap.h"
 #include "thread.h"
 #include "timer.h"
@@ -130,6 +131,7 @@ static void gorev(void) {
     if (!orn || orn->durum != KERVAN2_GECERLI || !esit(orn->ad, "ornek-belgeler")) hata |= 2;
 
     /* 6) reddedilenler: hiçbiri diske yazmamalı */
+    sinama_umay_gunluk_durgun(60);      /* UMAY'in acilis yazimlari olcumu bozmasin */
     uint32_t bos0 = fat16_bos_kume_sayisi();
     const char *red[] = {"K2BOZUK.KRV", "K2YABAN.KRV", "K2ANAH0.KRV", "K2ANAH7.KRV", "K2OZET.KRV", "K2KORUN.KRV", "K2CAKIS.KRV"};
     for (unsigned i = 0; i < sizeof red / sizeof red[0]; i++) {

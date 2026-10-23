@@ -12,6 +12,7 @@
  * (ana makinede: testler.sh diski fsck.fat -n ile ayrica denetler)
  * ===================================================================== */
 #include "sinama_dizin.h"
+#include "sinama_uyg.h"
 #include "fat16.h"
 #include "fat16_ic.h"
 #include "vfs.h"
@@ -46,6 +47,10 @@ static void ad_yap(char *d, const char *on, int i, const char *son) {
 static void gorev(void) {
     uint32_t hz = timer_hz() ? timer_hz() : 100;
     int hata = 0;
+    /* bos kume sayisini olcen oteki disk sinamalari (KERVAN, ASENA, UYG)
+     * bitmeden baslama: esanli yazimlar birbirinin olcumunu bozar.
+     * UYG-TEST zincirin sonudur (KERVAN ve ASENA'yi bekler). */
+    for (uint64_t t0 = timer_get_ticks(); !sinama_uyg_bitti() && timer_get_ticks() - t0 < 600 * (uint64_t)hz; ) thread_sleep(1);
     uint8_t *a = (uint8_t *)kmalloc(16384), *b = (uint8_t *)kmalloc(16384);
     if (!a || !b) { serial_write("DIZIN-YAZ-TEST: bellek yok -> HATA\n"); thread_exit(); }
     uint32_t bos0 = fat16_bos_kume_sayisi();
@@ -125,11 +130,35 @@ static void gorev(void) {
     serial_write("DIZIN-YAZ-TEST:   bos kume "); yaz_sayi(bos0); serial_write("->"); yaz_sayi(bos1);
     serial_write(" ekle="); yaz_sayi(top); serial_write(" liste="); yaz_sayi((uint64_t)ln);
     serial_write(" UMAY gunluk="); yaz_sayi(boy); serial_write("\n");
-    serial_write("DIZIN-YAZ-TEST: alt dizine yaz/ekle/sil, dizin uzamasi, sizinti, ASENA, TORE yazma koku, UMAY hata=");
-    yaz_sayi((uint64_t)hata);
-    serial_write(hata ? " -> HATA\n" : " -> BASARILI\n");
+    {   /* sonuc satiri TEK cagrida yazilir: oteki gorevlerin satirlari araya giremez */
+        static char sn[160];
+        const char *on = "DIZIN-YAZ-TEST: alt dizine yaz/ekle/sil, dizin uzamasi, sizinti, ASENA, TORE yazma koku, UMAY hata=";
+        const char *son = hata ? " -> HATA\n" : " -> BASARILI\n";
+        int i = 0;
+        while (*on) sn[i++] = *on++;
+        char t[12]; int n = 0; unsigned h = (unsigned)hata;
+        do { t[n++] = (char)('0' + h % 10); h /= 10; } while (h);
+        while (n) sn[i++] = t[--n];
+        while (*son) sn[i++] = *son++;
+        sn[i] = 0;
+        serial_write(sn);
+    }
     kfree(a); kfree(b);
     thread_exit();
+}
+
+int sinama_umay_gunluk_durgun(uint32_t azami_sn) {
+    uint32_t hz = timer_hz() ? timer_hz() : 100;
+    uint64_t t0 = timer_get_ticks(), deg = t0, son = (uint64_t)-1;
+    while (timer_get_ticks() - t0 < (uint64_t)azami_sn * hz) {
+        uint64_t boy = 0; int dz = 0;
+        if (vfs_stat("/KUT/UMAY/GUNLUK.TXT", &boy, &dz) == 0 && boy > 0) {
+            if (boy != son) { son = boy; deg = timer_get_ticks(); }
+            else if (timer_get_ticks() - deg >= 2 * (uint64_t)hz) return 1;
+        }
+        thread_sleep(hz / 4 ? hz / 4 : 1);
+    }
+    return 0;
 }
 
 void sinama_dizin_baslat(void) { thread_create("DizinSinama", gorev); }
