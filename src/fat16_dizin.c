@@ -307,7 +307,7 @@ static uint32_t kume_bayt(void) { return fat16_sectors_per_cluster() * 512u; }
 
 static void zincir_bosalt(uint16_t k) {
     uint32_t say = 0;
-    while (k >= 2 && k < 0xFFF8 && say++ < 65536) {
+    while (k >= 2 && k < 0xFFF8 && say++ < 65536 && fat16_kume_gecerli(k)) {
         uint16_t n = fat16_sonraki_kume(k);
         fat16_kume_yaz(k, 0x0000);
         k = n;
@@ -424,21 +424,41 @@ static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy,
     uint32_t kb = kume_bayt();
     if (ekle && var && eski.first_cluster >= 2 && eski.size > 0) {
         /* SONUNA EKLE: yalnız yeni bayt yazılır */
-        uint16_t k = eski.first_cluster, son = k;
-        uint32_t say = 0;
-        while (k >= 2 && k < 0xFFF8 && say++ < 65536) { son = k; k = fat16_sonraki_kume(k); }
+        /* son küme BOYDAN hesaplanır (zincir sonundan değil): yarıda kalmış
+         * eski bir eklemeden artakalan küme varsa kesilir */
+        uint32_t gerek = (eski.size + kb - 1) / kb;
+        uint16_t son = eski.first_cluster;
+        for (uint32_t i = 1; i < gerek; i++) {
+            uint16_t nx = fat16_sonraki_kume(son);
+            if (!fat16_kume_gecerli(nx)) return -1;       /* zincir boydan kısa: bozuk */
+            son = nx;
+        }
+        {
+            uint16_t art = fat16_sonraki_kume(son);
+            if (art >= 2 && art < 0xFFF8) {
+                if (!fat16_kume_gecerli(art)) return -1;
+                if (fat16_kume_yaz(son, 0xFFFF) != 0) return -1;   /* önce kes, sonra bırak */
+                zincir_bosalt(art);
+            }
+        }
         uint32_t dolu = eski.size % kb; if (dolu == 0) dolu = kb;
         uint32_t bosluk = kb - dolu;
         uint32_t ilk_parca = boy < bosluk ? boy : bosluk;
         if (ilk_parca && veri_yaz(son, dolu, veri, ilk_parca) != 0) return -1;
         uint32_t kalan = boy - ilk_parca;
+        uint16_t ek = 0;
         if (kalan) {
             uint32_t n = (kalan + kb - 1) / kb;
-            uint16_t yeni = zincir_ayir(n, son);
-            if (!yeni) return -1;
-            if (veri_yaz(yeni, 0, veri + ilk_parca, kalan) != 0) { zincir_bosalt(yeni); fat16_kume_yaz(son, 0xFFFF); return -1; }
+            ek = zincir_ayir(n, son);
+            if (!ek) return -1;
+            if (veri_yaz(ek, 0, veri + ilk_parca, kalan) != 0) { zincir_bosalt(ek); fat16_kume_yaz(son, 0xFFFF); return -1; }
         }
-        if (girdi_yaz(lba, indeks, ad, 0x20, eski.first_cluster, eski.size + boy) != 0) return -1;
+        if (girdi_yaz(lba, indeks, ad, 0x20, eski.first_cluster, eski.size + boy) != 0) {
+            /* boy güncellenemedi: eklenen kümeler ayrılıp bırakılır (eski
+             * kuyruğa yazılan baytlar boyun dışında kalır, görünmez) */
+            if (ek) { zincir_bosalt(ek); fat16_kume_yaz(son, 0xFFFF); }
+            return -1;
+        }
         return (int)boy;
     }
     /* YENİ ya da BAŞTAN: önce yeni zincir + veri, sonra girdi, en son eski zincir */

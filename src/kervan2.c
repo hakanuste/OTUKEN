@@ -472,12 +472,17 @@ int kervan2_kaldir(const char *paket, char *neden) {
     int r = -1;
     k2_kurulu_t *u = paket_adi_gecerli(paket, KERVAN2_AD) ? kurulu_bul(paket) : 0;
     if (!u) { neden_yaz(neden, "paket kurulu degil"); goto son; }
-    for (int d = 0; d < u->dosya_adet; d++) fat16_sil(u->dosyalar[d]);     /* yoksa sorun değil */
+    /* önce kayıt: yazılamazsa paket olduğu gibi kalır (dosyalar silinmez).
+     * Kayıt yazıldıktan sonra dosyalar silinir; silinemeyen olursa kayıt
+     * yine tutarlıdır (paket kurulu değil), artakalan dosya bildirilir. */
     u->var = 0;
-    if (kayit_yaz() != 0) { neden_yaz(neden, "kayit yazilamadi"); goto son; }
+    if (kayit_yaz() != 0) { u->var = 1; neden_yaz(neden, "kayit yazilamadi; paket yerinde birakildi"); goto son; }
+    int kalan = 0;
+    for (int d = 0; d < u->dosya_adet; d++)
+        if (fat16_sil(u->dosyalar[d]) != 0 && dosya_var(u->dosyalar[d])) kalan++;
     serial_write("KERVAN2: '"); serial_write(paket); serial_write("' kaldirildi\n");
     uyg_onbellek_yenile();
-    neden_yaz(neden, "kaldirildi");
+    neden_yaz(neden, kalan ? "kaldirildi; bazi dosyalar silinemedi" : "kaldirildi");
     r = 0;
 son:
     ozkilit_birak(&k2_kilit);

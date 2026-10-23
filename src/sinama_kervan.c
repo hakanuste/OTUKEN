@@ -183,6 +183,16 @@ static void gorev(void) {
     kervan2_init();
     if (!kervan2_kurulu_mu("sinama-iyi", sur) || !esit(sur, "2.0.0")) hata |= 64;
 
+    /* 5a) kaldırmada kayıt yazılamazsa paket ve dosyaları yerinde kalmalı */
+    fat16_sinama_yazim_hatasi = 1;
+    if (kervan2_kaldir("sinama-iyi", neden) == 0) hata |= 16;
+    fat16_sinama_yazim_hatasi = 0;
+    serial_write("KERVAN-TEST:   kayit yazilamayan kaldirma: "); serial_write(neden); serial_write("\n");
+    ih = icerik_denetle('2', &adet);
+    if (ih != 0 || adet != 2 || !kervan2_kurulu_mu("sinama-iyi", sur) || !esit(sur, "2.0.0")) {
+        hata |= 16; serial_write("KERVAN-TEST:   kaldirma hatasinda paket bozuldu\n");
+    }
+
     /* 5) kaldırma, sızıntı */
     if (kervan2_kaldir("sinama-iyi", neden) != 0) hata |= 16;
     if (dosya_var("IYI1.TXT") || dosya_var("IYI2.TXT") || kervan2_kurulu_mu("sinama-iyi", 0)) hata |= 16;
