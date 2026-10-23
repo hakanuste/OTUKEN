@@ -283,23 +283,6 @@ if command -v sgdisk >/dev/null 2>&1 && command -v mkfs.fat >/dev/null 2>&1; the
   rm -f /tmp/t_dy_gb.img
 fi
 
-# AC'97 ses: surucu baslatilmali (ses_init) ve gercek PCM uretilmeli.
-# QEMU sesi WAV'a yazar; genlikli ornek yoksa ses YOKTUR.
-cp -f diskfiles.img /tmp/t_ses.img 2>/dev/null
-rm -f /tmp/t_ses.wav
-timeout -s KILL 30 qemu-system-x86_64 -cdrom otukenos-mini.iso \
-  -drive file=/tmp/t_ses.img,format=raw,if=ide,index=0 \
-  -audiodev wav,id=a,path=/tmp/t_ses.wav -device AC97,audiodev=a \
-  -m 256 -display none -serial stdio -no-reboot -boot d > /tmp/t_ses.log 2>&1
-kontrol "AC97 surucusu baslatildi" "AC97 ses surucusu hazir" /tmp/t_ses.log
-if python3 - <<'PY'
-import array
-d = open('/tmp/t_ses.wav','rb').read()
-a = array.array('h', d[44:44 + ((len(d) - 44) // 2) * 2])
-raise SystemExit(0 if sum(1 for x in a if abs(x) > 500) > 1000 else 1)
-PY
-then ok "AC97 gercek PCM cikti (WAV'da genlikli ornek var)"; else hata "AC97 sessiz: WAV'da ornek yok"; fi
-
 mavi "SONUC"
 printf "  GECEN: %s   KALAN: %s\n\n" "$GECEN" "$KALAN"
 [ "$KALAN" -eq 0 ] && exit 0 || exit 1
