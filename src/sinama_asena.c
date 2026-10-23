@@ -224,8 +224,16 @@ static void mod2(uint32_t hz) {
         if (sira < 0) hata |= 2;
         else {
             int y = 96 + sira * 18;
+            /* uygulama listeyi okuyup çizmeden tıklanırsa yanlış satır seçilir
+             * (smp4'te liste özetleri geç bitebiliyor): önce satır görünsün,
+             * tıklamadan sonra seçili (vurgulu zemin) olduğu görülsün */
+            uint64_t t_l = timer_get_ticks();
+            BEKLE((sinama_satir_ocr(id, 304, y, 6, R_KIRMIZI, R_ARKA, s, sizeof s), esit(s, "FARKLI")), 30 * hz);
+            serial_write("ERGENEKON-TEST:   liste gorundu, tik="); serial_write_hex((uint32_t)(timer_get_ticks() - t_l));
+            serial_write(" '"); serial_write(s); serial_write("'\n");
             ic_tikla(id, 30, y + 6);                        /* satırı seç */
-            thread_sleep(hz / 5);
+            BEKLE((sinama_satir_ocr(id, 304, y, 6, R_KIRMIZI, 0x24424Cu, s, sizeof s), esit(s, "FARKLI")), 5 * hz);
+            if (!esit(s, "FARKLI")) { hata |= 2; serial_write("ERGENEKON-TEST:   DEDE.ELF satiri secilemedi\n"); }
             ic_tikla(id, 400, 50);                          /* İmajdan kurtar */
             BEKLE((sinama_satir_ocr(id, 304, y, 6, R_VURGU, 0x24424Cu, s, sizeof s), esit(s, "aynı")), 10 * hz);
             serial_write("ERGENEKON-TEST:   ASENA kurtar DEDE.ELF satir (OCR) '"); serial_write(s); serial_write("'\n");

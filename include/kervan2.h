@@ -62,6 +62,10 @@ void kervan2_kaydi_unut(void);
 int  kervan2_kur_bellek(const uint8_t *v, uint32_t boy, char *neden);
 /* kurulu paketlerin uygulamaları (.ELF): Uygulamalar menüsü */
 #define KERVAN2_UYG_AZAMI 8
+/* kilit sırası: KERVAN kilidi -> depo_kilit. depo_kilit altında KERVAN'a
+ * girecek olan (ERGENEKON) önce bunu alır. Özyinelemeli. */
+void kervan2_kilit_al(void);
+void kervan2_kilit_birak(void);
 int  kervan2_uygulama_sayisi(void);
 int  kervan2_uygulama_al(int i, char dosya[13], char paket[KERVAN2_AD]);
 

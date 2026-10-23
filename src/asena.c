@@ -152,6 +152,12 @@ int asena_tara(int onar, asena_rapor_t *r) {
                 else fat[onceki] = EOC;
                 break;
             }
+            if (fat[c] == 0xFFF7) {               /* kötü küme zincirde: ÖNCEKİNDE bitir, işaret kalır */
+                bulgu_ekle(r, ASENA_KIRIK, k, c);
+                if (onceki == 0) { e->ilk = 0; e->degisti = 1; if (e->dizin) e->silindi = 1; }
+                else fat[onceki] = EOC;
+                break;
+            }
             sahip[c] = (uint16_t)k;
             uzunluk++;
             uint16_t sonraki = fat[c];

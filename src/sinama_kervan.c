@@ -14,6 +14,7 @@
 #include "kervan2.h"
 #include "uygulama.h"
 #include "fat16.h"
+#include "fat16_ic.h"
 #include "vfs.h"
 #include "sinama_dizin.h"
 #include "heap.h"
@@ -149,6 +150,17 @@ static void gorev(void) {
     if (ih != 0 || adet != 3) hata |= 4;
     char sur[16];
     if (!kervan2_kurulu_mu("sinama-iyi", sur) || !esit(sur, "1.0.0")) hata |= 4;
+
+    /* 4a) yükseltme yarıda kalırsa: 2. dosya yazılamaz -> 1. dosya eski
+     * içeriğiyle geri yazılmalı, kayıt 1.0.0 kalmalı (karışık sürüm yok) */
+    fat16_sinama_yazim_hatasi = 2;
+    if (kervan2_kur("K2IYI2.KRV", neden) == 0) hata |= 8;
+    fat16_sinama_yazim_hatasi = 0;
+    serial_write("KERVAN-TEST:   yarida kalan yukseltme: "); serial_write(neden); serial_write("\n");
+    ih = icerik_denetle('1', &adet);
+    if (ih != 0 || adet != 3 || !kervan2_kurulu_mu("sinama-iyi", sur) || !esit(sur, "1.0.0")) {
+        hata |= 8; serial_write("KERVAN-TEST:   geri alma eksik (surum karisik)\n");
+    }
 
     /* 4) yükseltme */
     if (kervan2_kur("K2IYI2.KRV", neden) != 0) hata |= 8;

@@ -209,6 +209,9 @@ int kervan2_girdi(const uint8_t *v, uint32_t i, char ad[13], const uint8_t **ver
     return 0;
 }
 /* ERGENEKON biçimlemesi sonrası: disk boşaldı, kurulu paket kaydı da */
+void kervan2_kilit_al(void)    { ozkilit_al(&k2_kilit); }
+void kervan2_kilit_birak(void) { ozkilit_birak(&k2_kilit); }
+
 void kervan2_kaydi_unut(void) {
     ozkilit_al(&k2_kilit);
     for (int i = 0; i < K2_KURULU_AZAMI; i++) kurulu[i].var = 0;
@@ -381,16 +384,49 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
         }
         if (!kb || gereken > fat16_bos_kume_sayisi()) { neden_yaz(neden, "diskte yer yok (paket sigmiyor)"); goto son; }
     }
-    /* yaz; hata olursa bu kurulumda yazılanlar silinir */
+    /* yükseltme: üzerine yazılacak eski dosyaların içeriği önce belleğe
+     * alınır; yazım yarıda kalırsa geri yazılır (karışık sürüm kalmaz).
+     * Eski paket de en çok 2 MB olduğu için tek tampona sığar. */
+    static uint32_t yedek_ofs[KERVAN2_AZAMI_DOSYA + 1], yedek_boy[KERVAN2_AZAMI_DOSYA + 1];
+    static uint8_t  yedek_var[KERVAN2_AZAMI_DOSYA + 1];
+    uint8_t *yedek = 0;
+    if (eski) {
+        yedek = (uint8_t *)kmalloc(KERVAN2_AZAMI_BOY);
+        if (!yedek) { neden_yaz(neden, "bellek yok (yukseltme yedegi)"); goto son; }
+        uint32_t dolu = 0;
+        for (uint32_t i = 0; i < b->girdi; i++) {
+            yedek_var[i] = 0;
+            if (dosya_sahibi(g[i].ad) != eski) continue;
+            char yol[16]; yol[0] = '/'; kopya(yol + 1, sizeof yol - 1, g[i].ad);
+            int fd = vfs_open(yol);
+            if (fd < 0) continue;
+            uint32_t n = 0; int r2;
+            while (dolu + n < KERVAN2_AZAMI_BOY &&
+                   (r2 = vfs_read(fd, yedek + dolu + n, KERVAN2_AZAMI_BOY - dolu - n > 4096 ? 4096 : KERVAN2_AZAMI_BOY - dolu - n)) > 0)
+                n += (uint32_t)r2;
+            int tam = dolu + n < KERVAN2_AZAMI_BOY;      /* tampon dolduysa kesik olabilir: yükseltme yok */
+            vfs_close(fd);
+            if (!tam) { kfree(yedek); neden_yaz(neden, "eski surum yedeklenemedi"); goto son; }
+            yedek_var[i] = 1; yedek_ofs[i] = dolu; yedek_boy[i] = n; dolu += n;
+        }
+    }
+    /* yaz; hata olursa: yeni dosyalar silinir, eski sürümün dosyaları geri yazılır */
     uint32_t yazilan = 0;
     for (; yazilan < b->girdi; yazilan++) {
         if (fat16_write_file(g[yazilan].ad, v + g[yazilan].ofset, g[yazilan].boy) < 0) break;
     }
     if (yazilan != b->girdi) {
-        for (uint32_t i = 0; i < yazilan; i++) if (!eski || !dosya_sahibi(g[i].ad)) fat16_sil(g[i].ad);
-        neden_yaz(neden, "diske yazilamadi (yer yok?)");
+        /* yazılamayan dosya (yazilan. sıradaki) yerinde durur: fat16_write_file
+         * eski zinciri ancak başarıdan sonra bırakır */
+        for (uint32_t i = 0; i < yazilan; i++) {
+            if (yedek && yedek_var[i]) fat16_write_file(g[i].ad, yedek + yedek_ofs[i], yedek_boy[i]);
+            else fat16_sil(g[i].ad);
+        }
+        if (yedek) kfree(yedek);
+        neden_yaz(neden, eski ? "diske yazilamadi; eski surum geri yazildi" : "diske yazilamadi (yer yok?)");
         goto son;
     }
+    if (yedek) kfree(yedek);
     /* yükseltme: yeni sürümde olmayan eski dosyalar silinir */
     if (eski) {
         for (int d = 0; d < eski->dosya_adet; d++) {

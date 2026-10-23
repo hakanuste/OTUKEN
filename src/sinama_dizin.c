@@ -132,10 +132,10 @@ static void gorev(void) {
     serial_write(" UMAY gunluk="); yaz_sayi(boy); serial_write("\n");
     {   /* sonuc satiri TEK cagrida yazilir: oteki gorevlerin satirlari araya giremez */
         static char sn[160];
-        const char *on = "DIZIN-YAZ-TEST: alt dizine yaz/ekle/sil, dizin uzamasi, sizinti, ASENA, TORE yazma koku, UMAY hata=";
+        const char *bas_m = "DIZIN-YAZ-TEST: alt dizine yaz/ekle/sil, dizin uzamasi, sizinti, ASENA, TORE yazma koku, UMAY hata=";
         const char *son = hata ? " -> HATA\n" : " -> BASARILI\n";
         int i = 0;
-        while (*on) sn[i++] = *on++;
+        while (*bas_m) sn[i++] = *bas_m++;
         char t[12]; int n = 0; unsigned h = (unsigned)hata;
         do { t[n++] = (char)('0' + h % 10); h /= 10; } while (h);
         while (n) sn[i++] = t[--n];

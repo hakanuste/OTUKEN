@@ -158,7 +158,8 @@ ergenekon.krv: diskfiles.img araclar/kervan_paketle.py
 	rm -rf ergenekon_kaynak; mkdir ergenekon_kaynak
 	for f in $(ERGENEKON_DOSYALAR); do mcopy -n -i diskfiles.img ::$$f ergenekon_kaynak/$$f || exit 1; done
 	if [ -f anahtarlar/kervan_uretim.pem ]; then K=anahtarlar/kervan_uretim.pem; N=0; \
-	else K=tests/kervan/sinama_anahtari.pem; N=1; echo "UYARI: uretim anahtari yok, ERGENEKON imaji SINAMA anahtariyla (yalniz TANI)"; fi; \
+	elif [ -f tests/kervan/sinama_anahtari.pem ]; then K=tests/kervan/sinama_anahtari.pem; N=1; echo "UYARI: uretim anahtari yok, ERGENEKON imaji SINAMA anahtariyla (yalniz TANI)"; \
+	else echo "HATA: ERGENEKON imajini imzalamak icin anahtarlar/kervan_uretim.pem gerekli"; exit 1; fi; \
 	python3 araclar/kervan_paketle.py paketle --ad otuken-dizge --surum 1.4.9 \
 	  --aciklama "OTUKEN dizge imaji (ERGENEKON)" --anahtar $$K --anahtar-no $$N --cikti $@ \
 	  $(addprefix ergenekon_kaynak/,$(ERGENEKON_DOSYALAR))

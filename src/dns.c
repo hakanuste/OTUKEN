@@ -20,7 +20,7 @@ typedef struct {
     int      kullanimda;
     uint16_t id;
     uint16_t kaynak_port;
-    char     ad[64];
+    char     ad[256];                /* sorulan adin TAMAMI (en cok 253) */
     int      durum;           /* 0 bekliyor, 1 cozuldu, -1 yok */
     uint8_t  ip[4];
 } dns_yuva_t;
@@ -78,8 +78,8 @@ static int sor__ic(const char *hostname, const uint8_t dns_server[4]) {
     s->kaynak_port = (uint16_t)(40000 + ((lo >> 3) & 0x3FF) * DNS_YUVA + y);
     s->durum = 0;
     int k = 0;
-    while (hostname[k] && k < 63) { s->ad[k] = hostname[k]; last_name[k] = hostname[k]; k++; }
-    s->ad[k] = 0; last_name[k] = 0;
+    while (hostname[k]) { s->ad[k] = hostname[k]; if (k < 63) last_name[k] = hostname[k]; k++; }
+    s->ad[k] = 0; last_name[k < 63 ? k : 63] = 0;
 
     uint8_t pkt[300];
     int i = 0;

@@ -78,7 +78,7 @@ static int liste_n;
 
 int ergenekon_dosya(int sira, ergenekon_dosya_t *o) {
     if (sira == 0) {
-        ozkilit_al(&depo_kilit);
+        kervan2_kilit_al(); ozkilit_al(&depo_kilit);   /* sıra: KERVAN -> depo */
         liste_n = 0;
         if (imaj_hazir() == 0) {
             uint32_t girdi = 0;
@@ -95,11 +95,15 @@ int ergenekon_dosya(int sira, ergenekon_dosya_t *o) {
                 for (int k = 0; k < 32; k++) if (oz[k] != sha[k]) { e->durum = 1; break; }
             }
         }
-        ozkilit_birak(&depo_kilit);
+        ozkilit_birak(&depo_kilit); kervan2_kilit_birak();
     }
-    if (sira < 0 || sira >= liste_n) return -1;
-    *o = liste[sira];
-    return 0;
+    /* okuma da kilit altında: başka bir süreç (sira 0 ile) listeyi yeniden
+     * kurarken yarım liste görülmez */
+    int r = -1;
+    ozkilit_al(&depo_kilit);
+    if (sira >= 0 && sira < liste_n) { *o = liste[sira]; r = 0; }
+    ozkilit_birak(&depo_kilit);
+    return r;
 }
 
 int ergenekon_imaj_dosyasi_mi(const char *ad) {
@@ -123,7 +127,7 @@ static int yaz_dogrula(uint32_t i) {
 }
 
 int ergenekon_dosya_kurtar(const char *ad, char *neden) {
-    ozkilit_al(&depo_kilit);
+    kervan2_kilit_al(); ozkilit_al(&depo_kilit);   /* sıra: KERVAN -> depo */
     int r = -1;
     if (imaj_hazir() != 0) { kopya(neden, 64, imaj_neden); goto son; }
     uint32_t girdi = 0;
@@ -139,12 +143,12 @@ int ergenekon_dosya_kurtar(const char *ad, char *neden) {
     }
     kopya(neden, 64, "imajda boyle bir dosya yok");
 son:
-    ozkilit_birak(&depo_kilit);
+    ozkilit_birak(&depo_kilit); kervan2_kilit_birak();
     return r;
 }
 
 int ergenekon_yenile(ergenekon_durum_t *d) {
-    ozkilit_al(&depo_kilit);
+    kervan2_kilit_al(); ozkilit_al(&depo_kilit);   /* sıra: KERVAN -> depo */
     son_yazilan = son_ayni = son_hata = 0;
     int r = -1;
     if (imaj_hazir() == 0) {
@@ -165,7 +169,7 @@ int ergenekon_yenile(ergenekon_durum_t *d) {
         serial_write(" hata="); serial_write_hex(son_hata); serial_write("\n");
         log_write(LOG_UYARI, "ERGENEKON", "dizge dosyalari imajdan yenilendi");
     }
-    ozkilit_birak(&depo_kilit);
+    ozkilit_birak(&depo_kilit); kervan2_kilit_birak();
     if (d) ergenekon_durum(d);
     return r;
 }
@@ -205,7 +209,7 @@ static int bicimle(void) {
 }
 
 int ergenekon_sifirdan(ergenekon_durum_t *d) {
-    ozkilit_al(&depo_kilit);
+    kervan2_kilit_al(); ozkilit_al(&depo_kilit);   /* sıra: KERVAN -> depo */
     son_yazilan = son_ayni = son_hata = 0;
     int r = -1;
     if (imaj_hazir() == 0) {
@@ -223,7 +227,7 @@ int ergenekon_sifirdan(ergenekon_durum_t *d) {
         log_write(LOG_UYARI, "ERGENEKON", "birim bicimlendi, dizge imajdan kuruldu");
     }
 son:
-    ozkilit_birak(&depo_kilit);
+    ozkilit_birak(&depo_kilit); kervan2_kilit_birak();
     if (d) ergenekon_durum(d);
     return r;
 }
