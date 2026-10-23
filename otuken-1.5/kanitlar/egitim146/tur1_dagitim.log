@@ -1,0 +1,13 @@
+derlem: eğitim çifti 1462, geliştirme çifti 0, metin doğrulaması 0 bayt, sınama çifti 85 (eğitime girmez); pencere: cevap 0, metin 0
+model: d=96 katman=4 bas=4 ffn=256 baglam=96 sozluk=83 parametre=459168
+  adim    500  kayip 1.6078  dog {}  lr 1.99e-03  5.20 adim/sn
+  adim   1000  kayip 0.9090  dog {}  lr 1.92e-03  5.20 adim/sn
+  adim   1500  kayip 0.6685  dog {}  lr 1.77e-03  5.18 adim/sn
+  adim   2000  kayip 0.5132  dog {}  lr 1.57e-03  5.19 adim/sn
+  adim   2500  kayip 0.4055  dog {}  lr 1.32e-03  5.18 adim/sn
+  adim   3000  kayip 0.3126  dog {}  lr 1.05e-03  5.20 adim/sn
+  adim   3500  kayip 0.2698  dog {}  lr 7.81e-04  5.20 adim/sn
+  adim   4000  kayip 0.2338  dog {}  lr 5.45e-04  5.21 adim/sn
+  adim   4500  kayip 0.1998  dog {}  lr 3.59e-04  5.21 adim/sn
+  adim   5000  kayip 0.1832  dog {}  lr 2.41e-04  5.21 adim/sn
+  adim   5500  kayip 0.1700  dog {}  lr 2.00e-04  5.21 adim/sn

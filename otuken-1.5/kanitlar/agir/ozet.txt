@@ -1,0 +1,56 @@
+== KONTROL GRUBU: KALDI (SIZINTI VAR) beklenir
+kontrol_sizinti_s4           smp=4  cpu=max    m=512  KALDI   sure= 18s tur_gecti=8 SMP-YARIS: GECTI SIZINTI VAR
+KONTROL: olcut bilerek konan sizintiyi YAKALADI (dogru)
+== MATRIS (tekrar=3)
+m_s1_max_t1                  smp=1  cpu=max    m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_max_t2                  smp=1  cpu=max    m=512  GECTI   sure= 11s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_max_t3                  smp=1  cpu=max    m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_qemu64_t1               smp=1  cpu=qemu64 m=512  GECTI   sure= 11s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_qemu64_t2               smp=1  cpu=qemu64 m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_qemu64_t3               smp=1  cpu=qemu64 m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_EPYC_t1                 smp=1  cpu=EPYC   m=512  GECTI   sure= 11s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_EPYC_t2                 smp=1  cpu=EPYC   m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s1_EPYC_t3                 smp=1  cpu=EPYC   m=512  GECTI   sure= 11s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_max_t1                  smp=2  cpu=max    m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_max_t2                  smp=2  cpu=max    m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_max_t3                  smp=2  cpu=max    m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_qemu64_t1               smp=2  cpu=qemu64 m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_qemu64_t2               smp=2  cpu=qemu64 m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_qemu64_t3               smp=2  cpu=qemu64 m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_EPYC_t1                 smp=2  cpu=EPYC   m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_EPYC_t2                 smp=2  cpu=EPYC   m=512  GECTI   sure= 10s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s2_EPYC_t3                 smp=2  cpu=EPYC   m=512  GECTI   sure=  9s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_max_t1                  smp=4  cpu=max    m=512  GECTI   sure= 18s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_max_t2                  smp=4  cpu=max    m=512  GECTI   sure= 17s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_max_t3                  smp=4  cpu=max    m=512  GECTI   sure= 16s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_qemu64_t1               smp=4  cpu=qemu64 m=512  GECTI   sure= 16s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_qemu64_t2               smp=4  cpu=qemu64 m=512  GECTI   sure= 16s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_qemu64_t3               smp=4  cpu=qemu64 m=512  GECTI   sure= 17s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_EPYC_t1                 smp=4  cpu=EPYC   m=512  GECTI   sure= 16s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_EPYC_t2                 smp=4  cpu=EPYC   m=512  GECTI   sure= 17s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s4_EPYC_t3                 smp=4  cpu=EPYC   m=512  GECTI   sure= 18s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_max_t1                  smp=8  cpu=max    m=512  GECTI   sure= 22s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_max_t2                  smp=8  cpu=max    m=512  GECTI   sure= 19s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_max_t3                  smp=8  cpu=max    m=512  GECTI   sure= 21s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_qemu64_t1               smp=8  cpu=qemu64 m=512  GECTI   sure= 19s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_qemu64_t2               smp=8  cpu=qemu64 m=512  GECTI   sure= 19s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_qemu64_t3               smp=8  cpu=qemu64 m=512  GECTI   sure= 19s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_EPYC_t1                 smp=8  cpu=EPYC   m=512  GECTI   sure= 22s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_EPYC_t2                 smp=8  cpu=EPYC   m=512  GECTI   sure= 21s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s8_EPYC_t3                 smp=8  cpu=EPYC   m=512  GECTI   sure= 20s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_max_t1                 smp=16 cpu=max    m=512  GECTI   sure= 33s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_max_t2                 smp=16 cpu=max    m=512  GECTI   sure= 33s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_max_t3                 smp=16 cpu=max    m=512  GECTI   sure= 35s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_qemu64_t1              smp=16 cpu=qemu64 m=512  GECTI   sure= 27s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_qemu64_t2              smp=16 cpu=qemu64 m=512  GECTI   sure= 29s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_qemu64_t3              smp=16 cpu=qemu64 m=512  GECTI   sure= 31s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_EPYC_t1                smp=16 cpu=EPYC   m=512  GECTI   sure= 33s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_EPYC_t2                smp=16 cpu=EPYC   m=512  GECTI   sure= 33s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+m_s16_EPYC_t3                smp=16 cpu=EPYC   m=512  GECTI   sure= 35s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+== BELLEK kenarlari
+bellek_128_s4                smp=4  cpu=max    m=128  GECTI   sure= 16s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+bellek_2048_s4               smp=4  cpu=max    m=2048 GECTI   sure= 16s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+== SOAK (64 tur)
+soak_s4                      smp=4  cpu=max    m=512  GECTI   sure= 97s tur_gecti=64 SMP-YARIS: GECTI SIZINTI YOK
+soak_s8                      smp=8  cpu=max    m=512  GECTI   sure=113s tur_gecti=64 SMP-YARIS: GECTI SIZINTI YOK
+== TOPLAM kosu=49 gecti=49 kaldi=0 takildi=0

@@ -1,0 +1,9 @@
+model: d=96 katman=4 bas=4 ffn=256 baglam=96 sozluk=83 parametre=459168
+  adim    500  kayip 1.2071  dog {"cift": 1.172, "duz": 2.47}  lr 2.00e-03  4.90 adim/sn
+  adim   1000  kayip 0.8300  dog {"cift": 0.749, "duz": 2.538}  lr 1.98e-03  4.98 adim/sn
+  adim   1500  kayip 0.6981  dog {"cift": 0.592, "duz": 2.69}  lr 1.95e-03  5.00 adim/sn
+  adim   2000  kayip 0.5864  dog {"cift": 0.536, "duz": 2.814}  lr 1.91e-03  5.03 adim/sn
+  adim   2500  kayip 0.5001  dog {"cift": 0.445, "duz": 2.893}  lr 1.85e-03  4.98 adim/sn
+  adim   3000  kayip 0.4179  dog {"cift": 0.421, "duz": 3.108}  lr 1.77e-03  4.89 adim/sn
+  adim   3500  kayip 0.3569  dog {"cift": 0.441, "duz": 3.281}  lr 1.69e-03  4.83 adim/sn
+  adim   4000  kayip 0.3055  dog {"cift": 0.397, "duz": 3.285}  lr 1.59e-03  4.54 adim/sn

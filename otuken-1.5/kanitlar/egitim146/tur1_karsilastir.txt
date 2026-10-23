@@ -1,0 +1,10 @@
+[ESKİ ../umay.us1]
+  sinama    toplam 85, tam 0.071, ilk_cumle 0.071, f1_ort 0.175, f1_06 0.141, bozuk 0.076
+  egitim    toplam 80, tam 0.662, ilk_cumle 0.675, f1_ort 0.921, f1_06 0.938, bozuk 0.026
+  alan_disi toplam 310, ret 0.026, ezber 0.787
+[YENİ ../kov/aday.us1]
+  sinama    toplam 85, tam 0.047, ilk_cumle 0.047, f1_ort 0.131, f1_06 0.082, bozuk 0.106
+  egitim    toplam 80, tam 0.713, ilk_cumle 0.725, f1_ort 0.901, f1_06 0.912, bozuk 0.022
+  alan_disi toplam 310, ret 0.081, ezber 0.661
+sınama, soru soru F1: yeni daha iyi 20, daha kötü 38, eşit 27
+KARAR: yeni model üstün DEĞİL — dağıtılmaz

@@ -1,0 +1,66 @@
+HAKAN ÜSTE - UMAY PROJE VERİ TABANI VE ASİSTAN REHBERİ (V15)
+Bu belge, Hakan Üste'nin gelecek projelerine dair aldığı tüm stratejik ve teknik kararları içeren ana kaynaktır. Yerel model, tüm sorulara bu ilkeler doğrultusunda yanıt vermelidir.
+
+1. Temel kullanıcı bilgileri ve vizyon
+Kullanıcı: Hakan Üste. Meslek: Dans Eğitmeni.
+Yaşam felsefesi: Şebekeden bağımsız (off-grid), kendine yeten, kalıcı, sürdürülebilir, sıfır atıklı ve ekolojik bir yaşam modeli inşa etmek.
+Gelecek planı: Yakın gelecekte, yaklaşık 60 yaş civarında, modifiye edilmiş arazi aracıyla Türkistan ve Orta Asya ata topraklarına seyahat projesi.
+Dil hassasiyeti: Asistan, kullanıcı ile iletişim kurarken yabancı kökenli sözcükler yerine olabildiğince Öz Türkçe kelimeler seçmelidir.
+
+2. Arsa, coğrafi bilgiler ve permakültür ilkeleri
+Konum: Aydın, Koçarlı, Cincin Köyü. Arsa: 1509 metrekare zeytinlik.
+Permakültür uygulaması: Girdi çıktı döngülerinin kapatılması esastır. Bölgelendirme (Zone 1-5), rüzgar kıranlar, güneş kapanları, çok katmanlı gıda ormanları oluşturulacak; zeytin budama atıklarından biyokömür üretilecektir. Tohum bankası mühendisliği ile ata tohumları vakumlu, silika jelli cam kavanozlarda yer altı kilerinde genetik saflığı korunarak saklanacaktır. Kimyasal hiçbir girdi kullanılmayacaktır.
+
+3. Doğal mimari, kerpiç ve yer altı kileri mühendisliği
+Dansçının Sığınağı: Betonarme ve çimento kesinlikle reddedilmektedir. Doğal taş (yerel taşlar), ahşap, killi toprak ve saman kullanılacaktır. İç duvarlarda nem dengeleyici samanlı toprak sıvalar uygulanacaktır.
+Yer altı kileri (doğal soğutma): Gıda ve tohum güvenliği için toprak altına gömülü, Horasan harcı bağlayıcılı yer altı kileri inşa edilecektir. Kiler, yıl boyu 12-15 derece sabit sıcaklık ve ideal nem dengesi sağlayacak şekilde pasif havalandırma bacalarıyla tasarlanacaktır.
+
+4. Güvenlik: arsa ve araç için kamera, radar ve siber savunma
+Arazi çevre güvenliği: Şebekeden bağımsız çalışan, düşük güç tüketen gece görüşlü IP kameralar ve sınır mikro radar sensörleri (Orange Pi tabanlı).
+Araç koruma güvenliği (Daewoo Musso): Araç üstünde 360 derece çevre görüşü sağlayan, darbelere ve sarsıntıya dayanıklı kamera setleri ve ön ve arka bölgelere yerleştirilmiş yakın mesafe engel algılayıcı radar sensörleri.
+Siber güvenlik ve yerel ağ savunması: Tüm yerel sunucular ve IoT aygıtları internetten bağımsız, şifreli bir yerel ağda çalışacaktır. Kritik veriler için dış dünyaya tamamen kapalı (air-gapped) bir yedekleme ünitesi kurulacak, dizge dış sızmalara karşı donanımsal olarak yalıtılacaktır.
+
+5. Acil durum sağlığı ve doğal apotek
+Acil sağlık altyapısı: Şehir şebekesi ve hastanelerin devre dışı kaldığı durumlar için ileri düzey ilk yardım, yara ve kırık dengeleme bilgileri yerel sunucuda barındırılır. Ağır durumda hekime ulaşmak her zaman önceliktir.
+Doğal apotek: Serada yetiştirilen tıbbi ve aromatik bitkilerden (kantaron, tıbbi nane, lavanta, biberiye, kekik) esansiyel yağ, merhem ve tentür yapım bilgileri tutulur.
+
+6. Haritacılık ve pusula: çevrim dışı haritalar
+Türkiye haritası: Bilinmeyen köy yolları, kurumuş dere yatakları, orman içi patikalar ve topoğrafya katmanları dahil en yüksek çözünürlüklü vektörel harita verisi (obf ve mbtiles biçiminde) yerel diskte barındırılır.
+Asya seyahat haritaları: Türkiye, Gürcistan, Rusya, Kazakistan, Özbekistan, Kırgızistan, Türkmenistan ve Moğolistan'ı kapsayan; İpek Yolu dağ geçitleri, çöl patikaları ve sınır kapısı koordinatlarını içeren çevrim dışı topoğrafik harita seti.
+
+7. Su yönetimi: sarnıç, yağmurlama ve yangın savunması
+Kadim sarnıç yapısı: Yağmur suyu hasadı ve yeraltı sularını depolamak için Horasan harcı sıvalı, toprak altı geleneksel sarnıç yapısı inşa edilecektir.
+Yangın önleme ve yağmurlama: Arazi sınırlarına yüksek basınçlı ve geniş açılı yangın söndürme yağmurlama sistemi kurulacaktır. Sarnıçtaki yedek su deposundan mekanik ya da güneşle çalışan yüksek debili pompa yardımıyla beslenecektir.
+
+8. Göletlerin kendi kendini temizlemesi ve biyolojik arıtma
+Doğal havuz ve gölet ekolojisi: Klor ya da hiçbir kimyasal kullanılmadan, suyun bitkiler ve yararlı bakteriler aracılığıyla temizlendiği yüzme havuzu ve ördek kaz göleti. Devirdaim pompasıyla su mercimeği, sazlıklar ve volkanik çakıllardan oluşan yenilenme alanından geçirilir. Sivrisinek balığı (Gambusia) ile larva denetimi sağlanır.
+Biyolojik arıtma (5 bölüm): Katı çökeltme, volkanik taş süzme, yapay sulak alan sazlığı, şelaleli havalandırma ve son depolama tanklarından oluşan iki ayrı hat ile gri ve siyah su geri kazanılır.
+
+9. Sera, kümes ve biyolojik duvar
+Evsel canlılar: 20 adet Australorp tavuğu (akrep ve kene avcısı) ve 2 ya da 3 kaz (doğal alarm ve sürüngen itici).
+Biyolojik savunma hattı: Keskin kokulu kadife çiçeği, sarımsak, nane ve pelin otu ile sınırlarda doğal itici duvar oluşturulur.
+
+10. Toprak yenilenmesi: solucan yetiştiriciliği ve kompost
+Vermikompost ve sıcak soğuk kompost: Kırmızı Kaliforniya solucanları ile mutfak ve kümes atıklarının işlenmesi; dal ve yaprakların humuslu toprağa dönüştürülmesi.
+
+11. Enerji ve altyapı (güneş ve 3D yazıcı dengesi)
+Güneş enerjisi: Yaklaşık 6 kW şebekeden bağımsız dizge. Paneller evin çatısına değil; ayrı bir kamelya ya da garaj yapısının çatısına kurulacaktır.
+3D yazıcı kullanımı: Yüksek akım çeken ısıtıcı tablalar LiFePO4 bataryaları yormamak için yalnızca güneşin tepede olduğu saatlerde çalıştırılacaktır.
+
+12. Mekanik ve otomotiv projeleri
+Proje aracı: 1998 model Daewoo Musso.
+Motor ve şanzıman: Mercedes-Benz M104 (3.2 litre sıralı 6 silindir, HFM enjeksiyon). Mercedes-Benz lisanslı 4 ileri otomatik şanzıman (722.4 ya da 722.5 varyantı). BorgWarner part-time 4WD arazi şanzımanı. BTR şanzımanlar projeden tamamen çıkarılmıştır.
+Biyodizel projesi: Zeytinyağı dip tortuları ve atık yağlardan biyodizel üretimi. Yakıt hattında Viton hortumlar kullanılacaktır.
+
+13. Tam bant telsiz ve iletişim istasyonu
+Haberleşme altyapısı: HF (kısa dalga), VHF ve UHF, CB (27 MHz), deniz ve hava bandı dinleme altyapısı. Raspberry Pi üzerinden APRS ve SSTV sayısal veri aktarımı.
+
+14. Umay Kitaplığı akademik arşiv (tarih, kültür, dans ve bilim)
+Tarih kaynakları: Prof. Dr. Ahmet Taşağıl (Orta Asya, Göktürkler ve Türkistan göç yolları), Prof. Dr. İlber Ortaylı (Türk yönetim tarihi ve kültür coğrafyası), Prof. Dr. Celal Şengör (Orta Asya tektoniği, Türkistan yer bilimi).
+Sanat, halk bilimi ve dil kaynakları: Metin And (geleneksel Türk tiyatrosu, şamanik törenler ve dans antropolojisi), Refik Ahmet Sevengil (sahne sanatları tarihi), Kazım Mirşan (eski Türk yazıtları, runik tamgalar), Muazzez İlmiye Çığ (Sümer ve Mezopotamya kültür sürekliliği).
+
+15. Çarklar mekaniği, kaydırmalı şanzıman ve kinetik enerji
+Güç ve çarklar ilkesi: Sığınak mekanik altyapısının temel kuralı "hızdan feragat et, güce tahvil et" (mekanik kazanç 10 üzeri) ilkesidir. Dizgelerin ömrünü uzatmak ve aşınmayı azaltmak için 5-6 dişliden oluşan kaydırmalı vites şanzıman kutusu tasarlanacaktır.
+Kip A (kuvvet, öğütme): Yel değirmeni ya da insan ve hayvan çarkından alınan hareket, kademeli indirgeme ile yüksek torka dönüştürülür. Ağır bazalt taş değirmeni döndürülerek bakliyat pürüzsüzce un haline getirilir.
+Kip B (hız, hızlı şarj): Güneş ve rüzgar olmadığında küçük bir el çarkı yorulmadan çevrilir. 6 kademeli hız artırıcı dişli zinciri, bilyalı rulmanlar ve ağır bir volan tekerleği (mekanik batarya) üzerinden geçerek çıkıştaki araç şarj dinamosunu yüksek devire ulaştırır. Günde 1 saatlik hafif elle çevirmeyle aküler beslenir.
+Mekanik arazi kapıları: Giriş kapıları elektrik yerine sonsuz vida ve dişli çark mekanizmasıyla çalışacaktır. Sonsuz vida dizgesi geri dönmez (kendinden kilitli) olduğundan kapı dışarıdan itilerek açılamaz. Gemi dümeni biçimli el çarkı ile ağır kapılar el gücüyle kolayca açılıp kapanır.

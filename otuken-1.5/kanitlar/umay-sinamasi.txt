@@ -1,0 +1,621 @@
+# UMAY mantik takimi (make -C umay sina)
+# Tarih: 2026-09-27 21:13 (Europe/Istanbul)
+# Kaynak: OTUKEN 1.4.5 + UMAY (git f2354b6), QEMU 8.2.2, ajan arastirma yordami dahil
+
+sina/sina.c: In function 'main':
+sina/sina.c:760:15: warning: declaration of 'b' shadows a previous local [-Wshadow]
+  760 |         void *b = up_ayir(128);
+      |               ^
+sina/sina.c:61:14: note: shadowed declaration is here
+   61 |     baglam_t b[3];
+      |              ^
+sina/sina.c:762:15: warning: declaration of 'c' shadows a previous local [-Wshadow]
+  762 |         void *c = up_ayir(64);
+      |               ^
+sina/sina.c:77:10: note: shadowed declaration is here
+   77 |     char c[512];
+      |          ^
+sina/sina.c:766:15: warning: declaration of 'd' shadows a previous local [-Wshadow]
+  766 |         void *d = up_ayir(64);
+      |               ^
+sina/sina.c:59:9: note: shadowed declaration is here
+   59 |     int d = bilgi_doktrin_yukle();
+      |         ^
+sina/sina.c:794:21: warning: declaration of 'kb' shadows a previous local [-Wshadow]
+  794 |         const char *kb[3] = { "balbal", "ortak", 0 };
+      |                     ^~
+sina/sina.c:297:14: note: shadowed declaration is here
+  297 |     uint32_t kb = (uint32_t)otag_gorev_ver(&o6, &gb);
+      |              ^~
+sina/sina.c:804:18: warning: declaration of 'i' shadows a previous local [-Wshadow]
+  804 |         for (int i = 0; i < ar.havuz_sayi; i++)
+      |                  ^
+sina/sina.c:746:16: note: shadowed declaration is here
+  746 |     us_istem_t i = { .kisilik = ozan_kimlik(), .baglam = "", .soru = "x",
+      |                ^
+sina/sina.c:810:18: warning: declaration of 'i' shadows a previous local [-Wshadow]
+  810 |         for (int i = 1; i < ar.havuz_sayi; i++) if (ar.havuz[i].skor > ar.havuz[i - 1].skor) sirali = 0;
+      |                  ^
+sina/sina.c:746:16: note: shadowed declaration is here
+  746 |     us_istem_t i = { .kisilik = ozan_kimlik(), .baglam = "", .soru = "x",
+      |                ^
+sina/sina.c:815:18: warning: declaration of 't' shadows a previous local [-Wshadow]
+  815 |         for (int t = 0; t < ar.terim_sayi; t++) {
+      |                  ^
+sina/sina.c:44:10: note: shadowed declaration is here
+   44 |     char t[64];
+      |          ^
+sina/sina.c:843:18: warning: declaration of 'i' shadows a previous local [-Wshadow]
+  843 |         for (int i = 0; i < alp_uzman_sayisi(); i++) otag_alp_kat(&oa, alp_uzman_sirali(i));
+      |                  ^
+sina/sina.c:746:16: note: shadowed declaration is here
+  746 |     us_istem_t i = { .kisilik = ozan_kimlik(), .baglam = "", .soru = "x",
+      |                ^
+sina/sina.c:844:17: warning: declaration of 'ga' shadows a previous local [-Wshadow]
+  844 |         gorev_t ga;
+      |                 ^~
+sina/sina.c:200:13: note: shadowed declaration is here
+  200 |     gorev_t ga;
+      |             ^~
+sina/sina.c:848:17: warning: declaration of 'gb' shadows a previous local [-Wshadow]
+  848 |         gorev_t gb;
+      |                 ^~
+sina/sina.c:293:13: note: shadowed declaration is here
+  293 |     gorev_t gb;
+      |             ^~
+./kov/umay_sina
+=== UMAY SINAMA ===
+
+1) Dize ve UTF-8
+  [GECTI] um_bicim
+  [GECTI] Türkçe küçültme (I->ı, İ->i)
+  [GECTI] um_icinde
+  [GECTI] taşma yok
+
+2) Ayarlar
+  [GECTI] varsayılan kullanıcı
+  [GECTI] sayı ayarı
+
+3) Bilgi (kütüphane/RAG)
+  [GECTI] doktrin yüklendi
+  [GECTI] bağlam bulundu
+  [GECTI] doğru kayda gitti
+  [GECTI] araç sorusu doğru eşleşti
+  [GECTI] alakasız sorguda boş
+
+4) OZAN niyet çözümü
+  [GECTI] selam
+  [GECTI] denetim
+  [GECTI] onarım
+  [GECTI] soru
+  [GECTI] veda
+  [GECTI] Dede Korkut ağzı (hitap)
+
+5) BENGİ kalıcı bellek
+  [GECTI] yazıldı-okundu
+  [GECTI] saklandı
+  [GECTI] diskten geri yüklendi
+
+6) ONAY katmanı
+[0] Onay istendi: onay1 (Eksik iz)
+  [GECTI] onay istendi
+  [GECTI] bekleyen var
+[0] Onay verildi: onay1
+  [GECTI] onay verildi
+  [GECTI] iki kez tüketilemez
+
+7) OTAĞ ajan meclisi
+[0] US: ipc-us deneniyor.
+[0] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+[0] US: ipc-us hazırlanamadı.
+[0] US: gerçek motor yok, stub'a düştüm.
+[0] Ajan katıldı: BİLGE — bilgi bulma ve öğüt
+  [GECTI] BİLGE katıldı
+[0] Ajan katıldı: GÖZCÜ — dizge yoklaması
+  [GECTI] GÖZCÜ katıldı
+[0] Ajan katıldı: ONARICI — aksaklık bulma ve onarım önerisi
+  [GECTI] ONARICI katıldı
+  [GECTI] görev kuyruğa girdi
+  [GECTI] BİLGE görevi bitirdi
+  [GECTI] yanıt üretildi
+  [GECTI] dayanak gösterildi
+     ---- UMAY'ın yanıtı ----
+BİLGE (bilgi bulma ve öğüt) söyler:
+Dancer's Sanctuary yapımında betonarme ve çimento kesinlikle kullanılmaz. Yerel doğal taş, ahşap, killi toprak ve saman kullanılır.
+(Dayanağım: balbal / Doğal yapı ve yer altı kileri — doktrin [doktrin])
+(Dayanağım: yer-su / Arsa ve permakültür — doktrin [doktrin])
+(Dayanağım: ortak / Su yönetimi ve yangın savunması — doktrin [doktrin])
+Güven: sağlam
+     ------------------------
+  [GECTI] GÖZCÜ denetimi bitirdi
+  [GECTI] denetim raporu doldu
+     ---- GÖZCÜ raporu ----
+Yurtta 4 iş koşuyor, 0 tanesi devrilmiş.
+Kütüphanede 21 bitig var; 2 gerekli iz eksik.
+Aksaklık var; ONARICI'yı çağırmak gerek.
+     ----------------------
+
+8) Uzman kadrosu
+  [GECTI] kadro 12 kişi
+[1] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[1] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[1] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[1] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[1] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[1] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[1] Ajan katıldı: YARGU — hukuk ve mevzuat
+[1] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[1] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[1] Ajan katıldı: KOPUZ — müzik ve beste
+[1] Ajan katıldı: OYUN — dans ve koreografi
+[1] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+  [GECTI] 12 uzman otağa katıldı
+[1] Ajan katıldı: BİLGE — bilgi bulma ve öğüt
+  [GECTI] BİLGE de sığdı
+  [GECTI] alan araması
+  [GECTI] her uzmanın adı var
+
+9) OZAN alan yönlendirmesi
+  [GECTI] musso motorunun şanzımanı ne -> TULGA
+  [GECTI] solar panel için kaç watt gerek -> KÜN
+  [GECTI] zeytin budama artığından kompost -> YER-SU
+  [GECTI] kerpiç duvara horasan harcı olur mu -> BALBAL
+  [GECTI] yaraya hangi merhem sürülür -> OTACI
+  [GECTI] imar izni ve tapu için ne gerek -> YARGU
+  [GECTI] altın ve döviz kuru ne olur -> AKÇA
+  [GECTI] zeybek için prova dizilimi -> OYUN
+  [GECTI] kopuz ile ezgi bestelemek -> KOPUZ
+  [GECTI] pcb üstüne sensör lehimleme -> DEMİR
+  [GECTI] çit ve kamera ile devriye düzeni -> ALPAGU
+  [GECTI] belgeleri arşivde indeksle -> YAZIT
+  [GECTI] alansız soru genel kalır
+
+10) Uzmana yönlendirme ve yanıt
+  [GECTI] TULGA görevi aldı ve bitirdi
+  [GECTI] uzman kendi kimliğiyle konuştu
+     ---- TULGA ----
+TULGA (otomotiv ve araç mühendisliği) söyler:
+Proje aracı 1998 model Daewoo Musso. Motor Mercedes-Benz M104 3.2 litre sıralı altı silindir HFM enjeksiyon.
+(Dayanağım: tulga / Mekanik ve otomotiv — doktrin [doktrin])
+Güven: orta
+     ---------------
+
+11) Çok uzmanlı meclis
+[1] Meclis kuruldu: 3 uzman, kök 2
+  [GECTI] meclis kuruldu
+  [GECTI] tek birleşik sonuç döndü
+  [GECTI] sonucu OTAĞ imzaladı
+  [GECTI] üç uzman da konuştu
+     ---- MECLİS ----
+Bu iş birden çok uzmanı ilgilendirir; otağı topladım.
+
+YER-SU (permakültür, tarım, toprak, ekosistem) söyler:
+sazlık ve volkanik çakıldan oluşan yenilenme alanından geçirilir. Gambusia balığıyla sivrisinek larvası denetlenir.
+(Dayanağım: yer-su / Gölet ekolojisi ve biyolojik arıtma — doktrin [doktrin])
+(Dayanağım: yer-su / Sera, kümes ve biyolojik duvar — doktrin [doktrin])
+Güven: orta
+
+KÜN (güneş enerjisi ve solar dizgeler) söyler:
+Yağmur suyu hasadı ve yeraltı suyu için Horasan harcı sıvalı toprak altı kadim sarnıç yapılır. Arazi sınırlarına yüksek basınçlı geniş açılı yangın söndürme yağmurlama sistemi kurulur, sarnıçtaki yedek sudan mekanik ya da solar yüksek debili pompayla beslenir.
+Kendi alanımda kayıt yoktu; ortak havuzdan baktım.
+(Dayanağım: ortak / Su yönetimi ve yangın savunması — doktrin [doktrin])
+(Dayanağım: ortak / Çarklar mekaniği ve kinetik enerji — doktrin [doktrin])
+Güven: orta
+
+BALBAL (inşaat, taş ev, yapı ve mimari) söyler:
+Dancer's Sanctuary yapımında betonarme ve çimento kesinlikle kullanılmaz. Yerel doğal taş, ahşap, killi toprak ve saman kullanılır.
+(Dayanağım: balbal / Doğal yapı ve yer altı kileri — doktrin [doktrin])
+Güven: orta
+
+Katılan uzmanlar: YER-SU, KÜN, BALBAL
+Otağın ortak güveni: orta
+     ----------------
+
+12) Uyarı ve dürüstlük
+  [GECTI] YARGU hukuki görüş uyarısı koydu
+  [GECTI] AKÇA ağ yokken güncel sayı vermedi
+
+13) Görev motoru
+[1] Ajan katıldı: BİLGE — bilgi bulma ve öğüt
+[1] Ajan katıldı: GÖZCÜ — dizge yoklaması
+[1] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[1] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[1] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[1] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[1] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[1] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[1] Ajan katıldı: YARGU — hukuk ve mevzuat
+[1] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[1] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[1] Ajan katıldı: KOPUZ — müzik ve beste
+[1] Ajan katıldı: OYUN — dans ve koreografi
+[1] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+  [GECTI] görev havuza girdi
+  [GECTI] görev kimlikle bulunuyor
+  [GECTI] tür ve öncelik korundu
+  [GECTI] tür adı
+  [GECTI] durum adı
+  [GECTI] alt görev açıldı
+  [GECTI] bağımlılık kuruldu
+  [GECTI] bağımlı görev bekliyor
+  [GECTI] ilerleme yazılabiliyor
+  [GECTI] alt görev önce, ebeveyn sonra bitti
+  [GECTI] sıra doğru: ARAŞTIR sonra TASARLA
+  [GECTI] iki iş de BALBAL'a gitti
+  [GECTI] otağ boşaldı
+
+14) Öncelik sırası
+[1] Ajan katıldı: BİLGE — bilgi bulma ve öğüt
+  [GECTI] acil görev önce koştu
+
+15) UYGULA türü onaya bağlı
+[1] Ajan katıldı: YAZMAN — bitig ve bellek işleri
+  [GECTI] UYGULA varsayılan onay ister
+[1] Onay istendi: onay1 (Görev onayı)
+  [GECTI] onay alınmadan koşmadı
+  [GECTI] onay belgesi üretildi
+  [GECTI] YAZMAN boşta kaldı
+
+16) Görev sonucu BENGİ'ye geçiyor
+[1] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[1] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[1] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[1] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[1] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[1] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[1] Ajan katıldı: YARGU — hukuk ve mevzuat
+[1] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[1] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[1] Ajan katıldı: KOPUZ — müzik ve beste
+[1] Ajan katıldı: OYUN — dans ve koreografi
+[1] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+  [GECTI] sonuç bengi taşa kazındı
+  [GECTI] sonuç kaydı türü ve imzası var
+  [GECTI] SONUC türünde aranabiliyor
+  [GECTI] KARAR bağlama giriyor
+  [GECTI] doğrulanmamış SONUC bağlama girmiyor
+  [GECTI] bengi diske yazıldı
+  [GECTI] türler diskten geri geldi
+
+17) BİLGİ etiket ve kaynak
+  [GECTI] kaynak belge katılabiliyor
+  [GECTI] etikete göre bulundu
+  [GECTI] kaynak taşındı
+  [GECTI] kaynağa göre süzülüyor
+
+18) Yetenek bildirimi
+  [GECTI] uzmanlar TASARLA bildiriyor
+  [GECTI] GÖZCÜ yalnız KONTROL/İZLE
+
+19) Depo standardı — 12 alan
+  [GECTI] 13 depo dizini tanımlı
+  [GECTI] alan -> kategori eşlemesi
+  [GECTI] AKÇA kendi kategorisinden buldu
+  [GECTI] YER-SU kendi kategorisinden buldu
+  [GECTI] KÜN kendi kategorisinden buldu
+  [GECTI] DEMİR kendi kategorisinden buldu
+  [GECTI] TULGA kendi kategorisinden buldu
+  [GECTI] OTACI kendi kategorisinden buldu
+  [GECTI] YARGU kendi kategorisinden buldu
+  [GECTI] BALBAL kendi kategorisinden buldu
+  [GECTI] ALPAGU kendi kategorisinden buldu
+  [GECTI] KOPUZ kendi kategorisinden buldu
+  [GECTI] OYUN kendi kategorisinden buldu
+  [GECTI] YAZIT kendi kategorisinden buldu
+
+20) Yanlış kategoriye düşmüyor
+  [GECTI] tıp kategorisinde motor sorusu yok
+  [GECTI] aynı soru kendi kategorisinde var
+
+21) Uzman kademeli erişim ve fallback
+[2] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[2] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[2] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[2] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[2] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[2] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[2] Ajan katıldı: YARGU — hukuk ve mevzuat
+[2] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[2] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[2] Ajan katıldı: KOPUZ — müzik ve beste
+[2] Ajan katıldı: OYUN — dans ve koreografi
+[2] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+  [GECTI] kendi kategorisinde bulunca fallback demiyor
+  [GECTI] kaynak türü yazılıyor
+  [GECTI] alan dışına düşünce kullanıcıya söylüyor
+
+22) Kaynak güveni ve çatışma
+  [GECTI] BENGİ kaydı BİLGİ deposuna giremez
+  [GECTI] dış belge KT_DIS olarak giriyor
+  [GECTI] iki ayrı kaynak çatışma sayılıyor
+  [GECTI] çatışmada iki kaynak da adlandırılıyor
+  [GECTI] aynı kaynaktan iki kayıt çatışma değil
+[2] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+  [GECTI] çatışma OTAĞ'a bildirildi
+  [GECTI] çatışma kullanıcıya söylendi
+
+23) BENGİ doğrulama kuralı
+  [GECTI] dogrulandi bayrağı zorunlu
+  [GECTI] geçersiz tür reddediliyor
+  [GECTI] doğrulanmamış kayıt yazılabiliyor
+  [GECTI] doğrulanmamış kayıt US bağlamına girmiyor
+  [GECTI] doğrulanınca da SONUC bağlama girmiyor
+  [GECTI] SONUC türü hiçbir zaman bağlamda yok
+  [GECTI] doğrulanmış PROJE kaydı bağlamda
+
+24) US — tek uzman
+[2] US: ipc-us deneniyor.
+[2] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+[2] US: ipc-us hazırlanamadı.
+[2] US: gerçek motor yok, stub'a düştüm.
+  [GECTI] motor yoksa stub'a düşüyor
+  [GECTI] çıkarım koştu
+  [GECTI] metin üretildi
+  [GECTI] dayanak korundu
+  [GECTI] kaynak türü korundu
+  [GECTI] uzman kaydedildi
+  [GECTI] güven verildi
+  [GECTI] çıktıda başyazı, dayanak ve güven var
+
+25) US — kaynaksız soru
+  [GECTI] dayanaksız işaretlendi
+  [GECTI] güven yok
+  [GECTI] uydurmadığını söylüyor
+  [GECTI] motor HİÇ çağrılmadı
+
+26) US — BENGİ bağlamı
+  [GECTI] BENGİ bağlamı tek başına yeter
+  [GECTI] motora bağlam gitti
+  [GECTI] doğrulanmış KARAR bağlamda
+  [GECTI] doğrulanmamış SONUC bağlamda değil
+
+27) US — kaynak çatışması
+  [GECTI] çatışma çıktıya taşındı
+  [GECTI] çatışmada güven zayıf
+  [GECTI] iki kaynak da adıyla anıldı
+  [GECTI] birleştirmediğini söylüyor
+
+28) US — yedeğe düşme
+  [GECTI] çöken motor takıldı
+[2] US: cokan yanıt vermedi, stub yedeğine düştüm.
+  [GECTI] asıl motor denendi
+  [GECTI] yedeğe düşüldü
+  [GECTI] yedek motor adı yazıldı
+  [GECTI] yine de yanıt üretildi
+  [GECTI] yedeğe düşüldüğü uyarıya işlendi
+[2] US: ipc-us deneniyor.
+[2] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+[2] US: ipc-us hazırlanamadı.
+[2] US: gerçek motor yok, stub'a düştüm.
+
+29) US — uyarılı uzman sonucu
+[2] Ajan katıldı: YARGU — hukuk ve mevzuat
+[2] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+  [GECTI] YARGU uyarısı çıktıda
+  [GECTI] uyarıyla birlikte dayanak da var
+  [GECTI] güven satırı korundu
+
+30) US — 3 uzmanlı meclis
+[2] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[2] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[2] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[2] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[2] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[2] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[2] Ajan katıldı: YARGU — hukuk ve mevzuat
+[2] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[2] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[2] Ajan katıldı: KOPUZ — müzik ve beste
+[2] Ajan katıldı: OYUN — dans ve koreografi
+[2] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+[2] Meclis kuruldu: 3 uzman, kök 1
+  [GECTI] meclis kuruldu
+  [GECTI] tek birleşik sonuç
+  [GECTI] üç uzman da çıktıda
+  [GECTI] katılan uzmanlar listelendi
+  [GECTI] ortak güven bildirildi
+  [GECTI] dayanaklar korundu
+
+31) Atanamayan görev kuyruğu kilitlemiyor
+[2] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[2] Görev düştü (1): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+  [GECTI] atanamayan görev düştü, asılı kalmadı
+  [GECTI] arkasındaki atanabilir görev koştu
+  [GECTI] otağ kilitlenmedi
+  [GECTI] düşen görev havuzdan temizlendi
+
+32) 24 atanamayan görev havuzu doldurmuyor
+[2] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+  [GECTI] havuz doldu
+[2] Görev düştü (1): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (2): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (3): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (4): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (5): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (6): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (7): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (8): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (9): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (10): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (11): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (12): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (13): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (14): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (15): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (16): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (17): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (18): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (19): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (20): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (21): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (22): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (23): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+[2] Görev düştü (24): Bu işi görecek ajan otağımda yok (SORU / TULGA). Görevi bıraktım.
+
+  [GECTI] hepsi tek turda düştü
+  [GECTI] havuz boşaldı
+  [GECTI] havuz yeniden kullanılabiliyor
+  [GECTI] dolduktan sonra iş yine koşuyor
+
+33) TÖRE birinci kapısı
+  [GECTI] UYGULA yazma yetkisi ister
+  [GECTI] İZLE süreç yetkisi ister
+  [GECTI] SORU yetki istemez
+[2] Ajan katıldı: YAZMAN — bitig ve bellek işleri
+[2] Görev düştü (1): UYGULA türü iş için TÖRE yetkim yok; elimi bu işe atamam.
+
+  [GECTI] TÖRE yetkisi yokken görev reddedildi
+  [GECTI] ajan görevi hiç almadı
+  [GECTI] onay bile istenmedi
+  [GECTI] görev havuzda asılı kalmadı
+[2] Ajan katıldı: YAZMAN — bitig ve bellek işleri
+[3] Onay istendi: onay1 (Görev onayı)
+  [GECTI] yetki verilince TÖRE geçildi
+  [GECTI] ikinci kapı (onay) devrede
+
+34) ARAŞTIR -> TASARLA zinciri ve SONUC izolasyonu
+[3] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[3] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[3] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[3] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[3] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[3] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[3] Ajan katıldı: YARGU — hukuk ve mevzuat
+[3] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[3] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[3] Ajan katıldı: KOPUZ — müzik ve beste
+[3] Ajan katıldı: OYUN — dans ve koreografi
+[3] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+  [GECTI] zincirin iki halkası da koştu
+  [GECTI] öncül çıktısı ardıla ayrı alanda geçti
+  [GECTI] ardıl çıktısında öncül işaretlendi
+  [GECTI] ardıl kendi kategorisinden dayanak gösterdi
+  [GECTI] öncül dayanak listesine girmedi
+
+35) SONUC US dayanağına girmiyor
+[3] US: ipc-us deneniyor.
+[3] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+[3] US: ipc-us hazırlanamadı.
+[3] US: gerçek motor yok, stub'a düştüm.
+  [GECTI] tek başına öncül çıktı dayanak sayılmadı
+  [GECTI] güven yok
+  [GECTI] dayanak listesi boş
+  [GECTI] öncül kullanıldığı işaretli
+  [GECTI] sebebi söyleniyor
+  [GECTI] gerçek dayanak varken koşuyor
+  [GECTI] dayanak sayısı yalnız kaynaklardan
+  [GECTI] öncül güveni sağlamaya çıkaramıyor
+  [GECTI] çıktıda doğrulanmamış diye anılıyor
+
+36) Yalıtım
+  [GECTI] US motoru takılabilir
+  [GECTI] bağlamsızken uydurmaz
+
+37) Öbek: serbest liste
+  [GECTI] ayırma çalışıyor
+  [GECTI] bırakılan blok geri kullanılıyor
+  [GECTI] ikinci blok ayrı
+  [GECTI] liste bozulmadı
+  [GECTI] sıfır işaretçi yutuluyor
+
+38) US motoru: değiştirilebilir arka uç
+  [GECTI] IPC motoru var
+  [GECTI] motor adı bildiriliyor
+[3] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+  [GECTI] servis yokken hazırlama başarısız
+  [GECTI] bağlanmamış motor üretmez
+[3] US: ipc-us deneniyor.
+[3] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+[3] US: ipc-us hazırlanamadı.
+[3] US: gerçek motor yok, stub'a düştüm.
+  [GECTI] stub'a düşüldü
+
+39) ARAŞTIRMA: ajanın kendi yordamı
+  [GECTI] plan: buyruk sözcüğü terim sayılmadı
+  [GECTI] tarama sınırlı adımda bitti (soru + terim başına bir)
+  [GECTI] ilerleme 100
+  [GECTI] birden çok ayrı kayıt bulundu
+  [GECTI] aynı kayıt iki kez sayılmadı
+  [GECTI] bulgular skorla sıralı
+  [GECTI] kendi alanı önde (ilk bulgu BALBAL)
+  [GECTI] olmayan terimde bulgu yok
+  [GECTI] çekimli terim kökle bulundu (sarnıcı -> sarnıç)
+  [GECTI] raporda bulgular var
+  [GECTI] eksik terim açıkça söylendi
+  [GECTI] kökle bulunan söylendi
+  [GECTI] her bulgunun kaynağı var
+     ---- rapor ----
+BALBAL araştırdı: horasan harcı sarnıcı ve zzqqyy araştır
+Tarama: 5 sorgu, 4 terim; 3 ayrı kayıt, 2 ayrı kaynaktan.
+Bulgular:
+1. Yer altı kileri Horasan harcı bağlayıcılı olup yıl boyu 12-15 derece sabit sıcaklık ve pasif havalandırma bacalarıyla nem dengesi sağlar.
+   [kaynak: balbal / Doğal yapı ve yer altı kileri]
+2. Horasan harcinda kirec orani usta notuna gore farklidir.
+   [kaynak: balbal / Usta Notu]
+3. Yağmur suyu hasadı ve yeraltı suyu için Horasan harcı sıvalı toprak altı kadim sarnıç yapılır.
+   [kaynak: ortak / Su yönetimi ve yangın savunması, ortak havuzdan]
+Kayıt bulunamayan: zzqqyy.
+Kökle bulunan (tam sözcük tutmadı): sarnıcı.
+Dikkat: balbal alanında iki ayrı kaynak (Doğal yapı ve yer altı kileri / Usta Notu); birleştirmedim.
+     ---------------
+  [GECTI] hiç bulgu yoksa uydurmadan söyler
+[3] US: ipc-us deneniyor.
+[3] US-IPC: 'us' kapısı yok — motor bağlanamadı.
+[3] US: ipc-us hazırlanamadı.
+[3] US: gerçek motor yok, stub'a düştüm.
+[3] Ajan katıldı: BİLGE — bilgi bulma ve öğüt
+[3] Ajan katıldı: AKÇA — akçe, borsa, kripto, makroekonomi
+[3] Ajan katıldı: YER-SU — permakültür, tarım, toprak, ekosistem
+[3] Ajan katıldı: KÜN — güneş enerjisi ve solar dizgeler
+[3] Ajan katıldı: DEMİR — elektronik, kart, donanım
+[3] Ajan katıldı: TULGA — otomotiv ve araç mühendisliği
+[3] Ajan katıldı: OTACI — sağlık ve tıp danışmanlığı
+[3] Ajan katıldı: YARGU — hukuk ve mevzuat
+[3] Ajan katıldı: BALBAL — inşaat, taş ev, yapı ve mimari
+[3] Ajan katıldı: ALPAGU — savunma, güvenlik, dayanma
+[3] Ajan katıldı: KOPUZ — müzik ve beste
+[3] Ajan katıldı: OYUN — dans ve koreografi
+[3] Ajan katıldı: YAZIT — bilgi arşivi ve belge yönetimi
+  [GECTI] iki araştırma da bitti
+  [GECTI] alanlı araştırmayı uzman (BALBAL) yaptı
+  [GECTI] alansız araştırmayı BİLGE yaptı
+  [GECTI] araştırma turlara yayıldı (ara ilerleme görüldü)
+  [GECTI] rapor bulgu + kaynak + özet taşıyor
+  [GECTI] özet dayanağını gösterdi
+     ---- BİLGE raporu ----
+BİLGE araştırdı: zeytin budama biyokömür kaynak tara
+Tarama: 4 sorgu, 3 terim; 1 ayrı kayıt, 1 ayrı kaynaktan.
+Bulgular:
+1. Zeytin budama atığından biyokömür biochar üretilir.
+   [kaynak: yer-su / Arsa ve permakültür, genel depodan]
+Özet — BİLGE (bilgi bulma ve öğüt) söyler:
+Aydın Koçarlı Cincin Köyü, 1509 metrekare zeytinlik. Girdi çıktı döngüleri kapatılır.
+(Dayanağım: yer-su / Arsa ve permakültür — doktrin [doktrin])
+Güven: orta
+     ----------------------
+
+=== SONUC: 222 gecti, 0 kaldi ===

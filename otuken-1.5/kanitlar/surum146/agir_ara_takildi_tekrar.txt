@@ -1,0 +1,7 @@
+tekrar_s8_EPYC_t1            smp=8  cpu=EPYC   m=512  GECTI   sure= 21s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+tekrar_s8_EPYC_t2            smp=8  cpu=EPYC   m=512  GECTI   sure= 21s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+tekrar_s8_EPYC_t3            smp=8  cpu=EPYC   m=512  GECTI   sure= 21s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+tekrar_s16_max_t1            smp=16 cpu=max    m=512  GECTI   sure= 37s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+tekrar_s16_max_t2            smp=16 cpu=max    m=512  GECTI   sure= 36s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+tekrar_s16_max_t3            smp=16 cpu=max    m=512  GECTI   sure= 36s tur_gecti=8 SMP-YARIS: GECTI SIZINTI YOK
+== TOPLAM kosu=6 gecti=6 kaldi=0 takildi=0
