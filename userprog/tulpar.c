@@ -120,6 +120,14 @@ static uint32_u stil_renk(int st) {
     }
 }
 
+/* düzenlenen alanın metnini sakla (Enter ya da başka yere tıklama) */
+static void alan_sakla(int o) {
+    int i;
+    for (i = 0; i < alan_adet; i++) if (alan_oge[i] == o + 1) break;
+    if (i == alan_adet && alan_adet < 64) alan_adet++;
+    if (i < 64) { alan_oge[i] = o + 1; kopya(alan_deger[i], 512, alan_metin); }
+}
+
 /* alan düzenlenmişse onun değeri */
 static const char *alan_degeri(int oge) {
     for (int i = 0; i < alan_adet; i++) if (alan_oge[i] == oge) return alan_deger[i];
@@ -545,9 +553,15 @@ static void form_gonder(int form, int dugme) {
     const char *act = h_metin(&sayfa, sayfa.formlar[form].eylem);
     if (!act[0]) url_yaz(&taban, eylem, sizeof eylem);
     else if (url_birlestir(&taban, act, eylem, sizeof eylem) != 0) return;
-    for (int i = 0; eylem[i]; i++) if (eylem[i] == '?') { eylem[i] = 0; break; }
+    /* eylemin kendi sorgusu korunur, alanlar '&' ile eklenir; # atılır */
+    int soru = 0;
+    for (int i = 0; eylem[i]; i++) {
+        if (eylem[i] == '#') { eylem[i] = 0; break; }
+        if (eylem[i] == '?') soru = i + 1;
+    }
     kopya(hedef, sizeof hedef, eylem);
-    dize_ekle(hedef, sizeof hedef, "?");
+    if (!soru) dize_ekle(hedef, sizeof hedef, "?");
+    else if (eylem[soru] && sorgu[0]) dize_ekle(hedef, sizeof hedef, "&");
     dize_ekle(hedef, sizeof hedef, sorgu);
     git(hedef, 1, 0);
     if (sayfa.formlar[form].post)
@@ -661,10 +675,7 @@ static void tus_isle(uint32_u t) {
             int o = alan_modu;
             alan_modu = -1;
             if (r == 1) {
-                int i;
-                for (i = 0; i < alan_adet; i++) if (alan_oge[i] == o + 1) break;
-                if (i == alan_adet && alan_adet < 64) alan_adet++;
-                if (i < 64) { alan_oge[i] = o + 1; kopya(alan_deger[i], 512, alan_metin); }
+                alan_sakla(o);
                 form_gonder(sayfa.ogeler[o].form, -1);
                 return;
             }
@@ -704,7 +715,7 @@ static void tus_isle(uint32_u t) {
 }
 
 static void tik_isle(int x, int y) {
-    if (alan_modu >= 0 && y < YUK - ALT) { alan_modu = -1; ciz(); }
+    if (alan_modu >= 0 && y < YUK - ALT) { alan_sakla(alan_modu); alan_modu = -1; ciz(); }   /* başka yere tıklamak yazılanı korur */
     if (y < UST) {
         if (x >= 6 && x < 64) { if (adres_modu) adres_modu = 0; geri(); return; }
         if (x >= 70 && x < 136) { adres_modu = 0; git(adres, 0, 0); return; }

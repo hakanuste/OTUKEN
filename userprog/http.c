@@ -105,8 +105,7 @@ int url_birlestir(const url_t *taban, const char *bag, char *c, int boy) {
         }
         if (!sorgu && yol[i] == '/' && yol[i+1] == '.' && yol[i+2] == '.' &&
             (yol[i+3] == '/' || yol[i+3] == 0 || yol[i+3] == '?')) {
-            while (n > 0 && norm[n-1] != '/') n--;
-            if (n > 0) n--;
+            /* bir üst: son kesimi at ("/a/b" -> "/a"); arkadan gelen "/x" eklenir */
             while (n > 0 && norm[n-1] != '/') n--;
             if (n > 0) n--;
             i += 3; if (!yol[i]) norm[n++] = '/';

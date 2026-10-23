@@ -836,7 +836,15 @@ int html_isle(const uint8_u *g, uint32_u n, int kk, int duz_metin, int genislik,
                     const char *ad = nitelik(&e, "name");
                     char deger[512]; int k = 0;
                     uint32_u p = i;
-                    while (p < son && k < 500) { uint32_u kod = kod_al(g, son, &p, kk); k += utf8_yaz(kod, deger + k); }
+                    while (p < son && k < 500) {
+                        uint32_u kod;
+                        if (g[p] == '&') {                 /* &amp; vb. çözülür (başlıktaki gibi) */
+                            uint32_u tuk; int gec;
+                            kod = varlik_coz(g + p + 1, son - p - 1, &tuk, &gec);
+                            if (gec) p += 1 + tuk; else { kod = '&'; p++; }
+                        } else kod = kod_al(g, son, &p, kk);
+                        k += utf8_yaz(kod, deger + k);
+                    }
                     deger[k] = 0;
                     int o = oge_ekle(s, OGE_METIN_ALANI, b.form >= 0 ? b.form : 0, depo(s, ad ? ad : "", -1), depo(s, deger, -1));
                     blok(&d, 0);
