@@ -592,7 +592,7 @@ if (ayrinti_kalan) {
         if (dport == 68) {
             dhcp_handle_packet(udp_payload, payload_len);
         } else if (sport == 53) {
-            dns_handle_packet(udp_payload, payload_len);
+            dns_handle_packet(src_ip, dport, udp_payload, payload_len);
         } else {
             socket_deliver_udp(src_ip, sport, dport, udp_payload, payload_len);
         }

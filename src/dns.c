@@ -20,6 +20,7 @@ typedef struct {
     int      kullanimda;
     uint16_t id;
     uint16_t kaynak_port;
+    uint8_t  sunucu[4];              /* soru bu sunucuya gitti: yanit ondan gelmeli */
     char     ad[256];                /* sorulan adin TAMAMI (en cok 253) */
     int      durum;           /* 0 bekliyor, 1 cozuldu, -1 yok */
     uint8_t  ip[4];
@@ -77,6 +78,7 @@ static int sor__ic(const char *hostname, const uint8_t dns_server[4]) {
     s->id = dns_id;
     s->kaynak_port = (uint16_t)(40000 + ((lo >> 3) & 0x3FF) * DNS_YUVA + y);
     s->durum = 0;
+    for (int b = 0; b < 4; b++) s->sunucu[b] = dns_server[b];
     int k = 0;
     while (hostname[k]) { s->ad[k] = hostname[k]; if (k < 63) last_name[k] = hostname[k]; k++; }
     s->ad[k] = 0; last_name[k < 63 ? k : 63] = 0;
@@ -178,13 +180,20 @@ static int ad_ayni(const uint8_t *p, int off, uint16_t len, const char *ad) {
     return 0;
 }
 
-static void yanit__ic(const uint8_t *payload, uint16_t len) {
+/* Yanit, bekleyen sorunun DORTLUSUYLA eslesmeli: kimlik + sorulan ad +
+ * sorunun gittigi sunucu (kaynak IP) + sorunun rastgele kaynak portu
+ * (yanitin hedef portu). Yalniz kimlik+ad ile eslesen sahte yanit
+ * (yerel agdan enjekte) A kaydini kazanamaz. */
+static void yanit__ic(const uint8_t src_ip[4], uint16_t dport, const uint8_t *payload, uint16_t len) {
     if (len < 12) return;
     uint16_t id = ((uint16_t)payload[0] << 8) | payload[1];
     if (!(payload[2] & 0x80)) return;                    /* soru, yanit degil */
     dns_yuva_t *s = 0;
     for (int i = 0; i < DNS_YUVA; i++)
-        if (yuva[i].kullanimda && yuva[i].durum == 0 && yuva[i].id == id) s = &yuva[i];
+        if (yuva[i].kullanimda && yuva[i].durum == 0 && yuva[i].id == id &&
+            yuva[i].kaynak_port == dport &&
+            yuva[i].sunucu[0] == src_ip[0] && yuva[i].sunucu[1] == src_ip[1] &&
+            yuva[i].sunucu[2] == src_ip[2] && yuva[i].sunucu[3] == src_ip[3]) s = &yuva[i];
     if (!s) return;
     uint16_t qd = ((uint16_t)payload[4] << 8) | payload[5];
     uint16_t an = ((uint16_t)payload[6] << 8) | payload[7];
@@ -220,9 +229,9 @@ static void yanit__ic(const uint8_t *payload, uint16_t len) {
     s->durum = -1;          /* yanit var ama A kaydi yok (yalniz CNAME/AAAA) */
 }
 
-void dns_handle_packet(const uint8_t *payload, uint16_t len) {
+void dns_handle_packet(const uint8_t src_ip[4], uint16_t dport, const uint8_t *payload, uint16_t len) {
     KILIT;
-    yanit__ic(payload, len);
+    yanit__ic(src_ip, dport, payload, len);
     BIRAK;
 }
 

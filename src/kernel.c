@@ -1896,6 +1896,25 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
             serial_write("vfs-fat32-test: vfs_open basarisiz\n");
         }
 
+        /* vfs_stat ikinci bag noktasindan cozulur (SYS_STAT bunu kullanir) */
+        {
+            uint64_t sb = 0, lb = (uint64_t)-1; int sd = -1, kd = -1;
+            for (int i = 0; i < n32; i++) {
+                const char *a = entries32[i].name, *b = "FAT32F.TXT";
+                while (*a && *a == *b) { a++; b++; }
+                if (!*a && !*b) lb = entries32[i].size;
+            }
+            int r1 = vfs_stat("/fat32/fat32f.txt", &sb, &sd);
+            int r2 = vfs_stat("/fat32", 0, &kd);
+            int r3 = vfs_stat("/fat32/YOK.TXT", 0, 0);
+            int r4 = vfs_stat("/fat32x/fat32f.txt", 0, 0);
+            int iyi = r1 == 0 && sb == lb && sd == 0 && r2 == 0 && kd == 1 && r3 != 0 && r4 != 0;
+            serial_write("STAT-TEST: /fat32 dosya boyu=");
+            serial_write_hex((uint32_t)sb);
+            serial_write(iyi ? " (listeyle ayni), bag noktasi dizin, yok/sinir disi reddedildi -> BASARILI\n"
+                             : " -> HATA (FAT32 bag noktasinda stat)\n");
+        }
+
         uint32_t cache_hits = 0, cache_misses = 0;
         disk_cache_stats(&cache_hits, &cache_misses);
         serial_write("disk-cache-test: hits="); serial_write_hex(cache_hits);

@@ -305,13 +305,17 @@ static int fat16_dizin_yarat__ic(const char *yol) {
 #define AZAMI_KUME 4096
 static uint32_t kume_bayt(void) { return fat16_sectors_per_cluster() * 512u; }
 
-static void zincir_bosalt(uint16_t k) {
+/* Zinciri bırakır. Bir FAT yazımı başarısız olsa da kalanı bırakmayı
+ * sürdürür (sızıntıyı küçültür) ama -1 döner: çağıran başarı bildirmez. */
+static int zincir_bosalt(uint16_t k) {
     uint32_t say = 0;
+    int r = 0;
     while (k >= 2 && k < 0xFFF8 && say++ < 65536 && fat16_kume_gecerli(k)) {
         uint16_t n = fat16_sonraki_kume(k);
-        fat16_kume_yaz(k, 0x0000);
+        if (fat16_kume_yaz(k, 0x0000) != 0) r = -1;
         k = n;
     }
+    return r;
 }
 
 /* n küme ayırıp zincirler (onceki != 0 ise ona eklenir). İlk küme; 0 hata
@@ -447,7 +451,7 @@ static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy,
                 if (!fat16_kume_gecerli(art)) return -1;
                 if (gezildi[art >> 3] & (1u << (art & 7))) return -1;   /* artakalan sandığımız küme dosyanın içinde: döngü */
                 if (fat16_kume_yaz(son, 0xFFFF) != 0) return -1;   /* önce kes, sonra bırak */
-                zincir_bosalt(art);
+                if (zincir_bosalt(art) != 0) return -1;            /* artakalan bırakılamadı */
             }
         }
         uint32_t dolu = eski.size % kb; if (dolu == 0) dolu = kb;
@@ -479,7 +483,11 @@ static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy,
         if (veri_yaz(yeni, 0, veri, boy) != 0) { zincir_bosalt(yeni); return -1; }
     }
     if (girdi_yaz(lba, indeks, ad, 0x20, yeni, boy) != 0) { if (yeni) zincir_bosalt(yeni); return -1; }
-    if (var && eski.first_cluster >= 2) zincir_bosalt(eski.first_cluster);
+    if (var && eski.first_cluster >= 2 && zincir_bosalt(eski.first_cluster) != 0) {
+        /* yeni içerik ve girdi diskte; yalnız ESKİ zincir tam bırakılamadı */
+        serial_write("BITIG(fat16): UYARI eski zincir birakilamadi '"); serial_write(yol); serial_write("'\n");
+        return -1;
+    }
     serial_write("BITIG(fat16): yazildi '"); serial_write(yol); serial_write("'\n");
     return (int)boy;
 }
@@ -514,7 +522,8 @@ static int fat16_yol_sil__ic(const char *yol) {
     if (disk_cache_read_sectors(0, lba, 1, s) != 0) return -1;
     s[indeks * GIRDI_BOY] = 0xE5;
     if (disk_cache_write_sectors(0, lba, 1, s) != 0) return -1;
-    if (d.first_cluster >= 2) zincir_bosalt(d.first_cluster);
+    /* girdi silindi; kümeler bırakılamadıysa başarı BİLDİRİLMEZ */
+    if (d.first_cluster >= 2 && zincir_bosalt(d.first_cluster) != 0) return -3;
     return 0;
 }
 

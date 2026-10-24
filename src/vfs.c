@@ -132,7 +132,9 @@ static vfs_mount_t *resolve_mount(const char *path, const char **relative_out) {
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         if (!mounts[i].active) continue;
         int mp_len = str_len(mounts[i].mount_point);
-        if (starts_with(path, mounts[i].mount_point) && mp_len > best_len) {
+        /* bag noktasi bir YOL BILESENI olmali: "/fat32x" "/fat32"e dusmez */
+        if (starts_with(path, mounts[i].mount_point) && mp_len > best_len &&
+            (mp_len == 1 || path[mp_len] == 0 || path[mp_len] == '/')) {
             best = &mounts[i];
             best_len = mp_len;
         }
@@ -252,8 +254,49 @@ int vfs_acik_sayisi(void) {
  * ===================================================================== */
 static char buyut(char c) { return (c >= 'a' && c <= 'z') ? (char)(c - 32) : c; }
 
+/* Kok olmayan bag noktasi (orn. /fat32): ust dizini O dosya sisteminin
+ * list_dir'i ile listeleyip adi harf duyarsiz arar. */
+static int bagli_stat(vfs_mount_t *m, const char *rel, uint64_t *boyut, int *dizin_mi) {
+    if (rel[0] == '/' && rel[1] == 0) {                 /* bag noktasinin kendisi */
+        if (boyut) *boyut = 0;
+        if (dizin_mi) *dizin_mi = 1;
+        return 0;
+    }
+    int n = str_len(rel), son = 0;
+    while (n > 1 && rel[n - 1] == '/') n--;             /* sondaki '/' */
+    for (int i = 0; i < n; i++) if (rel[i] == '/') son = i;
+    char ust[VFS_MAX_PATH];
+    if (son == 0) { ust[0] = '/'; ust[1] = 0; }
+    else {
+        if (son >= VFS_MAX_PATH) return -1;
+        for (int i = 0; i < son; i++) ust[i] = rel[i];
+        ust[son] = 0;
+    }
+    const char *ad = rel + son + 1;
+    int ad_n = n - son - 1;
+    if (ad_n <= 0 || !m->ops->list_dir) return -1;
+    static vfs_dirent_t girdi[32];                      /* depo_kilit altinda */
+    int k = m->ops->list_dir(ust, girdi, 32, m->fs_ctx);
+    for (int i = 0; i < k; i++) {
+        const char *a = girdi[i].name;
+        int j = 0;
+        while (j < ad_n && a[j] && buyut(a[j]) == buyut(ad[j])) j++;
+        if (j == ad_n && a[j] == 0) {
+            if (boyut) *boyut = girdi[i].size;
+            if (dizin_mi) *dizin_mi = girdi[i].is_dir;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 static int vfs_stat__ic(const char *path, uint64_t *boyut, int *dizin_mi) {
     if (!path || path[0] != '/') return -1;
+    {
+        const char *rel;
+        vfs_mount_t *m = resolve_mount(path, &rel);
+        if (m && str_len(m->mount_point) > 1) return bagli_stat(m, rel, boyut, dizin_mi);
+    }
     {
         /* Alt dizin katmani tam yolu cozebiliyorsa onu kullan. */
         fat16_dirent_t d;
