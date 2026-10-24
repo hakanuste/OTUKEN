@@ -882,6 +882,30 @@ int html_isle(const uint8_u *g, uint32_u n, int kk, int duz_metin, int genislik,
                 continue;
             }
             if (bas_icinde && !esit(a, "meta") && !esit(a, "base")) continue;
+            /* value'suz <option>: gönderilen değer seçeneğin METNİdir (HTML).
+             * Metin burada kaynaktan okunur; i değişmez, metin yine çizilir. */
+            if (!e.bitis && esit(a, "option") && b.select_oge > 0 && !nitelik(&e, "value")) {
+                uint32_u *gz = s->gizli[b.select_oge - 1];
+                if (gz[2] == 0 || nitelik(&e, "selected")) {
+                    char deger[512]; int k = 0, onceki_bosluk = 1;
+                    uint32_u p = i;
+                    while (p < n && g[p] != '<' && k < 500) {
+                        uint32_u kod;
+                        if (g[p] == '&') {
+                            uint32_u tuk; int gec;
+                            kod = varlik_coz(g + p + 1, n - p - 1, &tuk, &gec);
+                            if (gec) p += 1 + tuk; else { kod = '&'; p++; }
+                        } else kod = kod_al(g, n, &p, kk);
+                        if (bosluk_mu(kod) || kod == 0xA0) { if (onceki_bosluk) continue; kod = ' '; onceki_bosluk = 1; }
+                        else onceki_bosluk = 0;
+                        k += utf8_yaz(kod, deger + k);
+                    }
+                    while (k > 0 && deger[k - 1] == ' ') k--;
+                    deger[k] = 0;
+                    gz[2] = depo(s, deger, k);
+                }
+                continue;
+            }
             etiket_isle(&d, &b, &e, s);
             continue;
         }

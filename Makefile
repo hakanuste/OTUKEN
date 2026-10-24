@@ -56,11 +56,18 @@ cekirdek_br/bearssl.a: $(BRK_OBJ)
 $(KERNEL): $(OBJ) linker.ld cekirdek_br/bearssl.a
 	$(LD) $(LDFLAGS) -o $(KERNEL) $(OBJ) cekirdek_br/bearssl.a
 
-iso: $(KERNEL) ergenekon.krv
+# ERGENEKON imaji imza anahtari ister (anahtarlar/ git disi). Temiz bir
+# kopyada anahtar yoksa ISO imajsiz kurulur: cekirdek "dizge imaji yok"
+# der, fabrika sifirlamasi devre disi kalir; geri kalan her sey calisir.
+ERGENEKON_ANAHTAR := $(firstword $(wildcard anahtarlar/kervan_uretim.pem tests/kervan/sinama_anahtari.pem))
+ISO_ERGENEKON := $(if $(ERGENEKON_ANAHTAR),ergenekon.krv,)
+
+iso: $(KERNEL) $(ISO_ERGENEKON)
 	mkdir -p iso/boot/grub
 	cp $(KERNEL) iso/boot/otukenos-mini.elf
-	cp ergenekon.krv iso/boot/ergenekon.krv
-	cp grub.cfg iso/boot/grub/grub.cfg
+	if [ -n "$(ISO_ERGENEKON)" ]; then cp ergenekon.krv iso/boot/ergenekon.krv; cp grub.cfg iso/boot/grub/grub.cfg; \
+	else echo "UYARI: imza anahtari yok (anahtarlar/kervan_uretim.pem): ISO ERGENEKON dizge imajsiz kuruluyor, fabrika sifirlamasi devre disi"; \
+	  rm -f iso/boot/ergenekon.krv; grep -v 'ergenekon.krv' grub.cfg > iso/boot/grub/grub.cfg; fi
 	grub-mkrescue -o $(ISO) iso 2>/dev/null
 
 clean:

@@ -37,6 +37,8 @@ int         ulgen_theme_dock_hit(int x, int y);
 #define ULGEN_MENU_TAMGA   100
 #define ULGEN_MENU_UYGULAMALAR 3
 #define ULGEN_MENU_PAKET 100   /* uyg_menu_hit: 100+i = i. kurulu paket uygulamasi */
+#define ULGEN_MENU_PAKET_SAYFA (-3)  /* uyg_menu_hit: "sonraki sayfa" satiri */
+void ulgen_theme_uyg_menu_sonraki(void);   /* paket listesinde sonraki sayfa (sona gelince basa) */
 /* 1.4.9: "Uygulamalar" açılır menüsü (tamga kimliğiyle) */
 int  ulgen_theme_uyg_menu_acik(void);
 void ulgen_theme_uyg_menu_ata(int acik);

@@ -46,6 +46,7 @@ typedef struct {
     int  dosya_adet;
 } k2_kurulu_t;
 static k2_kurulu_t kurulu[K2_KURULU_AZAMI];
+_Static_assert(KERVAN2_UYG_AZAMI >= K2_KURULU_AZAMI * KERVAN2_AZAMI_DOSYA, "uygulama onbellegi tum kurulu .ELF dosyalarini tutmali");
 static ozkilit_t k2_kilit;
 
 /* dizge dosyaları: hiçbir paket bunların üzerine yazamaz */

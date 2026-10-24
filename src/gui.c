@@ -538,6 +538,11 @@ static void gui_fare_isle__ic(int mx, int my, int buttons) {
         int ux, uy, uw, uh;
         ulgen_theme_uyg_menu_kutu(&ux, &uy, &uw, &uh);
         int t = ulgen_theme_uyg_menu_hit(mx, my);
+        if (t == ULGEN_MENU_PAKET_SAYFA) {                /* sayfa değişir, menü açık kalır */
+            ulgen_theme_uyg_menu_sonraki();
+            ekran_hasar(ux, uy, uw, uh);
+            prev_buttons = buttons; redraw_all(); return;
+        }
         int menu_dugmesi = (my < ULGEN_UST_BAR && ulgen_theme_menu_hit(mx, my) == ULGEN_MENU_UYGULAMALAR);
         ulgen_theme_uyg_menu_ata(0);
         ekran_hasar(ux, uy, uw, uh);

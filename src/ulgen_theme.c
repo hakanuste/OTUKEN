@@ -308,11 +308,33 @@ int ulgen_theme_izgara_hit(int x, int y) {
 #define UM_SATIR 26
 #define UM_EN    300
 static int g_uyg_menu = 0;
+static int g_uyg_sayfa = 0;               /* kurulu paket listesinde sayfa */
 /* tamga -> uygulaması var mı (gui.c rihtim_ac ile aynı küme) */
 static const uint8_t UM_VAR[TAMGA_N] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 };   /* 1.4.9: hepsi */
 
 int  ulgen_theme_uyg_menu_acik(void) { return g_uyg_menu; }
-void ulgen_theme_uyg_menu_ata(int acik) { g_uyg_menu = acik ? 1 : 0; }
+void ulgen_theme_uyg_menu_ata(int acik) { g_uyg_menu = acik ? 1 : 0; if (acik) g_uyg_sayfa = 0; }
+
+/* Paket satırları ekrana sığmazsa sayfalanır: sayfa başına 'adim' öğe ve
+ * en altta "sonraki sayfa" satırı. Hiçbir kurulu uygulama ulaşılamaz kalmaz. */
+typedef struct { int pn, adim, sayfa_n, bas, gor, sayfali; } paket_duzen_t;
+static void paket_duzen(paket_duzen_t *d) {
+    d->pn = kervan2_uygulama_sayisi();
+    int satir = (fb_height() - ULGEN_UST_BAR - GUI_GOREV_CUBUGU_H - 8) / UM_SATIR - TAMGA_N - 1;
+    if (satir < 2) satir = 2;
+    d->sayfali = d->pn > satir;
+    d->adim = d->sayfali ? satir - 1 : (d->pn ? d->pn : 1);
+    d->sayfa_n = (d->pn + d->adim - 1) / d->adim;
+    if (d->sayfa_n < 1) d->sayfa_n = 1;
+    if (g_uyg_sayfa >= d->sayfa_n) g_uyg_sayfa = 0;
+    d->bas = g_uyg_sayfa * d->adim;
+    d->gor = d->pn - d->bas < d->adim ? d->pn - d->bas : d->adim;
+    if (d->gor < 0) d->gor = 0;
+}
+void ulgen_theme_uyg_menu_sonraki(void) {
+    paket_duzen_t d; paket_duzen(&d);
+    g_uyg_sayfa = (g_uyg_sayfa + 1) % d.sayfa_n;
+}
 int  ulgen_theme_uyg_var(int id) { return id >= 0 && id < TAMGA_N && UM_VAR[id]; }
 
 void ulgen_theme_uyg_menu_kutu(int *x, int *y, int *w, int *h) {
@@ -330,8 +352,9 @@ void ulgen_theme_uyg_menu_kutu(int *x, int *y, int *w, int *h) {
         while (UST_MENU[i] && UST_MENU[i] != ' ') i++;
         sira++;
     }
-    int pn = kervan2_uygulama_sayisi();               /* 1.4.9: kurulu paket uygulamaları */
-    *x = x0 - 8; *y = ULGEN_UST_BAR; *w = UM_EN; *h = (TAMGA_N + (pn ? pn + 1 : 0)) * UM_SATIR + 8;
+    paket_duzen_t d; paket_duzen(&d);                 /* 1.4.9: kurulu paket uygulamaları */
+    int ps = d.pn ? 1 + (d.sayfali ? d.adim + 1 : d.pn) : 0;   /* ayraç + öğeler (+ sayfa satırı) */
+    *x = x0 - 8; *y = ULGEN_UST_BAR; *w = UM_EN; *h = (TAMGA_N + ps) * UM_SATIR + 8;
 }
 
 int ulgen_theme_uyg_menu_hit(int x, int y) {
@@ -343,7 +366,9 @@ int ulgen_theme_uyg_menu_hit(int x, int y) {
     if (y - my < 4 || r < 0) return -2;
     if (r < TAMGA_N) return r;
     int pi = r - TAMGA_N - 1;                         /* ayraç satırı: -2 */
-    if (pi >= 0 && pi < kervan2_uygulama_sayisi()) return ULGEN_MENU_PAKET + pi;
+    paket_duzen_t d; paket_duzen(&d);
+    if (pi >= 0 && pi < d.gor) return ULGEN_MENU_PAKET + d.bas + pi;
+    if (d.sayfali && pi == d.adim) return ULGEN_MENU_PAKET_SAYFA;
     return -2;
 }
 
@@ -364,17 +389,28 @@ void ulgen_theme_uyg_menu_ciz(void) {
         fb_yazi_saydam(mx + 14, y + 5, t ? t->ad : "?", c);
         fb_yazi_saydam(mx + 150, y + 5, ROLLER[i], UM_VAR[i] ? tm->vurgu : sonuk);
     }
-    int pn = kervan2_uygulama_sayisi();
-    if (pn) {
+    paket_duzen_t d; paket_duzen(&d);
+    if (d.pn) {
         int y = my + 4 + TAMGA_N * UM_SATIR;
         fb_fill_rect(mx + 10, y + 12, mw - 20, 1, sonuk);
         fb_yazi_saydam(mx + 14, y + 5, "KURULU PAKETLER", sonuk);
-        for (int i = 0; i < pn; i++) {
+        for (int i = 0; i < d.gor; i++) {
             char dosya[13], paket[24];
-            if (kervan2_uygulama_al(i, dosya, paket) != 0) continue;
+            if (kervan2_uygulama_al(d.bas + i, dosya, paket) != 0) continue;
             int yy = y + (i + 1) * UM_SATIR;
             fb_yazi_saydam(mx + 14, yy + 5, dosya, tm->gorev_yazi);
             fb_yazi_saydam(mx + 150, yy + 5, paket, sonuk);
+        }
+        if (d.sayfali) {
+            char e[40]; int k = 0;
+            const char *on = "sonraki sayfa >> ";
+            while (*on) e[k++] = *on++;
+            int a = g_uyg_sayfa + 1, b = d.sayfa_n;
+            if (a >= 10) e[k++] = (char)('0' + a / 10);
+            e[k++] = (char)('0' + a % 10); e[k++] = '/';
+            if (b >= 10) e[k++] = (char)('0' + b / 10);
+            e[k++] = (char)('0' + b % 10); e[k] = 0;
+            fb_yazi_saydam(mx + 14, y + (d.adim + 1) * UM_SATIR + 5, e, tm->vurgu);
         }
     }
 }
