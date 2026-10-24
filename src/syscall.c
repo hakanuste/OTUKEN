@@ -1001,22 +1001,29 @@ static uint64_t sys_ag_bilgi_impl(uint64_t cikti, uint64_t a2, uint64_t a3, uint
 }
 
 /* --- 1.4.9: donanim rastgeleligi ve gercek saat (TLS icin) --- */
-static int rng_turu = -1;             /* 0 yok, 1 RDRAND, 2 RDSEED(+RDRAND) */
+static int rng_turu = -1;             /* 0 yok, 1 RDRAND, 2 RDSEED (RDRAND ayrica olabilir) */
+static int rng_rdrand = 0;            /* 1.5: RDRAND AYRI CPUID biti; RDSEED varken de olmayabilir */
 static void rng_bul(void) {
     uint32_t a, b, c, d;
     __asm__ volatile ("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1), "c"(0));
     int rdrand = (c >> 30) & 1;
     __asm__ volatile ("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(7), "c"(0));
     int rdseed = (b >> 18) & 1;
+    rng_rdrand = rdrand;
     rng_turu = rdseed ? 2 : rdrand ? 1 : 0;
 }
+/* 1.5 (Codex): RDSEED var, RDRAND yoksa (CPUID'de RDRAND'i gizleyen sanal
+ * makine) yedek RDRAND yolu #UD verirdi. Yedeğe yalnız RDRAND varsa geçilir;
+ * yoksa bütün denemeler RDSEED ile yapılır, hepsi başarısızsa -1. */
 static int rng_64(uint64_t *v) {
     for (int deneme = 0; deneme < 32; deneme++) {
         uint8_t ok;
-        if (rng_turu == 2 && deneme < 16)
+        if (rng_turu == 2 && (deneme < 16 || !rng_rdrand))
             __asm__ volatile ("rdseed %0; setc %1" : "=r"(*v), "=qm"(ok));
-        else
+        else if (rng_rdrand)
             __asm__ volatile ("rdrand %0; setc %1" : "=r"(*v), "=qm"(ok));
+        else
+            return -1;
         if (ok) return 0;
         __asm__ volatile ("pause");
     }
