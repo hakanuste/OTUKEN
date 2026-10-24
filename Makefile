@@ -172,7 +172,7 @@ uygulama-disk: $(UYG_ELF)
 # imzalanir: o imaj yalniz TANI yapisinda kabul edilir.
 ERGENEKON_DOSYALAR = OTUKEN.TXT NOTLAR.TXT BELGE1.TXT BELGE2.TXT BELGE3.TXT UMAY.ELF UMAY.US1 \
     SOZLUK.TXT SISTEM.ELF GORUNUM.ELF TULPAR.ELF KERVAN.ELF ORNEK.KRV ULAK.ELF DEDE.ELF TORE.ELF \
-    TIMUR.ELF KUT.ELF ASENA.ELF ERGENEKO.ELF TAMGA.ELF
+    TIMUR.ELF KUT.ELF ASENA.ELF ERGENEKO.ELF TAMGA.ELF ARAYICI.ELF UMAY.DRL
 ergenekon.krv: diskfiles.img araclar/kervan_paketle.py
 	rm -rf ergenekon_kaynak; mkdir ergenekon_kaynak
 	for f in $(ERGENEKON_DOSYALAR); do mcopy -n -i diskfiles.img ::$$f ergenekon_kaynak/$$f || exit 1; done

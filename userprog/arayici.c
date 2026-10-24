@@ -358,7 +358,8 @@ static void arastir(const char *soru, char *yanit_c, int yn) {
         if (belge_yaz(yanit.son_url[0] ? yanit.son_url : sonuc[r], sayfa.baslik, cumleler, adlar[adet]) == 0) {
             char s[64]; sayi(s, (uint64_u)c); ekle(s, sizeof s, " cumle -> "); ekle(s, sizeof s, adlar[adet]);
             gunluk("belge: ", s);
-            ekle(yanit_c, yn, adlar[adet]); ekle(yanit_c, yn, " ");
+            /* yanıt tek IPC iletisi (96 bayt): en çok 5 ad; fazlası rafta/DIZIN.TXT'de */
+            if (adet < 5) { ekle(yanit_c, yn, adlar[adet]); ekle(yanit_c, yn, " "); }
             adet++;
         }
     }
@@ -390,13 +391,19 @@ int main(void) {
         char *nl = istek; while (*nl && *nl != '\n') nl++;
         if (!*nl) { gunluk("bicimsiz istek", 0); continue; }
         *nl = 0;
-        const char *kime = istek, *soru = nl + 1;
+        /* ilk satır: "<yanit_kapisi> <istek_kimligi>"; yanıt kimlikle başlar */
+        char *kime = istek, *kimlik = istek;
+        while (*kimlik && *kimlik != ' ') kimlik++;
+        if (*kimlik) *kimlik++ = 0;
+        const char *soru = nl + 1;
         gunluk("istek: ", soru);
-        static char y[96];
+        static char y[96], ty[112];
         arastir(soru, y, sizeof y);
-        gunluk("yanit: ", y);
+        kopya(ty, sizeof ty, kimlik[0] ? kimlik : "0"); ekle(ty, sizeof ty, " "); ekle(ty, sizeof ty, y);
+        if (uzun(ty) > 95) ty[95] = 0;                    /* tek IPC iletisi */
+        gunluk("yanit: ", ty);
         int h = ipc_bul(kime);
-        if (h >= 0) ipc_gonder(h, 0, y, (uint32_u)uzun(y));
+        if (h >= 0) ipc_gonder(h, 0, ty, (uint32_u)uzun(ty));
         else gunluk("yanit kapisi yok: ", kime);
     }
 }

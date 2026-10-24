@@ -95,6 +95,9 @@ static int kademeli_ara(arastirma_t *a, const char *sorgu, int onek) {
 #define AG_ZAMAN_ASIMI_MS 300000u      /* QEMU (TCG) TLS'te yavaş */
 static up_tut_t g_ag_kapi = UP_GECERSIZ, g_ag_yanit = UP_GECERSIZ;
 static const arastirma_t *g_ag_sahip = 0;
+/* 1.5 (Codex): istek kimliği. Zaman aşımına uğrayan bir isteğin GEÇ gelen
+ * yanıtı sonraki araştırmanın sonucu sanılmasın: yanıt kimliği tutmazsa atılır. */
+static uint32_t g_ag_kimlik = 0;
 
 static int ag_gonder(arastirma_t *a) {
     if (g_ag_sahip) return 0;                         /* sıra bekle */
@@ -103,7 +106,8 @@ static int ag_gonder(arastirma_t *a) {
     if (g_ag_yanit == UP_GECERSIZ) g_ag_yanit = up_kapi_ac("umay-ag");
     if (g_ag_yanit == UP_GECERSIZ) return -1;
     char istek[400];
-    um_kopya(istek, sizeof istek, "umay-ag\n");
+    g_ag_kimlik++;
+    um_bicim(istek, sizeof istek, "umay-ag %u\n", g_ag_kimlik);
     for (int t = 0; t < a->terim_sayi; t++) {
         if (t) um_ekle(istek, sizeof istek, " ");
         um_ekle(istek, sizeof istek, a->terim[t]);
@@ -111,7 +115,8 @@ static int ag_gonder(arastirma_t *a) {
     if (up_gonder(g_ag_kapi, istek, um_uzun(istek)) < 0) return -1;
     g_ag_sahip = a;
     a->ag_bas_ms = up_ms();
-    gun_yaz("ARAŞTIRMA: ağa soruldu: %s", istek + 8);
+    const char *terimler = istek; while (*terimler && *terimler != '\n') terimler++;
+    gun_yaz("ARAŞTIRMA: ağa soruldu (istek %u): %s", g_ag_kimlik, *terimler ? terimler + 1 : terimler);
     return 1;
 }
 
@@ -187,12 +192,20 @@ static int ag_adim(arastirma_t *a) {
         return 1;
     }
     char y[100];
-    int n = up_al(g_ag_yanit, y, sizeof y - 1, 0);
-    if (n > 0) {
+    int n;
+    while ((n = up_al(g_ag_yanit, y, sizeof y - 1, 0)) > 0) {
         y[n] = 0;
+        /* "<kimlik> T ..." / "<kimlik> H ..." */
+        uint32_t k = 0; const char *p = y;
+        while (*p >= '0' && *p <= '9') k = k * 10 + (uint32_t)(*p++ - '0');
+        if (p == y || *p != ' ' || k != g_ag_kimlik) {
+            gun_yaz("ARAŞTIRMA: eski/bicimsiz ag yaniti atildi: %s", y);
+            continue;                                  /* geç gelen eski yanıt */
+        }
+        p++;
         g_ag_sahip = 0;
-        gun_yaz("ARAŞTIRMA: ağdan yanıt: %s", y);
-        ag_yanitini_isle(a, y);
+        gun_yaz("ARAŞTIRMA: ağdan yanıt (istek %u): %s", k, p);
+        ag_yanitini_isle(a, p);
         a->ag_durum = 2;
         return 0;
     }
