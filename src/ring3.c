@@ -212,7 +212,14 @@ void ring3_run_shell(void) {
 #define UMAY_YIGIN_SAYFA 32
 /* 64 KB sinir UMAY'i KESIK okutuyordu (ikili 106 KB). Sinir buyutuldu;
  * sinirdan buyuk dosya artik SESSIZCE KESILMEZ, acikca reddedilir. */
-#define UMAY_AZAMI_BOYUT (512 * 1024)
+/* 1.5: Dede Korkut ses motoru (OSES + Turkce sesletim tablolari, ~470 KB)
+ * UMAY'a girdi: ikili 512 KB'i asar. Sinir 1 MB. */
+#define UMAY_AZAMI_BOYUT (1024 * 1024)
+/* 1.5: UMAY'in heap siniri. Ses modeli (DEDE.OSES, 64 MB float32) +
+ * motorun calisma alani (96 MB; uzun cumle parcalanir, tepe ~68 MB) +
+ * UMAY'in kendi obegi. Varsayilan gorev siniri (4 MB) degismedi. */
+/* 1.5: + US1 egiticisi (iki alan x 40 MB: buyutmede eski ve yeni model) */
+#define UMAY_HEAP_AZAMI  (320ULL * 1024 * 1024)
 
 int ring3_umay_calistir(const char *yol) {
     /* SMP adim 6: asagidaki 512 KB statik tampon tek kopya. Ikinci bir
@@ -229,7 +236,7 @@ int ring3_umay_calistir(const char *yol) {
         /* 1.4.7: AÇIK UMAY profili (1.4.6'daki 4 bit + eskiden hic
          * denetlenmeyen cagrilarin yetkileri). DISK_YAZ/SUREC_OLUSTUR yine YOK. */
         task_t *ben = scheduler_current_task();
-        if (ben) { tore_set_capabilities((uint32_t)ben->id, TORE_PROFILE_UMAY); tore_yazma_koku((uint32_t)ben->id, UMAY_YAZMA_KOKU); }
+        if (ben) { tore_set_capabilities((uint32_t)ben->id, TORE_PROFILE_UMAY); tore_yazma_koku((uint32_t)ben->id, UMAY_YAZMA_KOKU); ben->heap_azami = UMAY_HEAP_AZAMI; }
     }
 
     static uint8_t elf_tampon[UMAY_AZAMI_BOYUT];

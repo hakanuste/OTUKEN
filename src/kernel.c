@@ -7,6 +7,7 @@
 #include "dede.h"
 #include "modul.h"
 #include "smap.h"
+#include "fpu.h"
 #include "ergenekon.h"
 #include "fat16_ic.h"
 #include "cpu.h"
@@ -49,6 +50,7 @@
 #include "aghizmet.h"
 #include "timur.h"
 #include "tore.h"
+#include "uygulama.h"
 #include "kut.h"
 #include "umay.h"
 #include "kararlilik.h"
@@ -60,6 +62,7 @@
 #include "sinama_uyg.h"
 #include "sinama_asena.h"
 #include "sinama_dizin.h"
+#include "sinama_sse.h"
 #include "ses.h"
 #include "ag.h"
 #include "rtc.h"
@@ -348,6 +351,23 @@ static void ipc_istemci_gorev(void) {
 }
 
 static volatile int g_shell_active = 0;
+
+/* 1.5: ARAYICI — UMAY'in ag arastirmacisi; KENDI adres alaninda, dar
+ * profille. Yazma koku yetki kaydi acildiktan SONRA verilir. */
+static void arayici_giris(void) {
+    task_t *ben = scheduler_current_task();
+    if (ben) {
+        tore_set_capabilities((uint32_t)ben->id, TORE_PROFILE_ARAYICI);
+        tore_yazma_koku((uint32_t)ben->id, ARAYICI_YAZMA_KOKU);
+    }
+    uygulama_elf_calistir("/ARAYICI.ELF", TORE_PROFILE_ARAYICI);
+}
+static void arayici_baslat(void) {
+    int fd = vfs_open("/ARAYICI.ELF");
+    if (fd < 0) { serial_write("ARAYICI: diskte yok, ag arastirmasi kapali\n"); return; }
+    vfs_close(fd);
+    if (!process_create("Arayici", arayici_giris)) serial_write("ARAYICI: surec olusturulamadi\n");
+}
 
 /* UMAY gorevi: diskteki programi yukleyip Ring3'e gecer. */
 static void umay_gorev_entry(void) {
@@ -1048,6 +1068,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     }
     /* 1.4.9: SMEP + SMAP (islemci destekliyorsa). AP'ler CR4'u BSP'den alir. */
     {
+        if (fpu_ac() == 0) serial_write("guvenlik: x87/SSE etkin (gorev basina FXSAVE)\n");
+        else serial_write("[UYARI] islemci FXSR/SSE2 desteklemiyor: Ring3 SSE kullanamaz\n");
         int s = smep_smap_ac();
         serial_write((s & 1) ? "guvenlik: SMEP etkin" : "guvenlik: SMEP yok (islemci desteklemiyor)");
         serial_write((s & 2) ? ", SMAP etkin\n" : ", SMAP yok (islemci desteklemiyor)\n");
@@ -2375,6 +2397,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
      * olmadan bir calisma zamani baslatmak yanlistir (gercekten
      * yasandi: UMAY, IPC katmanindan ONCE calisip portunu acamadi). */
     thread_create("UMAY", umay_gorev_entry);
+    arayici_baslat();          /* 1.5: UMAY'in ag arastirmacisi */
 
     /* SMP adim 5: gorevler ve zamanlayici hazir - AP'ler katilsin. */
     if (OTUKEN_SMP_DAGITIM) smp_dagitimi_ac();
@@ -2393,7 +2416,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     /* 1.4.9: KERVAN v2 (yalniz sinama diskinde K2*.KRV varsa) */
     if (OTUKEN_TANI_MODU) sinama_kervan_baslat();
     /* 1.4.9: Uygulamalar menusu ve ULAK/DEDE/TORE/TIMUR/KUT */
-    if (OTUKEN_TANI_MODU) sinama_dizin_baslat();    /* 1.4.9: alt dizine yazma + yazma koku */
+    if (OTUKEN_TANI_MODU) sinama_dizin_baslat();
+    if (OTUKEN_TANI_MODU) sinama_sse_baslat();      /* 1.4.9: x87/SSE durumu korunuyor mu */    /* 1.4.9: alt dizine yazma + yazma koku */
     if (OTUKEN_TANI_MODU) sinama_asena_baslat();   /* 1.4.9: ASENA/ERGENEKON (ASENA.SNM varsa) */
     if (OTUKEN_TANI_MODU) sinama_uyg_baslat();
 

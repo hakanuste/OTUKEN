@@ -30,7 +30,7 @@ enum {
     SYS_MKDIR = 27, SYS_YETKI = 28, SYS_PROC_LISTE = 29,
     SYS_PEN_SUN = 30, SYS_PEN_OLAY = 31,
     SYS_SES_NOTA = 32, SYS_OZAN_SOYLE = 33, SYS_DEDE_KONUS = 35,
-    SYS_DOSYA_EKLE = 54
+    SYS_DOSYA_EKLE = 54, SYS_SES_PCM = 57
 };
 
 /* ÖTÜKEN TÖRE yetenek bitleri (include/tore.h) */
@@ -404,6 +404,10 @@ void up_ozan_soyle(const char *metin, int hiz) {
 int up_dede_konus(const char *metin) {
     if (!metin) return -1;
     return (int)sys(SYS_DEDE_KONUS, (int64_t)(uintptr_t)metin, 0, 0, 0);
+}
+
+int up_ses_pcm(const int16_t *pcm, uint32_t kare) {
+    return (int)sys(SYS_SES_PCM, (int64_t)(uintptr_t)pcm, (int64_t)kare, 0, 0);
 }
 
 void up_ses_nota(uint32_t hz, uint32_t ms) {

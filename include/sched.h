@@ -31,6 +31,7 @@ typedef struct task {
      * heap sinirlari var. */
     uint64_t heap_baslangic;
     uint64_t heap_son;
+    uint64_t heap_azami;  /* 1.5: 0 = varsayilan (USER_HEAP_AZAMI); UMAY ses modeli icin buyuk */
     int      heap_yuva;   /* tahsis edilen heap penceresi (-1 = yok) */
     /* SMP adim 5 */
     volatile int calisiyor;        /* bir cekirdekte su an calisiyor */
@@ -48,6 +49,9 @@ typedef struct task {
      * denetlenir; hic Ring3'e gecmemis cekirdek gorevi (kendi syscall
      * katmanini dogrudan cagiran, orn. iskence sinamalari) zaten Ring0'dadir. */
     int      kullanici;
+    /* 1.4.9: x87/SSE durumu (FXSAVE, 16 hizalı); fx_ham kfree içindir. 0: alan yok */
+    uint8_t *fx;
+    void    *fx_ham;
 } task_t;
 
 /* Zamanlayiciyi baslatir. Bu fonksiyonu CAGIRAN mevcut yurutme baglami

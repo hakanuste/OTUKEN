@@ -31,6 +31,9 @@ const ses_denetleyici_t *ses_durum(void);
  * ornek_sayisi = KARE sayisi (her kare = sol+sag = 4 bayt).
  * Basari: 0, hata: -1 */
 int  ses_cal(const int16_t *pcm, uint32_t kare_sayisi);
+/* 1.5: beklemeden calma kuyruguna verir; alinan KARE sayisi (0: halka
+ * dolu), aygit yoksa -1. */
+int  ses_cal_dene(const int16_t *pcm, uint32_t kare_sayisi);
 
 /* Calmayi durdurur. */
 void ses_dur(void);

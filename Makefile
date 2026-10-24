@@ -15,7 +15,7 @@ SRC_C    = src/kernel.c src/idt.c src/pic.c src/fb.c \
            src/disk.c src/fat16.c src/fat16_dizin.c src/pmm.c src/vmm.c src/heap.c \
            src/timer.c src/sched.c src/process.c src/thread.c \
            src/spinlock.c src/mutex.c src/msgqueue.c src/pipe.c src/shm.c \
-           src/syscall.c src/tss.c src/ring3.c src/vfs.c src/vfs_fat16.c src/disk_cache.c src/fat32.c src/vfs_fat32.c src/driver.c src/pci.c src/ahci.c src/nvme.c src/ulak.c src/timur.c src/tore.c src/log.c src/elf.c src/tcp.c src/ag.c src/rtc.c src/takvim.c src/bellek.c src/socket.c src/dhcp.c src/dns.c src/kut.c src/ipc2.c src/usb.c src/uhci.c src/iskence.c src/ses.c src/multiboot2.c src/gpt.c src/cpu.c src/smp.c src/gecikme.c src/umay.c src/kararlilik.c src/servis.c src/ulgen.c src/ekran.c src/ekran_sinama.c src/tema.c src/tamga.c src/duvar.c src/simge.c src/tamga_gorsel.c src/orbitron.c src/ezgi.c src/ozan_ses.c src/dede.c src/ulgen_theme.c src/kervan.c src/kervan2.c src/kervan_anahtar.c src/kervan_ornek.c src/aghizmet.c src/sinama147.c src/sinama148.c src/sinama149.c src/sinama_kervan.c src/sinama_uyg.c src/modul.c src/smap.c src/asena.c src/ergenekon.c src/sinama_asena.c src/sinama_dizin.c src/uygulama.c src/user_elf_blob.c src/shell_elf_blob.c
+           src/syscall.c src/tss.c src/ring3.c src/vfs.c src/vfs_fat16.c src/disk_cache.c src/fat32.c src/vfs_fat32.c src/driver.c src/pci.c src/ahci.c src/nvme.c src/ulak.c src/timur.c src/tore.c src/log.c src/elf.c src/tcp.c src/ag.c src/rtc.c src/takvim.c src/bellek.c src/socket.c src/dhcp.c src/dns.c src/kut.c src/ipc2.c src/usb.c src/uhci.c src/iskence.c src/ses.c src/multiboot2.c src/gpt.c src/cpu.c src/smp.c src/gecikme.c src/umay.c src/kararlilik.c src/servis.c src/ulgen.c src/ekran.c src/ekran_sinama.c src/tema.c src/tamga.c src/duvar.c src/simge.c src/tamga_gorsel.c src/orbitron.c src/ezgi.c src/ozan_ses.c src/dede.c src/ulgen_theme.c src/kervan.c src/kervan2.c src/kervan_anahtar.c src/kervan_ornek.c src/aghizmet.c src/sinama147.c src/sinama148.c src/sinama149.c src/sinama_kervan.c src/sinama_uyg.c src/modul.c src/smap.c src/fpu.c src/asena.c src/ergenekon.c src/sinama_asena.c src/sinama_dizin.c src/sinama_sse.c src/uygulama.c src/user_elf_blob.c src/shell_elf_blob.c
 
 OBJ = $(BOOT_ASM:.asm=.o) $(SRC_C:.c=.o)
 
@@ -87,7 +87,8 @@ userprog/shell.elf: userprog/crt0.uo userprog/shell.uo userprog/ulib.uo userprog
 # src/uygulama.c yukler). ulib.c'ye dokunulmaz: ekler ulib_uyg.c'de.
 UYG_ELF = userprog/sistem.elf userprog/gorunum.elf userprog/tulpar.elf userprog/kervan.elf \
           userprog/ulak.elf userprog/dede.elf userprog/toreg.elf userprog/timur.elf userprog/kut.elf \
-          userprog/asena.elf userprog/ergenekon.elf userprog/tamga.elf
+          userprog/asena.elf userprog/ergenekon.elf userprog/tamga.elf userprog/ssesina.elf \
+          userprog/arayici.elf
 userprog/sistem.uo userprog/gorunum.uo userprog/kervan.uo userprog/ulib_uyg.uo: userprog/uyg.h
 # (1.4.9: bu genel kural onceki commit'te yanlislikla silinmisti; ELF'ler
 # onceden derli oldugu icin fark edilmedi. Temiz agacta uygulama-disk kirilirdi.)
@@ -110,6 +111,11 @@ userprog/tls.uo: userprog/tls.c userprog/http.h userprog/uyg.h
 userprog/tls_kokler.uo: userprog/tls_kokler.c
 	$(UCC) $(UCFLAGS) -I$(BR_KOK)/inc -c $< -o $@
 # 1.4.9: sinama paketi uygulamasi (diske KONMAZ; tests/ag paketler, KERVAN agdan kurar)
+# 1.4.9: x87/SSE durum sınaması (TANI; diske konur, üretimde başlatılmaz)
+userprog/ssesina.uo: UCFLAGS += -msse -msse2
+userprog/ssesina.elf: userprog/crt0.uo userprog/ssesina.uo userprog/ulib.uo userprog/user.ld
+	$(LD) -m elf_x86_64 -T userprog/user.ld -nostdlib -o $@ userprog/crt0.uo userprog/ssesina.uo userprog/ulib.uo
+
 userprog/merhaba.elf: userprog/crt0.uo userprog/merhaba.uo userprog/ulib.uo userprog/ulib_uyg.uo userprog/user.ld
 	$(LD) -m elf_x86_64 -T userprog/user.ld -nostdlib -o $@ userprog/crt0.uo userprog/merhaba.uo userprog/ulib.uo userprog/ulib_uyg.uo
 userprog/tamga.uo: userprog/tamga.c userprog/uyg.h
@@ -128,6 +134,17 @@ userprog/http.uo userprog/tulpar.uo: userprog/uyg.h userprog/http.h userprog/htm
 userprog/html.uo: userprog/html.h userprog/uyg.h
 userprog/tulpar.elf: userprog/crt0.uo userprog/tulpar.uo userprog/html.uo userprog/ulib.uo userprog/ulib_uyg.uo $(AG_UO) $(TLS_UO) userprog/user.ld
 	$(LD) -m elf_x86_64 -T userprog/user.ld -nostdlib -o $@ userprog/crt0.uo userprog/tulpar.uo userprog/html.uo $(AG_UO) userprog/tls.uo userprog/tls_kokler.uo userprog/ulib.uo userprog/ulib_uyg.uo userprog/bearssl.a
+# 1.5: ARAYICI — UMAY'in ag arastirmacisi (ayri surec; ekran/klavye yok)
+# ARAYICI yalniz metin okur: daha kucuk sayfa sinirlariyla (bellek ~2 MB az).
+ARAYICI_HTML = -DH_MAX_KAR=120000 -DH_MAX_SATIR=6000 -DH_MAX_OGE=1500 -DH_MAX_METIN=65536
+userprog/arayici.uo: userprog/arayici.c userprog/uyg.h userprog/http.h userprog/html.h
+	$(UCC) $(UCFLAGS) $(ARAYICI_HTML) -I$(BR_KOK)/inc -c $< -o $@
+userprog/html_ara.uo: userprog/html.c userprog/html.h userprog/uyg.h
+	$(UCC) $(UCFLAGS) $(ARAYICI_HTML) -c $< -o $@
+userprog/arayici.elf: userprog/crt0.uo userprog/arayici.uo userprog/html_ara.uo userprog/ulib.uo userprog/ulib_uyg.uo $(AG_UO) $(TLS_UO) userprog/user.ld
+	$(LD) -m elf_x86_64 -T userprog/user.ld -nostdlib -o $@ userprog/crt0.uo userprog/arayici.uo userprog/html_ara.uo $(AG_UO) userprog/tls.uo userprog/tls_kokler.uo userprog/ulib.uo userprog/ulib_uyg.uo userprog/bearssl.a
+# sinama derlemesi (tests/arayici): sinama koku + ad eslemesi; diske yalniz sinamada konur
+arayici-sinama-nesneleri: userprog/crt0.uo userprog/html_ara.uo userprog/http.uo userprog/ulib.uo userprog/ulib_uyg.uo $(TLS_UO)
 # AGSINA sinama koku her kosuda uretilir: baglama tests/ag/calistir.sh'de.
 agsina-nesneleri: userprog/crt0.uo userprog/agsina.uo userprog/http.uo userprog/ulib.uo userprog/ulib_uyg.uo $(TLS_UO)
 ucflags-yaz:
@@ -146,6 +163,8 @@ uygulama-disk: $(UYG_ELF)
 	mcopy -o -i diskfiles.img userprog/asena.elf ::ASENA.ELF
 	mcopy -o -i diskfiles.img userprog/ergenekon.elf ::ERGENEKO.ELF
 	mcopy -o -i diskfiles.img userprog/tamga.elf ::TAMGA.ELF
+	mcopy -o -i diskfiles.img userprog/ssesina.elf ::SSESINA.ELF
+	mcopy -o -i diskfiles.img userprog/arayici.elf ::ARAYICI.ELF
 	mcopy -o -i diskfiles.img paketler/ORNEK.KRV ::ORNEK.KRV
 
 # 1.4.9: ERGENEKON dizge imaji = fabrika diskinin kok dizini (KERVAN v2 bicimi,
@@ -177,10 +196,26 @@ umay-disk: umay/kov/umay
 	mcopy -o -i diskfiles.img umay/kov/umay ::UMAY.ELF
 	mcopy -o -i diskfiles.img us1/umay.us1 ::UMAY.US1
 	mcopy -o -i diskfiles.img us1/sozluk.txt ::SOZLUK.TXT
+	python3 us1/arac/derlem.py drl us1/umay.drl >/dev/null
+	mcopy -o -i diskfiles.img us1/umay.drl ::UMAY.DRL
+
+# --- 1.5: Dede Korkut sesi (UMAY icinde OSES) ---
+# Model (DEDE.SES, ~64 MB float32) 16 MB'lik diskfiles.img'e sigmaz ve
+# depoya konmaz (dede_model/ .gitignore'da). Bu hedef diskfiles.img'in
+# butun icerigini 128 MB'lik yeni bir FAT16 imajina tasir ve modeli ekler.
+# Model: umay/ses/oses/arac/ses_cevir.py ile ONNX'ten uretilir.
+DEDE_MODEL ?= dede_model/dede.oses
+diskfiles_dede.img: diskfiles.img $(DEDE_MODEL)
+	rm -rf .dede_disk && mkdir .dede_disk && mcopy -s -n -i diskfiles.img '::*' .dede_disk/
+	rm -f $@ && mkfs.fat -F 16 -s 16 -n OTUKEN -C $@ 131072 >/dev/null
+	mcopy -s -i $@ .dede_disk/* ::
+	mcopy -o -i $@ $(DEDE_MODEL) ::DEDE.SES
+	rm -rf .dede_disk
+dede-disk: diskfiles_dede.img
 
 kullanici: src/shell_elf_blob.c
 
 # UMAY paketi uyumlulugu (kur.sh 'make userland' cagirir)
 userland: src/shell_elf_blob.c
 
-.PHONY: all iso clean kullanici userland umay-disk uygulama-disk agsina-nesneleri ucflags-yaz umay/kov/umay
+.PHONY: all iso clean kullanici userland umay-disk dede-disk arayici-sinama-nesneleri uygulama-disk agsina-nesneleri ucflags-yaz umay/kov/umay

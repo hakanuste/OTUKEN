@@ -309,8 +309,14 @@ static uint64_t sys_exit_impl(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4
  * Artik her gorev kendi heap araligina sahiptir; aralik gorev
  * kimligine gore ayrilir. */
 #define USER_HEAP_TABAN   0x8001000000ULL
-#define USER_HEAP_ADIM    (16ULL * 1024 * 1024)   /* gorev basina pencere */
-#define USER_HEAP_AZAMI   (4ULL * 1024 * 1024)    /* gorev basina kullanilabilir */
+/* 1.5: pencere 16 MB -> 256 MB. 32 pencere x 256 MB = 8 GB sanal alan
+ * (1.5: pencere 512 MB -> 0x8001000000 .. 0x8401000000; UMAY'in ikilisi
+ * bunun OTESINDE, 0x9000000000'da); fiziksel sayfa yalniz sbrk'te alinir.
+ * Varsayilan sinir 4 MB'ta kaldi; yalniz cekirdegin acikca buyuttugu
+ * gorev (UMAY: ses modeli + calisma alani) penceresinin tamamina yakin
+ * buyuyebilir. */
+#define USER_HEAP_ADIM    (512ULL * 1024 * 1024)  /* gorev basina pencere (1.5: 512 MB, 32 x 512 MB = 16 GB sanal) */
+#define USER_HEAP_AZAMI   (4ULL * 1024 * 1024)    /* varsayilan gorev siniri */
 
 /* Heap penceresi yuva haritasi: her bit bir pencereyi temsil eder. */
 #define HEAP_YUVA_SAYISI 32
@@ -386,10 +392,12 @@ static uint64_t sys_sbrk_impl(uint64_t increment, uint64_t a2, uint64_t a3, uint
     if (increment == 0) return eski_son;
 
     /* Tasma ve sinir denetimi */
-    if (increment > USER_HEAP_AZAMI) return (uint64_t)-1;
+    uint64_t sinir = gorev->heap_azami ? gorev->heap_azami : USER_HEAP_AZAMI;
+    if (sinir > USER_HEAP_ADIM) sinir = USER_HEAP_ADIM;          /* pencereyi asamaz */
+    if (increment > sinir) return (uint64_t)-1;
     uint64_t yeni_son = eski_son + increment;
     if (yeni_son < eski_son) return (uint64_t)-1;                /* tasma */
-    if (yeni_son > gorev->heap_baslangic + USER_HEAP_AZAMI) {
+    if (yeni_son > gorev->heap_baslangic + sinir) {
         log_write(LOG_UYARI, "SYSCALL", "sbrk: gorev heap siniri asildi");
         return (uint64_t)-1;
     }
@@ -894,6 +902,18 @@ static uint64_t sys_dede_konus_impl(uint64_t metin_p, uint64_t a2, uint64_t a3, 
     return (uint64_t)(int64_t)dede_konus_sirala(metin);
 }
 
+/* 1.5: UMAY'in urettigi konusma PCM'i (Dede Korkut, OSES). Beklemez:
+ * halkada yer kalmadiysa 0 doner, uygulama sonra yine dener. Veri gorev
+ * tamponundan (4 KB = 1024 kare) gecer; kullanici isaretcisi dogrulanir. */
+static uint64_t sys_ses_pcm_impl(uint64_t pcm_p, uint64_t kare, uint64_t a3, uint64_t a4) {
+    (void)a3; (void)a4;
+    if (kare == 0 || kare > SC_TAMPON_BOYUT / 4) return (uint64_t)-1;
+    int16_t *t = (int16_t *)gorev_tamponu();
+    if (!t) return (uint64_t)-1;
+    if (kullanicidan_atomik_oku(t, pcm_p, kare * 4) != 0) return (uint64_t)-1;
+    return (uint64_t)(int64_t)ses_cal_dene(t, (uint32_t)kare);
+}
+
 static uint64_t sys_tema_impl(uint64_t ad_p, uint64_t a2, uint64_t a3, uint64_t a4) {
     (void)a2; (void)a3; (void)a4;
     char ad[32];
@@ -1142,6 +1162,7 @@ static const sc_politika_t sc_politika[SYS_MAX] = {
     [SYS_DOSYA_EKLE]   = { KUT_DISK_WRITE, 1, "dosya sonuna ekle" },
     [SYS_DOSYA_SIL]    = { KUT_DISK_WRITE, 1, "dosya / bos dizin sil" },
     [SYS_KERVAN_YUKLE] = { KUT_KERVAN,     1, "indirilen imzali paketi kur" },
+    [SYS_SES_PCM]      = { KUT_SES,        1, "konusma PCM'i cal (beklemez)" },
 };
 
 /* --- 1.4.9: ULAK / TORE / TIMUR / KUT uygulamalari (salt okunur) --- */
@@ -1448,6 +1469,7 @@ void syscall_init(void) {
     syscall_table[SYS_DOSYA_EKLE]    = sys_dosya_ekle_impl;
     syscall_table[SYS_DOSYA_SIL]     = sys_dosya_sil_impl;
     syscall_table[SYS_KERVAN_YUKLE]  = sys_kervan_yukle_impl;
+    syscall_table[SYS_SES_PCM]       = sys_ses_pcm_impl;
     syscall_table[SYS_PENCERE_AC]  = sys_pencere_ac_impl;
     syscall_table[SYS_PEN_DOLDUR]  = sys_pen_doldur_impl;
     syscall_table[SYS_PEN_YAZI]    = sys_pen_yazi_impl;

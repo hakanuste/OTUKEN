@@ -5,6 +5,11 @@
 #include "disk_cache.h"
 #include "serial.h"
 
+/* 1.5: FAT16 zincir konum onbellegi (bkz. fat16_read_file_at__ic) */
+static struct { int gecerli; uint64_t kusak; uint32_t baglama; uint16_t ilk; uint32_t sira; uint16_t kume; } zincir_ok;
+static uint32_t baglama_sayaci = 0;
+
+
 static int fat16_bagli = 0;   /* mount BASARILI mi */
 static uint16_t bytes_per_sector;
 static uint8_t  sectors_per_cluster;
@@ -41,6 +46,7 @@ int fat16_mount(void) {
     }
     serial_write("BITIG dosya sistemi (fat16) baglaniyor...\n");
     fat16_bagli = 1;
+    baglama_sayaci++;               /* 1.5: zincir onbellegi eski birime bakmasin */
 
     bytes_per_sector    = rd_u16(&sector[11]);
     sectors_per_cluster = sector[13];
@@ -211,11 +217,24 @@ static int fat16_read_file_at__ic(const fat16_dirent_t *entry, uint8_t *buf,
     uint32_t clusters_to_skip = offset / cluster_size_bytes;
     uint32_t byte_offset_in_cluster = offset % cluster_size_bytes;
 
+    /* 1.5: kume zinciri her cagride bastan yuruyordu: 4 KB'lik okumalarla
+     * 64 MB'lik bir dosya (UMAY ses modeli) karesel surede (~5 dk)
+     * okunuyordu. Son konum saklanir; ayni dosyada ileri okuma oradan
+     * surer. Herhangi bir disk yazimi ya da yeniden baglama onbellegi
+     * gecersiz kilar (zincir degismis olabilir). */
     uint16_t cluster = entry->first_cluster;
-    for (uint32_t i = 0; i < clusters_to_skip; i++) {
+    uint32_t i0 = 0;
+    uint64_t kusak = disk_cache_yazim_kusagi();
+    if (zincir_ok.gecerli && zincir_ok.kusak == kusak && zincir_ok.baglama == baglama_sayaci &&
+        zincir_ok.ilk == entry->first_cluster && zincir_ok.sira <= clusters_to_skip) {
+        cluster = zincir_ok.kume; i0 = zincir_ok.sira;
+    }
+    for (uint32_t i = i0; i < clusters_to_skip; i++) {
         cluster = fat16_next_cluster(cluster);
         if (cluster == 0 || cluster >= 0xFFF8) return 0;
     }
+    zincir_ok.gecerli = 1; zincir_ok.kusak = kusak; zincir_ok.baglama = baglama_sayaci;
+    zincir_ok.ilk = entry->first_cluster; zincir_ok.sira = clusters_to_skip; zincir_ok.kume = cluster;
 
     uint32_t remaining = entry->size - offset;
     uint32_t total_read = 0;

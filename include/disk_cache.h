@@ -10,6 +10,7 @@ int disk_cache_read_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, void *
 /* Asama 27: yazma - onbellegi de GUNCELLER (write-through). Onbellek
  * guncellenmezse sonraki okumalar ESKI veriyi dondururdu. */
 int disk_cache_write_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, const void *buf);
+uint64_t disk_cache_yazim_kusagi(void);   /* 1.5: her yazimda artan sayac */
 
 void disk_cache_stats(uint32_t *hits, uint32_t *misses);
 #endif

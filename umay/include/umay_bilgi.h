@@ -21,7 +21,7 @@
 #define UMAY_BILGI_H
 #include "umay.h"
 
-#define BILGI_KAYIT_MAX   96
+#define BILGI_KAYIT_MAX   192   /* 1.5: ağ rafı için (en çok 96 ağ kaydı) */
 #define BILGI_KELIME_MAX  96
 #define BILGI_ICERIK_MAX  3072
 #define BILGI_ALINTI_MAX  800
@@ -81,7 +81,10 @@ const char *bilgi_alan_dizini(int i);          /* 0..12 depo dizin adları */
 int  bilgi_dizin_kur(const char *kok);         /* 13 alt dizini açar */
 int  bilgi_doktrin_yukle(void);
 int  bilgi_tara(const char *kok);              /* üstveriye göre indeksler */
+int  bilgi_belge_ekle(const char *yol);        /* 1.5: tek belge (ağ rafı: kaynak = adres) */
+int  bilgi_ag_rafi_yukle(void);                /* 1.5: /KUT/UMAY/AG/DIZIN.TXT */
 int  bilgi_sayi(void);
+int  bilgi_kayit(int i, const char **kategori, const char **baslik, const char **kaynak, const char **icerik);
 int  bilgi_kategori_sayisi(const char *kategori);
 
 int  bilgi_kayit_kat(const char *kategori, const char *baslik, const char *kaynak,

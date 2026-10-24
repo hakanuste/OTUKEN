@@ -20,7 +20,11 @@ PHDRS
 
 SECTIONS
 {
-    . = 0x8000A00000;
+    /* 1.5: UMAY (ses motoruyla ~2,3 MB) 0x8000A00000'dan baslayinca
+     * kabugun yiginina (0x8000C00000) tasiyordu. Heap pencerelerinin
+     * (1.5: 512 MB x 32 -> 0x8001000000 .. 0x8401000000) otesine tasindi. Yigin yerinde
+     * kaldi (ring3.c UMAY_YIGIN_VIRT). */
+    . = 0x9000000000;
 
     .text : { *(.text*) } :kod
     .rodata : { *(.rodata*) } :kod

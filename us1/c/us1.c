@@ -543,8 +543,17 @@ int us1_ileri(us1_model_t *m, const uint32_t *imler, uint32_t T, int32_t *mantik
 }
 
 /* =================== artımlı üretim (KV önbelleği) =================== */
-static int32_t  g_kk[US1_AZAMI_KATMAN][US1_AZAMI_BAGLAM * US1_AZAMI_D];
-static int32_t  g_vk[US1_AZAMI_KATMAN][US1_AZAMI_BAGLAM * US1_AZAMI_D];
+/* 1.5: KV önbelleği. Sabit bölge 4 katmanlık (bss büyümesin); daha çok
+ * katmanlı (büyümüş) model için çağıran us1_kv_kur ile tampon verir. */
+#define US1_KV_SABIT_KATMAN 4
+static int32_t  g_kv_sabit[2 * US1_KV_SABIT_KATMAN * US1_AZAMI_BAGLAM * US1_AZAMI_D];
+static int32_t *g_kv = g_kv_sabit;
+static uint32_t g_kv_katman = US1_KV_SABIT_KATMAN;
+void us1_kv_kur(int32_t *tampon, uint32_t katman) {
+    if (tampon && katman >= US1_KV_SABIT_KATMAN) { g_kv = tampon; g_kv_katman = katman; }
+    else { g_kv = g_kv_sabit; g_kv_katman = US1_KV_SABIT_KATMAN; }
+}
+uint32_t us1_kv_katman(void) { return g_kv_katman; }
 static int32_t  g_xt[US1_AZAMI_D], g_qt[US1_AZAMI_D];
 static uint32_t g_konum = 0;
 
@@ -553,6 +562,7 @@ uint32_t us1_konum(void) { return g_konum; }
 
 int us1_adim(us1_model_t *m, uint32_t im, int32_t *mantik)
 {
+    if (m->katman > g_kv_katman) return US1_BOZUK;     /* 1.5: KV tamponu bu katman sayısına yetmiyor (us1_kv_kur) */
     if (!m || !mantik || im >= m->sozluk) return US1_BOZUK;
     if (g_konum >= m->baglam) return US1_DOLU;
     uint32_t d = m->d, bs = d / m->bas, t = g_konum;
@@ -563,7 +573,8 @@ int us1_adim(us1_model_t *m, uint32_t im, int32_t *mantik)
 
     for (uint32_t L = 0; L < m->katman; L++) {
         us1_katman_t *k = &m->kat[L];
-        int32_t *kk = g_kk[L], *vk = g_vk[L];
+        int32_t *kk = g_kv + (uint32_t)L * US1_AZAMI_BAGLAM * US1_AZAMI_D;
+        int32_t *vk = g_kv + (g_kv_katman + (uint32_t)L) * US1_AZAMI_BAGLAM * US1_AZAMI_D;
 
         rmsnorm(g_xt, &k->n1, d, g_h);
         IZ("n1", L, -1, t, g_h, d);

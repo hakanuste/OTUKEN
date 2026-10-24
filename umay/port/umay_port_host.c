@@ -136,3 +136,4 @@ void up_ses_nota(uint32_t hz, uint32_t ms) { (void)hz; (void)ms; }
 
 /* Ana bilgisayarda ses aygiti yok. */
 int up_dede_konus(const char *metin) { (void)metin; return -1; }
+int up_ses_pcm(const int16_t *pcm, uint32_t kare) { (void)pcm; (void)kare; return -1; }   /* ana makinede ses aygıtı yok */

@@ -93,6 +93,9 @@ void     up_ozan_soyle(const char *metin, int hiz);
 void     up_ses_nota(uint32_t hz, uint32_t ms);
 /* Dede Korkut'un GERÇEK sesi: Türkçe formant sentezi. */
 int      up_dede_konus(const char *metin);
+/* 1.5: 48 kHz ikili kanal 16 bit PCM'i ses aygıtına verir, BEKLEMEZ.
+ * Alınan kare sayısı (0: halka dolu, sonra yine dene), aygıt yoksa -1. */
+int      up_ses_pcm(const int16_t *pcm, uint32_t kare);
 
 /* Yalniz ana makine portu (umay_port_host.c) ve sinamalar: yetki maskesini ayarlar. */
 void host_yetki_ayarla(uint32_t y);

@@ -24,4 +24,8 @@ int  ses_soyle(const char *metin);
 ses_surucu_t *ses_bos_surucu(void);   /* her çağrıya UM_DESTEKSIZ döner */
 /* Dede Korkut: metni kopuz ezgisine çevirir. Konuşma DEĞİL. */
 ses_surucu_t *ses_ozan_surucu(void);
+/* 1.5: Dede Korkut'un GERÇEK sesi — UMAY içinde VITS sentezi (OSES),
+ * model diskte /DEDE.SES. Model yoksa açılmaz (UM_DESTEKSIZ). */
+ses_surucu_t *ses_dede_surucu(void);
+void ses_pompa(void);
 #endif

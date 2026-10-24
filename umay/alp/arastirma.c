@@ -2,6 +2,8 @@
 #include "umay_arastirma.h"
 #include "umay_kanit.h"
 #include "umay_str.h"
+#include "umay_port.h"
+#include "umay_ortak.h"
 
 static uint32_t harf_sayisi(const char *s) {
     uint32_t n = 0, b;
@@ -85,8 +87,132 @@ static int kademeli_ara(arastirma_t *a, const char *sorgu, int onek) {
     return n;
 }
 
+/* ---- 1.5: ağ evresi (ARAYICI) ----
+ * Yerel tarama bitince soru terimleri IPC ile ARAYICI'ya gider; o, ağda
+ * arar, sayfaları okunur metne çevirip /KUT/UMAY/AG altına belge yazar.
+ * Biz yalnız o düz belgeleri okuruz (ham HTML UMAY'a girmez). Aynı anda
+ * tek istek: başka bir araştırma bekliyorsa sıra beklenir. */
+#define AG_ZAMAN_ASIMI_MS 300000u      /* QEMU (TCG) TLS'te yavaş */
+static up_tut_t g_ag_kapi = UP_GECERSIZ, g_ag_yanit = UP_GECERSIZ;
+static const arastirma_t *g_ag_sahip = 0;
+
+static int ag_gonder(arastirma_t *a) {
+    if (g_ag_sahip) return 0;                         /* sıra bekle */
+    if (g_ag_kapi == UP_GECERSIZ) g_ag_kapi = up_kapi_bagla("arayici");
+    if (g_ag_kapi == UP_GECERSIZ) return -1;          /* ARAYICI yok */
+    if (g_ag_yanit == UP_GECERSIZ) g_ag_yanit = up_kapi_ac("umay-ag");
+    if (g_ag_yanit == UP_GECERSIZ) return -1;
+    char istek[400];
+    um_kopya(istek, sizeof istek, "umay-ag\n");
+    for (int t = 0; t < a->terim_sayi; t++) {
+        if (t) um_ekle(istek, sizeof istek, " ");
+        um_ekle(istek, sizeof istek, a->terim[t]);
+    }
+    if (up_gonder(g_ag_kapi, istek, um_uzun(istek)) < 0) return -1;
+    g_ag_sahip = a;
+    a->ag_bas_ms = up_ms();
+    gun_yaz("ARAŞTIRMA: ağa soruldu: %s", istek + 8);
+    return 1;
+}
+
+/* ARAYICI'nın getirdiği belgeleri yalnız "ag" rafında arar */
+static int ag_rafinda_ara(arastirma_t *a, const char *sorgu, int onek) {
+    static baglam_t ara[3];
+    static const char *RAF[1] = { "ag" };
+    bilgi_suzgec_t sz = { 0, 0, 0, 0, onek, 0, 0 };
+    sz.kategoriler = RAF; sz.kategori_sayi = 1;
+    int n = bilgi_baglam_bul_suzgec(sorgu, &sz, ara, 3);
+    for (int i = 0; i < n; i++) havuza_kat(a, &ara[i], ARS_AG);
+    return n;
+}
+
+static void ag_yanitini_isle(arastirma_t *a, const char *y) {
+    um_kopya(a->ag_not, sizeof a->ag_not, y);
+    if (y[0] != 'T') return;
+    /* "T <adet> ad1 ad2 ..." */
+    const char *p = y + 1;
+    while (*p == ' ') p++;
+    while (*p >= '0' && *p <= '9') p++;
+    int yuklenen = 0;
+    while (*p) {
+        while (*p == ' ') p++;
+        char ad[20]; int o = 0;
+        while (*p && *p != ' ' && o < 19) ad[o++] = *p++;
+        ad[o] = 0;
+        if (!o) break;
+        char yol[48];
+        um_bicim(yol, sizeof yol, "/KUT/UMAY/AG/%s", ad);
+        if (bilgi_belge_ekle(yol) == UM_OLDU) yuklenen++;
+    }
+    a->ag_belge = yuklenen;
+}
+
+/* Ağ rafı kalıcıdır: ARAYICI bu kez ulaşamasa da önceki bulgular aranır. */
+static void ag_rafini_tara(arastirma_t *a) {
+    /* ağ rafında: bütün terimler, sonra tek tek (gerekirse kökle) */
+    char birlesik[ARS_TERIM_MAX * 25]; birlesik[0] = 0;
+    for (int t = 0; t < a->terim_sayi; t++) { um_ekle(birlesik, sizeof birlesik, a->terim[t]); um_ekle(birlesik, sizeof birlesik, " "); }
+    if (birlesik[0]) ag_rafinda_ara(a, birlesik, 0);
+    for (int t = 0; t < a->terim_sayi; t++) {
+        int n = ag_rafinda_ara(a, a->terim[t], 0);
+        if (n == 0 && harf_sayisi(a->terim[t]) >= 5) {
+            char kok[24]; uint32_t h = harf_sayisi(a->terim[t]);
+            on_kopya(kok, sizeof kok, a->terim[t], h - 2 < 4 ? 4 : h - 2);
+            n = ag_rafinda_ara(a, kok, 1);
+        }
+        if (n > 0) a->terim_bulgu[t] += n;
+        a->ag_sorgu++;                                 /* yerel sorgu sayısına katılmaz */
+    }
+}
+
+static void ars_bitir(arastirma_t *a) {
+    for (int i = 1; i < a->havuz_sayi; i++)
+        for (int j = i; j > 0 && a->havuz[j].skor > a->havuz[j - 1].skor; j--) {
+            baglam_t tb = a->havuz[j]; a->havuz[j] = a->havuz[j - 1]; a->havuz[j - 1] = tb;
+            ars_kademe_t tk = a->havuz_kademe[j];
+            a->havuz_kademe[j] = a->havuz_kademe[j - 1]; a->havuz_kademe[j - 1] = tk;
+        }
+    bilgi_catisma_bul(a->havuz, a->havuz_sayi, &a->catisma);
+    a->bitti = 1;
+}
+
+/* ağ evresi adımı: 1 sürüyor, 0 bitti */
+static int ag_adim(arastirma_t *a) {
+    if (a->ag_durum == 0) {
+        if (a->terim_sayi == 0) { a->ag_durum = -1; return 0; }
+        int r = ag_gonder(a);
+        if (r == 0) return 1;                          /* sırada */
+        if (r < 0) { a->ag_durum = -1; um_kopya(a->ag_not, sizeof a->ag_not, "ARAYICI yok"); return 0; }
+        a->ag_durum = 1;
+        return 1;
+    }
+    char y[100];
+    int n = up_al(g_ag_yanit, y, sizeof y - 1, 0);
+    if (n > 0) {
+        y[n] = 0;
+        g_ag_sahip = 0;
+        gun_yaz("ARAŞTIRMA: ağdan yanıt: %s", y);
+        ag_yanitini_isle(a, y);
+        a->ag_durum = 2;
+        return 0;
+    }
+    if (up_ms() - a->ag_bas_ms > AG_ZAMAN_ASIMI_MS) {
+        g_ag_sahip = 0;
+        um_kopya(a->ag_not, sizeof a->ag_not, "H zaman asimi");
+        a->ag_durum = 2;
+        return 0;
+    }
+    return 1;
+}
+
 int ars_adim(arastirma_t *a) {
     if (a->bitti) return 0;
+    if (a->sorgu_no > a->terim_sayi) {                 /* yerel bitti: ağ evresi */
+        if (ag_adim(a)) return 1;
+        ag_rafini_tara(a);
+        ars_bitir(a);
+        return 0;
+    }
     if (a->sorgu_no == 0) {
         /* bütün soru — ama YALNIZ terimlerle: buyruk sözcükleri ("kaynak
          * tara") kütüphanede kendi başına eşleşip ilgisiz kayıt getiriyordu */
@@ -112,18 +238,7 @@ int ars_adim(arastirma_t *a) {
     }
     a->sorgu_sayisi++;
     a->sorgu_no++;
-    if (a->sorgu_no > a->terim_sayi) {
-        /* skorla sırala (kararlı: eşitte ilk bulunan önde) */
-        for (int i = 1; i < a->havuz_sayi; i++)
-            for (int j = i; j > 0 && a->havuz[j].skor > a->havuz[j - 1].skor; j--) {
-                baglam_t tb = a->havuz[j]; a->havuz[j] = a->havuz[j - 1]; a->havuz[j - 1] = tb;
-                ars_kademe_t tk = a->havuz_kademe[j];
-                a->havuz_kademe[j] = a->havuz_kademe[j - 1]; a->havuz_kademe[j - 1] = tk;
-            }
-        bilgi_catisma_bul(a->havuz, a->havuz_sayi, &a->catisma);
-        a->bitti = 1;
-    }
-    return !a->bitti;
+    return 1;                                          /* sonraki adım: sorgu ya da ağ evresi */
 }
 
 /* Kanıt cümleleri: her bulgunun alıntısından soru terimlerini en ağır
@@ -178,6 +293,8 @@ void ars_sonuc_cikar(const arastirma_t *a, ars_sonuc_t *s) {
     kanit_t kk;
     kanit_degerlendir(a->soru, kb, s->kaynak_sayi, 0, &kk);
     s->guven = kk.kapsama;
+    s->ag_durum = a->ag_durum; s->ag_belge = a->ag_belge;
+    um_kopya(s->ag_not, sizeof s->ag_not, a->ag_not);
     s->yeterli = kk.yeterli;
 }
 
@@ -202,8 +319,12 @@ uint32_t ars_sonuc_yaz(const ars_sonuc_t *r, const char *ajan_ad, char *c, uint3
         for (int i = 0; i < r->kaynak_sayi; i++) {
             const char *kd = r->kaynak[i].kademe == ARS_KENDI ? "" :
                              r->kaynak[i].kademe == ARS_ORTAK ? ", ortak havuzdan" : ", genel depodan";
-            um_bicim(s, sizeof s, "%d. %s\n   [kaynak: %s / %s%s]\n",
-                     i + 1, r->kanit[i], r->kaynak[i].kategori, r->kaynak[i].baslik, kd);
+            if (r->kaynak[i].kademe == ARS_AG || um_esit(r->kaynak[i].kategori, "ag"))
+                um_bicim(s, sizeof s, "%d. %s\n   [kaynak: AĞ, doğrulanmadı / %s — %s]\n",
+                         i + 1, r->kanit[i], r->kaynak[i].baslik, r->kaynak[i].kaynak);
+            else
+                um_bicim(s, sizeof s, "%d. %s\n   [kaynak: %s / %s%s]\n",
+                         i + 1, r->kanit[i], r->kaynak[i].kategori, r->kaynak[i].baslik, kd);
             if (um_uzun(c) + um_uzun(s) + 200 >= n) {
                 um_ekle(c, n, "(Kalan bulgular yere sığmadı.)\n");
                 break;
@@ -212,6 +333,14 @@ uint32_t ars_sonuc_yaz(const ars_sonuc_t *r, const char *ajan_ad, char *c, uint3
         }
     }
 
+    /* 1.5: ağ araştırmasının sonucu da sessizce geçilmez */
+    if (r->ag_durum == 2) {
+        if (r->ag_not[0] == 'T')
+            um_bicim(s, sizeof s, "Ağ araştırması: %d sayfa okundu, belge olarak rafa kondu.\n", r->ag_belge);
+        else
+            um_bicim(s, sizeof s, "Ağ araştırması sonuç vermedi: %s\n", r->ag_not[0] == 'H' ? r->ag_not + 2 : r->ag_not);
+        um_ekle(c, n, s);
+    }
     /* bulunamayan ve kökle bulunan terimler — sessizce geçilmez */
     char l[200];
     if (r->eksik_sayi) {

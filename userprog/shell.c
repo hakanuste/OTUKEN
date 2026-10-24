@@ -184,19 +184,29 @@ static void cmd_umay(const char *ham_soru) {
     ipc_mesaj_u y;
     char yanit[160];
     uint32_u dolu = 0;
-    int parca = 0;
+    int parca = 0, basildi = 0;
     /* UYUM: UMAY'in cevabi cikarim motorundan gecer; yuk altinda (baska
      * istemciler + agir is) QEMU'da 9 sn'yi buldu. Eski sinir 150 x 2 tik
      * = 6 sn idi -> 'zaman asimi' deyip yaniti kuyrukta birakiyordu (bir
      * SONRAKI soruya karisirdi). Sinir 20 sn; parca gelince yenilenir. */
-    for (int bekle = 0; bekle < 500; bekle++) {
+    /* 1.5: arastirma agda da arar (ARAYICI); QEMU'da (TCG) TLS ile birkac
+     * sayfa dakikalar surebilir. Sinir ~6 dk; parca gelince yenilenir. */
+    for (int bekle = 0; bekle < 18000; bekle++) {
         if (kendi >= 0 && ipc_al(kendi, &y) == 1) {
-            for (uint32_u i = 0; i < y.length && dolu < sizeof(yanit) - 1; i++)
+            /* 1.5: uzun yanit (arastirma raporu, kaynaklariyla) 160 baytta
+             * KESILIYORDU. Tampon dolunca basilir, okumaya devam edilir. */
+            for (uint32_u i = 0; i < y.length; i++) {
+                if (dolu >= sizeof(yanit) - 1) {
+                    yanit[dolu] = 0;
+                    s_bas(&s); if (!basildi) s_ekle(&s, "UMAY yaniti: "); s_ekle(&s, yanit); s_yaz(&s);
+                    basildi = 1; dolu = 0;
+                }
                 yanit[dolu++] = (char)y.payload[i];
+            }
             parca++;
             if (y.opcode == 0) {
                 yanit[dolu] = 0;
-                s_bas(&s); s_ekle(&s, "UMAY yaniti: "); s_ekle(&s, yanit); s_ekle(&s, "\n"); s_yaz(&s);
+                s_bas(&s); if (!basildi) s_ekle(&s, "UMAY yaniti: "); s_ekle(&s, yanit); s_ekle(&s, "\n"); s_yaz(&s);
                 return;
             }
             bekle = 0;          /* devami geliyor: sureyi yenile */
@@ -206,7 +216,7 @@ static void cmd_umay(const char *ham_soru) {
     }
     if (parca > 0) {
         yanit[dolu] = 0;
-        s_bas(&s); s_ekle(&s, "UMAY yaniti (eksik): "); s_ekle(&s, yanit); s_ekle(&s, "\n"); s_yaz(&s);
+        s_bas(&s); s_ekle(&s, basildi ? " (eksik) " : "UMAY yaniti (eksik): "); s_ekle(&s, yanit); s_ekle(&s, "\n"); s_yaz(&s);
         return;
     }
     puts("UMAY yanit vermedi (zaman asimi)\n");

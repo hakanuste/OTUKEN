@@ -175,6 +175,7 @@ static alp_durum_t uzman_adim(alp_t *a) {
         /* tarama bitti: en iyi bulgular özetin dayanağı olur */
         u->baglam_sayi = ars_dayanak(&u->ars, u->baglam, 3);
         u->nereden = u->baglam_sayi ? (int)u->ars.havuz_kademe[0] : 0;
+        if (u->nereden > 2) u->nereden = 2;            /* ağ belgesi: genel depo gibi, güven ZAYIF'ı geçmez */
         um_bellek_kopya(&u->catisma, &u->ars.catisma, sizeof u->catisma);
         if (u->catisma.var && a->gorev) {
             a->gorev->catisma = 1;

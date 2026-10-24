@@ -18,6 +18,7 @@ typedef struct {
     int  kelime_sayisi;
     int  kesik;            /* dizin doldu: sonraki sözcükler yalnız içerikte */
     int  dolu;
+    uint32_t ag_sira;      /* 1.5: ağ rafı kaydının geliş sırası (eskisi önce çıkar) */
 } kayit_t;
 
 static kayit_t g_indeks[BILGI_KAYIT_MAX];
@@ -113,6 +114,39 @@ static int kayit_ekle_tam(const char *kategori, const char *baslik, const char *
     return UM_OLDU;
 }
 
+/* 1.5: ağ rafı. Aynı adres yeniden gelirse kaydı tazelenir; raf ya da
+ * dizin doluysa EN ESKİ ağ kaydının yerine geçer. Doktrin ve yerel belge
+ * kayıtlarına hiç dokunulmaz: ağ bilgisi senin bilgini ezemez. */
+#define AG_RAF_AZAMI 96
+static uint32_t g_ag_sira;
+static int ag_kaydi_ekle(const char *baslik, const char *kaynak, const char *etiketler, const char *icerik) {
+    int yer = -1, ag_say = 0, eski = -1;
+    for (int i = 0; i < g_sayi; i++) {
+        if (!um_esit(g_indeks[i].kategori, "ag")) continue;
+        ag_say++;
+        if (um_esit(g_indeks[i].kaynak, kaynak)) yer = i;
+        if (eski < 0 || g_indeks[i].ag_sira < g_indeks[eski].ag_sira) eski = i;
+    }
+    if (yer < 0) {
+        if (ag_say < AG_RAF_AZAMI && g_sayi < BILGI_KAYIT_MAX) yer = g_sayi++;
+        else if (eski >= 0) yer = eski;
+        else return UM_DOLU;
+    }
+    kayit_t *k = &g_indeks[yer];
+    um_kopya(k->kategori, sizeof k->kategori, "ag");
+    um_kopya(k->baslik,   sizeof k->baslik,   baslik);
+    um_kopya(k->kaynak,   sizeof k->kaynak,   kaynak);
+    k->kaynak_tur = KT_DIS;
+    k->etiket_sayi = 0;
+    etiket_ayikla(k, etiketler);
+    um_kopya(k->icerik,   sizeof k->icerik,   icerik);
+    k->kelime_sayisi = kelime_ayikla(k->icerik, k->kelime, BILGI_KELIME_MAX);
+    k->kesik = kelime_tasti(k->icerik, BILGI_KELIME_MAX);
+    k->dolu = 1;
+    k->ag_sira = ++g_ag_sira;
+    return UM_OLDU;
+}
+
 int bilgi_kayit_kat_tur(const char *kategori, const char *baslik, const char *kaynak,
                         kaynak_tur_t kt, const char *etiketler, const char *icerik) {
     return kayit_ekle_tam(kategori, baslik, kaynak, kt, etiketler, icerik);
@@ -172,6 +206,14 @@ int bilgi_dizin_kur(const char *kok) {
 }
 
 int bilgi_sayi(void) { return g_sayi; }
+
+/* 1.5: eğitim derlemi için salt okunur erişim */
+int bilgi_kayit(int i, const char **kategori, const char **baslik, const char **kaynak, const char **icerik) {
+    if (i < 0 || i >= g_sayi || !g_indeks[i].dolu) return UM_YOK;
+    *kategori = g_indeks[i].kategori; *baslik = g_indeks[i].baslik;
+    *kaynak = g_indeks[i].kaynak; *icerik = g_indeks[i].icerik;
+    return UM_OLDU;
+}
 
 /* ---- Gömülü doktrin: V15 proje veri tabanı özü ----
  * Kütüphane diskte bulunmasa bile UMAY temel bilgisini taşır. */
@@ -270,7 +312,7 @@ static const char *govde_bul(const char *bas) {
 
 static int gecerli_kategori(const char *k) {
     for (int i = 0; i < BILGI_ALAN_SAYI; i++) if (um_esit(k, DEPO_DIZIN[i])) return 1;
-    return 0;
+    return um_esit(k, "ag");          /* 1.5: ARAYICI'nın ağ rafı */
 }
 
 /* Bir belgeyi üstverisine göre indeksler. */
@@ -297,10 +339,41 @@ static int belge_yukle(const char *yol) {
     if (!e) etiket[0] = 0;
     /* kaynak adı verilmişse yol ile birlikte saklanır */
     char kaynak_tam[96];
+    if (um_esit(kategori, "ag") && s && kaynak[0]) {
+        /* ağ belgesi: kaynak = sayfanın ADRESİ (yanıtta gösterilir) */
+        um_kopya(kaynak_tam, sizeof kaynak_tam, kaynak);
+        return ag_kaydi_ekle(baslik, kaynak_tam, etiket, govde_bul(tampon));
+    }
     if (s && kaynak[0]) um_bicim(kaynak_tam, sizeof kaynak_tam, "%s (%s)", yol, kaynak);
     else um_kopya(kaynak_tam, sizeof kaynak_tam, yol);
 
     return kayit_ekle_tam(kategori, baslik, kaynak_tam, KT_BELGE, etiket, govde_bul(tampon));
+}
+
+int bilgi_belge_ekle(const char *yol) { return belge_yukle(yol); }
+
+/* 1.5: ARAYICI'nın rafı (/KUT/UMAY/AG/DIZIN.TXT'de adı geçen belgeler) */
+int bilgi_ag_rafi_yukle(void) {
+    static char d[4096];
+    up_tut_t t = up_ac("/KUT/UMAY/AG/DIZIN.TXT", UP_OKU);
+    if (t < 0) return 0;
+    int64_t n = up_oku(t, d, sizeof d - 1);
+    up_kapat(t);
+    if (n <= 0) return 0;
+    d[n] = 0;
+    int say = 0;
+    char yol[48], ad[20];
+    for (const char *p = d; *p; ) {
+        int o = 0;
+        while (*p && *p != '\n' && *p != '\r') { if (o < 19) ad[o++] = *p; p++; }
+        ad[o] = 0;
+        while (*p == '\n' || *p == '\r') p++;
+        if (!o) continue;
+        um_bicim(yol, sizeof yol, "/KUT/UMAY/AG/%s", ad);
+        if (belge_yukle(yol) == UM_OLDU) say++;
+    }
+    gun_yaz("Ağ rafı: %d belge.", say);
+    return say;
 }
 
 /* Depoyu tarar: 13 alan dizini + kök. Kategori yine üstveriden gelir;

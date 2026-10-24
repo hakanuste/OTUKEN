@@ -33,10 +33,11 @@
 #include "umay_bilgi.h"
 
 #define ARS_TERIM_MAX   6
-#define ARS_HAVUZ_MAX   6
+#define ARS_HAVUZ_MAX   8
 #define ARS_BULGU_BOY   220
 
-typedef enum { ARS_KENDI = 0, ARS_ORTAK = 1, ARS_GENEL = 2 } ars_kademe_t;
+/* ARS_AG (1.5): ARAYICI'nın ağdan getirdiği, DOĞRULANMAMIŞ belge */
+typedef enum { ARS_KENDI = 0, ARS_ORTAK = 1, ARS_GENEL = 2, ARS_AG = 3 } ars_kademe_t;
 
 typedef struct {
     char        soru[256];
@@ -58,6 +59,12 @@ typedef struct {
     int         havuz_sayi;
     int         ham_bulgu;           /* tekilleştirmeden önceki toplam     */
     catisma_t   catisma;
+    /* 1.5 ağ evresi: yerel tarama bitince ARAYICI'ya sorulur */
+    int         ag_durum;            /* 0 sorulmadı, 1 bekleniyor, 2 bitti, -1 yok */
+    uint64_t    ag_bas_ms;
+    int         ag_belge;            /* ağdan gelen belge sayısı */
+    int         ag_sorgu;            /* ağ rafında yapılan sorgu */
+    char        ag_not[96];          /* ARAYICI'nın yanıtı ya da hata */
 } arastirma_t;
 
 /* kategoriler: ajanın kategorileri (NULL = yalnız genel depo);
@@ -95,6 +102,8 @@ typedef struct {
     int          guven;                       /* 0..100 */
     int          yeterli;
     int          sorgu_sayisi, terim_sayi;
+    int          ag_durum, ag_belge;          /* 1.5 */
+    char         ag_not[96];
 } ars_sonuc_t;
 
 /* Taramadan yapılandırılmış sonucu çıkarır (tarama bitmiş olmalı). */

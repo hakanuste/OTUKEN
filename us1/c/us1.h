@@ -30,8 +30,10 @@
 /* Sınırlar Ring3'te makul bellek için seçildi; model bunları aşarsa
  * yükleme REDDEDİLİR (sessizce kırpılmaz). */
 #define US1_AZAMI_D        96
-#define US1_AZAMI_KATMAN    4
-#define US1_AZAMI_FFN     256
+/* 1.5: model ÖTÜKEN içinde büyüyebilir (umay/us/umay_egitim.c): katman
+ * 4 -> en çok 8, ffn 256 -> en çok 512. d, sözlük, bağlam sabit. */
+#define US1_AZAMI_KATMAN    8
+#define US1_AZAMI_FFN     512
 #define US1_AZAMI_SOZLUK  128
 #define US1_AZAMI_BAGLAM   96
 
@@ -85,6 +87,10 @@ uint32_t us1_konum(void);                              /* işlenen im sayısı *
  * Konum m->baglam'a ulaştıysa US1_DOLU: çağıran sıfırlayıp son imlerle
  * yeniden doldurur (konum kodlaması olmadığından kaydırma = yeniden hesap). */
 int      us1_adim(us1_model_t *m, uint32_t im, int32_t *mantik);
+/* 1.5: 4'ten çok katmanlı model için KV tamponu: 2 * katman * US1_AZAMI_BAGLAM
+ * * US1_AZAMI_D int32. Verilmezse 4 katmanlık iç tampon (fazlası reddedilir). */
+void     us1_kv_kur(int32_t *tampon, uint32_t katman);
+uint32_t us1_kv_katman(void);
 
 /* Bir satır mantıktan im seçer. tohum NULL ise en yüksek değerli im
  * (belirlenimci); değilse olasılığa göre örneklenir. */

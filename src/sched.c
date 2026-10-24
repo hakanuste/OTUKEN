@@ -1,4 +1,5 @@
 #include "sched.h"
+#include "fpu.h"
 #include "ipc2.h"
 #include "cpu.h"
 #include "heap.h"
@@ -126,6 +127,8 @@ static task_t *make_task_as(const char *name, void (*entry)(void),
     if (!kstack) { kfree(t); kfree(stack); return 0; }
     t->kernel_stack = kstack;
     t->kernel_stack_top = (uint64_t)(uintptr_t)(kstack + SYSCALL_KSTACK_SIZE);
+    t->fx = fpu_alan_ayir(&t->fx_ham);
+    if (fpu_etkin() && !t->fx) { kfree(kstack); kfree(t); kfree(stack); return 0; }
 
     t->rsp = (uint64_t)(uintptr_t)sp;
     t->stack_base = stack;
@@ -142,6 +145,7 @@ static task_t *make_task_as(const char *name, void (*entry)(void),
     t->kullanici = 0;
     t->heap_baslangic = 0;   /* ilk sbrk cagrisinda atanir */
     t->heap_son = 0;
+    t->heap_azami = 0;
     t->id = next_task_id++;
     t->state = TASK_READY;
     t->calisiyor = 0;
@@ -180,6 +184,7 @@ void scheduler_init(const char *main_task_name) {
     t->kullanici = 0;
     t->heap_baslangic = 0;
     t->heap_son = 0;
+    t->heap_azami = 0;
     {
         uint8_t *ks = (uint8_t *)kmalloc(SYSCALL_KSTACK_SIZE);
         t->kernel_stack = ks;
@@ -187,6 +192,7 @@ void scheduler_init(const char *main_task_name) {
         cpu_bu()->cekirdek_rsp = t->kernel_stack_top;
         tss_set_rsp0(t->kernel_stack_top);
     }
+    t->fx = fpu_alan_ayir(&t->fx_ham);
     t->id = next_task_id++;
     t->state = TASK_READY;
     t->calisiyor = 1;          /* su an BSP'de calisiyor */
@@ -334,6 +340,12 @@ static void gecis_yap(task_t *self, task_t *yeni) {
     c->cekirdek_rsp = yeni->kernel_stack_top;
     tss_set_rsp0(yeni->kernel_stack_top);
     adres_alanina_gec(yeni);
+    /* 1.4.9: x87/SSE durumu: çekirdek SSE kullanmadığından yazmaçlar hâlâ
+     * eski görevin (Ring3) değerlerini taşır; sakla, yenisininkini yükle. */
+#ifndef FPU_KAYIT_KAPALI
+    fpu_kaydet(self->fx);
+    fpu_yukle(yeni->fx);
+#endif
     context_switch(&self->rsp, yeni->rsp);
     /* Buradayiz: bu gorev (self) yeniden secildi - belki BASKA cekirdekte. */
     sched_gecis_sonrasi();
@@ -429,6 +441,7 @@ void scheduler_reap_terminated(void) {
         if (t->stack_base) kfree(t->stack_base);
         if (t->kernel_stack) kfree(t->kernel_stack);
         if (t->sc_tampon) kfree(t->sc_tampon);
+        if (t->fx_ham) kfree(t->fx_ham);
         kfree(t);
     }
 }
@@ -526,6 +539,7 @@ int sched_ap_katil(uint32_t indeks) {
     t->stack_base = 0;
     t->kernel_stack = ks;
     t->kernel_stack_top = (uint64_t)(uintptr_t)(ks + SYSCALL_KSTACK_SIZE);
+    t->fx = fpu_alan_ayir(&t->fx_ham);
     t->cr3 = 0;
     t->heap_yuva = -1;
     t->adres_sahibi = 0;
@@ -533,6 +547,7 @@ int sched_ap_katil(uint32_t indeks) {
     t->kullanici = 0;
     t->heap_baslangic = 0;
     t->heap_son = 0;
+    t->heap_azami = 0;
     t->state = TASK_READY;
     t->calisiyor = 1;
     t->cpu_bagli = (int)indeks;

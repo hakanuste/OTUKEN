@@ -203,6 +203,21 @@ static int elf_load__ic(const uint8_t *data, uint64_t size, elf_image_t *out) {
                 return -1;
             }
             uint64_t hedef_va = seg_start + p * PMM_FRAME_SIZE;
+            /* 1.5: hedef sayfa ZATEN haritaliysa (ayni adres alanindaki
+             * baska bir programin yigini/kodu) yukleme REDDEDILIR. Eskiden
+             * sayfa sessizce yeniden haritalaniyordu: UMAY buyuyup kabugun
+             * yiginina (0x8000C00000) tasinca kabuk sifirlanan yigindan
+             * 0 adresine dondu. */
+            if (vmm_get_physical(hedef_va) != 0) {
+                pmm_free_frame(phys);
+                log_write(LOG_HATA, "ELF", "hedef sayfa zaten haritali - baska bir programin alani");
+                serial_write("ELF: REDDEDILDI - dolu hedef sayfa va=");
+                serial_write_hex((uint32_t)(hedef_va >> 32));
+                serial_write_hex((uint32_t)hedef_va);
+                serial_write("\n");
+                elf_geri_al(kayit, kayit_adet);
+                return -1;
+            }
             if (vmm_map_page(hedef_va, phys,
                               VMM_PRESENT | VMM_WRITABLE | VMM_USER) != 0) {
                 pmm_free_frame(phys);

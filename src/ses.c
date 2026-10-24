@@ -252,6 +252,36 @@ static int ses_cal__ic(const int16_t *pcm, uint32_t kare_sayisi) {
     return (int)giris_sayisi > 0 ? 0 : -1;
 }
 
+/* 1.5: BEKLEMEYEN calma (UMAY'in Dede Korkut sesi). Halkada bos yer
+ * oldugu kadarini alir, dolunca durur ve alinan kare sayisini dondurur
+ * (0 = halka dolu, sonra yine dene). Uygulama kendi dongusunu
+ * durdurmadan sesi besler; cekirdekte uyuyarak beklenmez. */
+static int ses_cal_dene__ic(const int16_t *pcm, uint32_t kare_sayisi) {
+    if (!d.var) return -1;
+    uint32_t yazilan = 0;
+    while (yazilan < kare_sayisi) {
+        uint32_t bu_kare = kare_sayisi - yazilan;
+        if (bu_kare > SES_TAMPON_KARE) bu_kare = SES_TAMPON_KARE;
+        uint32_t giris = akis_basladi ? ((son_lvi + 1) & 31) : 0;
+        if (akis_basladi) {
+            uint8_t sr = inb(d.nabm_taban + NABM_PO_SR);
+            uint8_t civ = (uint8_t)(inb(d.nabm_taban + NABM_PO_CIV) & 31);
+            if (!(sr & SR_DCH) && civ == giris) break;          /* halka dolu */
+        }
+        int r = ses_cal__ic(pcm + (uint64_t)yazilan * 2, bu_kare);  /* yer var: beklemez */
+        if (r != 0) return yazilan ? (int)yazilan : -1;
+        yazilan += bu_kare;
+    }
+    return (int)yazilan;
+}
+
+int ses_cal_dene(const int16_t *pcm, uint32_t kare_sayisi) {
+    ozkilit_al(&ses_kilit);
+    int r = ses_cal_dene__ic(pcm, kare_sayisi);
+    ozkilit_birak(&ses_kilit);
+    return r;
+}
+
 static int ses_ton__ic(uint32_t frekans_hz, uint32_t sure_ms) {
     if (!d.var) return -1;
     /* 1.4.9: frekans 0 = SESSIZLIK (OZAN'in sozcuk arasi soluklari);

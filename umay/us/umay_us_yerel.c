@@ -22,7 +22,7 @@
 
 #define MODEL_YOLU   "/UMAY.US1"
 #define SOZLUK_YOLU  "/SOZLUK.TXT"
-#define MODEL_AZAMI  (640 * 1024)   /* 96x4 model ~470 KB (Q8) */
+#define MODEL_AZAMI  (2048 * 1024)  /* 96x4 model ~470 KB; büyümüş 96x8/ffn512 ~1,5 MB (Q8) */
 #define URET_AZAMI   160
 
 typedef struct {
@@ -57,7 +57,10 @@ static int dosya_oku(const char *yol, void *tampon, uint32_t azami)
 static int yerel_hazirla(umay_us_t *u, const char *model_yolu)
 {
     us_yerel_t *s = (us_yerel_t *)u;
-    const char *yol = (model_yolu && *model_yolu) ? model_yolu : MODEL_YOLU;
+    /* 1.5: UMAY'ın kendi eğittiği model (KABUL edildiyse) /KUT/UMAY/UMAY.US1;
+     * yoksa ya da açılamazsa diskteki ana model. */
+    const char *yol = (model_yolu && *model_yolu) ? model_yolu
+                    : (up_var_mi("/KUT/UMAY/UMAY.US1") ? "/KUT/UMAY/UMAY.US1" : MODEL_YOLU);
     s->hazir = 0;
 
     if (!g_model_veri) g_model_veri = (uint8_t *)up_ayir(MODEL_AZAMI);
@@ -75,6 +78,15 @@ static int yerel_hazirla(umay_us_t *u, const char *model_yolu)
     if (n <= 0) {
         gun_yaz("US-YEREL: model dosyası yok (%s).", yol);
         return UM_YANLIS;
+    }
+    /* 1.5: büyümüş model (4'ten çok katman) KV tamponunu öbekten alır */
+    if (n >= 16) {
+        uint32_t katman = (uint32_t)g_model_veri[12] | ((uint32_t)g_model_veri[13] << 8);
+        if (katman > us1_kv_katman() && katman <= US1_AZAMI_KATMAN) {
+            static int32_t *kv = 0;
+            if (!kv) kv = (int32_t *)up_ayir(sizeof(int32_t) * 2u * US1_AZAMI_KATMAN * US1_AZAMI_BAGLAM * US1_AZAMI_D);
+            if (kv) us1_kv_kur(kv, US1_AZAMI_KATMAN);
+        }
     }
     int r = us1_yukle(&s->model, g_model_veri, (uint32_t)n);
     if (r != US1_OLDU) {

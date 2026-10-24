@@ -408,6 +408,11 @@ int ekran_sinamasi(ekran_yaz_t yazici) {
     int mb;
     mouse_get_state(&imlec_x, &imlec_y, &mb);
     (void)mb;
+    /* 1.5: sahne BOŞ terminalle başlar. Çekirdekte kabuk iş parçacığı bu
+     * sınamadan hemen önce yaratılır; zamanlayıcı onu kesmeler kapanmadan
+     * koşturursa açılış yazısı terminale düşüyor ve sahne ana makinedekinden
+     * farklı oluyordu (yarış; ana makinede terminal hep boş). */
+    gui_terminal_temizle();
 
     /* --- renk kümeleri --- */
     k_bosalt(&k_gui);

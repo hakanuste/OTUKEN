@@ -20,10 +20,20 @@ typedef uint32_t uint32_u;
 typedef unsigned short uint16_u;
 #endif
 
+/* 1.5: sınırlar derlemede değiştirilebilir (ARAYICI daha küçük sayfa_t ile
+ * derlenir: html.c ve onu kullanan dosya AYNI değerlerle derlenmeli) */
+#ifndef H_MAX_KAR
 #define H_MAX_KAR    400000       /* hücre (kod noktası) */
+#endif
+#ifndef H_MAX_SATIR
 #define H_MAX_SATIR  16000
+#endif
+#ifndef H_MAX_OGE
 #define H_MAX_OGE    3000         /* bağlantı + form alanı */
+#endif
+#ifndef H_MAX_METIN
 #define H_MAX_METIN  (160 * 1024) /* href ve form değerleri */
+#endif
 #define H_MAX_FORM   24
 
 /* hücre = kod noktası (alt 21 bit) | biçem << 24 */

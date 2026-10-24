@@ -14,6 +14,7 @@
 #include "umay_onay.h"
 #include "umay_gui.h"
 #include "umay_ses.h"
+#include "umay_egitim.h"
 
 static otag_t        g_otag;
 static umay_kanal_t *g_kanal[4];
@@ -101,6 +102,7 @@ static int onay_buyrugu(const char *soz) {
 }
 
 static void ileti_isle(const umay_ileti_t *i) {
+    egitim_etkinlik();                    /* 1.5: boşta sayacı */
     g_son_kanal  = i->tur;
     g_son_kaynak = i->kaynak;
     gui_satir_ekle("SEN", i->govde);
@@ -197,14 +199,19 @@ int umay_kur(void) {
     bilgi_dizin_kur(kok);                 /* 12 uzman alanı + ortak havuz */
     int d = bilgi_doktrin_yukle();
     int k = bilgi_tara(kok);
+    bilgi_ag_rafi_yukle();                /* 1.5: ARAYICI'nın önceki bulguları */
     gun_yaz("Bilgi: %d doktrin, %d bitig.", d, k);
 
     us_kur(ayar_metin("model", 0));       /* PORT'ta motor yoksa stub'a düşer */
+    egitim_kur();                         /* 1.5: boşta kendi kendine eğitim */
     gun_yaz("US motoru: %s", us_motor_adi());
 
     /* Ses ayrı bir arka uçtur: Dede Korkut sürücüsü takılır. Açılamazsa
      * boş sürücüye düşülür ve bu açıkça günlüğe yazılır. */
-    if (ses_surucu_tak(ses_ozan_surucu()) == UM_OLDU)
+    /* 1.5: önce UMAY'ın kendi sentezi (OSES, model diskteyse); yoksa
+     * çekirdeğin formant/ezgi yolu. */
+    if (ses_surucu_tak(ses_dede_surucu()) == UM_OLDU ||
+        ses_surucu_tak(ses_ozan_surucu()) == UM_OLDU)
         gun_yaz("Ses: %s takıldı.", ses_surucu_adi());
     else {
         ses_surucu_tak(ses_bos_surucu());
@@ -276,6 +283,8 @@ void umay_tur(void) {
 
     gui_ciz(&g_otag);
     onay_temizle();
+    ses_pompa();
+    egitim_pompa();
 }
 
 int umay_kosuyor(void) { return g_kosuyor; }

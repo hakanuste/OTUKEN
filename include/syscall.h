@@ -98,7 +98,8 @@ typedef struct {
 #define SYS_DOSYA_EKLE    54 /* 1.4.9 a1=&yol a2=&veri a3=n -> eklenen / -1 */
 #define SYS_DOSYA_SIL     55 /* 1.4.9 a1=&yol -> 0 / -1 (dizin yalniz bossa) */
 #define SYS_KERVAN_YUKLE  56 /* 1.4.9 a1=&veri a2=boy a3=&neden[64] -> 0 / -1 */
-#define SYS_MAX          57
+#define SYS_SES_PCM       57 /* 1.5 a1=&int16[2*kare] (48 kHz stereo) a2=kare (<=1024) -> alinan kare (0 dolu) / -1 */
+#define SYS_MAX          58
 /* 1.4.9: diske yazan / makineyi yeniden baslatan cagrilarin onay sozcugu ("ONAY") */
 #define SYS_ONAY 0x59414E4FULL
 

@@ -1,4 +1,5 @@
 #include "smp.h"
+#include "fpu.h"
 #include "spinlock.h"
 #include "cpu.h"
 #include "idt.h"
@@ -219,6 +220,7 @@ static void ap_giris(uint64_t indeks) {
         "1:\n\t"
         : : "m"(g) : "rax", "memory");
     idt_ap_yukle();
+    fpu_ac();                                   /* 1.4.9: bu çekirdekte x87/SSE başlangıç durumu */
 
     if (x2apic_kip) {
         uint64_t t = rdmsr_(MSR_APIC_BASE);

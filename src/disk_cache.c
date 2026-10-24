@@ -73,8 +73,15 @@ int disk_cache_read_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, void *
     return r;
 }
 
+/* 1.5: her yazimda artar. Okuma tarafindaki konum onbellekleri (FAT16
+ * kume zinciri) bununla gecerliligini sinar: herhangi bir yazimdan sonra
+ * zincir degismis olabilir, onbellek atilir. */
+static uint64_t yazim_kusagi = 0;
+uint64_t disk_cache_yazim_kusagi(void) { return __atomic_load_n(&yazim_kusagi, __ATOMIC_ACQUIRE); }
+
 int disk_cache_write_sectors(uint8_t disk_id, uint64_t lba, uint8_t count, const void *buf) {
     ozkilit_al(&depo_kilit);
+    __atomic_add_fetch(&yazim_kusagi, 1, __ATOMIC_ACQ_REL);
     int r = disk_cache_write_sectors__ic(disk_id, lba, count, buf);
     ozkilit_birak(&depo_kilit);
     return r;

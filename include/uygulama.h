@@ -26,6 +26,8 @@ enum {
 /* 1.4.9: KERVAN paketlerinin uygulamaları için yuvalar (UYG_SAYI ... +3) */
 #define UYG_PAKET_YUVA 4
 int uygulama_paket_ac(const char *dosya);   /* yuva (uygulama no) / -1 */
+/* süreç bağlamında: diskteki ELF'i yükleyip Ring3'e geçer (geri dönmez) */
+void uygulama_elf_calistir(const char *yol, uint32_t profil) __attribute__((noreturn));
 
 /* Başlatır ya da (açıksa) öne getirir.
  * Dönüş: 1 yeni süreç başladı, 0 zaten açıktı (öne getirildi/açılıyor),

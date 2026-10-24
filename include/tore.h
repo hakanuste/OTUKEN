@@ -76,6 +76,10 @@ typedef enum {
 #define UMAY_YAZMA_KOKU "/KUT/UMAY"
 /* 1.4.9: KERVAN paketinden gelen uygulama: imzali olsa da en dar profil */
 #define TORE_PROFILE_PAKET_UYG     (KUT_EKRAN | KUT_KLAVYE | KUT_SISTEM)
+/* 1.5: ARAYICI — UMAY'in ag arastirmacisi. Ekran/klavye YOK; diske YALNIZ
+ * /KUT/UMAY/AG altina yazar (tore_yazma_koku). */
+#define TORE_PROFILE_ARAYICI (KUT_NET_SEND | KUT_NET_RECV | KUT_IPC | KUT_DISK_READ | KUT_DISK_WRITE | KUT_MEM_ALLOC)
+#define ARAYICI_YAZMA_KOKU "/KUT/UMAY/AG"
 #define TORE_PROFILE_SINAMA (KUT_EKRAN | KUT_TANI)   /* ring3 sinama / ELF gosterimi */
 
 void tore_init(void);

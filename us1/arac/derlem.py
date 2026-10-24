@@ -349,6 +349,12 @@ def sozluk_kur(d):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 2 and sys.argv[1] == "drl":
+        # 1.5: ÖTÜKEN içi eğitim için özgün derlem (dağıtım koşusunun çiftleri)
+        d = derlem_kur(secim=False)
+        open(sys.argv[2], "wb").write(b"".join(d["egit_cift"]))
+        print(f"{sys.argv[2]}: {len(d['egit_cift'])} cift")
+        sys.exit(0)
     d = derlem_kur(secim="--secim" in sys.argv)
     soz = sozluk_kur(d)
     top = lambda g: sum(len(b) for b in d[g])

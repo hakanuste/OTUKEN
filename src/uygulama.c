@@ -73,12 +73,13 @@ static void uyg_yaz(const char *a, const char *b) {
 
 /* Süreç kendi bağlamında (kendi CR3'ü etkin) çalışır; GERİ DÖNMEZ. */
 static void uyg_calistir(int u) {
-    uyg_tanim_t dinamik;
-    const uyg_tanim_t *t;
-    if (u >= UYG_SAYI) {
-        dinamik.ad = "Paket"; dinamik.yol = paket_yol[u - UYG_SAYI]; dinamik.profil = TORE_PROFILE_PAKET_UYG;
-        t = &dinamik;
-    } else t = &UYG[u];
+    if (u >= UYG_SAYI) uygulama_elf_calistir(paket_yol[u - UYG_SAYI], TORE_PROFILE_PAKET_UYG);
+    uygulama_elf_calistir(UYG[u].yol, UYG[u].profil);
+}
+
+/* diskteki ELF'i bu süreçte (kendi adres alanında) Ring3'te başlatır; GERİ DÖNMEZ */
+void uygulama_elf_calistir(const char *yol, uint32_t profil) {
+    struct { const char *yol; uint32_t profil; } tt = { yol, profil }, *t = &tt;
     int fd = vfs_open(t->yol);
     if (fd < 0) { uyg_yaz("diskte yok: ", t->yol); process_exit_current(); }
     uint8_t *tampon = (uint8_t *)kmalloc(UYG_AZAMI_BOYUT);

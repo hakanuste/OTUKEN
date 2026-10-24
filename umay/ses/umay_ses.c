@@ -31,6 +31,13 @@ int ses_surucu_tak(ses_surucu_t *s)
 
 int ses_var_mi(void) { return g_surucu != 0; }
 
+/* 1.5: her UMAY turunda çağrılır; bloklamayan sürücü (Dede Korkut OSES)
+ * kuyruğundaki sözü burada sentezler ve ses aygıtına verir. */
+void ses_pompa(void)
+{
+    if (g_surucu && g_surucu->bosalt) g_surucu->bosalt(g_surucu);
+}
+
 /* Takili surucunun adi. Gunluge elle yazilmis ad yerine bunu kullan:
  * surucu degisince kayit yaniltici olmasin. */
 const char *ses_surucu_adi(void) { return g_surucu ? g_surucu->ad : "yok"; }
