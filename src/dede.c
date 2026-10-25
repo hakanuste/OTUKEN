@@ -368,8 +368,13 @@ static void dede_isci(void) {
 
 void dede_sira_baslat(void) {
     if (isci_var || !ses_var()) return;
+    /* işçi GERÇEKTEN başladıysa istek kabul edilir; yoksa sıraya alınan
+     * söz hiç tüketilmez, "söylüyor" bayrağı hiç kalkmazdı */
+    if (!thread_create("Dede", dede_isci)) {
+        serial_write("DEDE: konusma iscisi baslatilamadi (gorev ayrilamadi)\n");
+        return;
+    }
     isci_var = 1;
-    thread_create("Dede", dede_isci);
 }
 
 int dede_konus_sirala(const char *metin) {

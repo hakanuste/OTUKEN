@@ -8,7 +8,7 @@ ve üzerinde Ring3'te koşan yapay us uygulaması UMAY.
 ```sh
 bash kur.sh              # araçları denetle, çekirdek + UMAY + US1'i derle
 bash kur.sh --calistir   # QEMU'da başlat (-smp 4, AC'97)
-bash kur.sh --sina       # tüm sınama takımları
+bash kur.sh --sina       # tüm sınama takımları (YALNIZ geliştirme ağacında; aşağıya bakın)
 ```
 
 Elle:
@@ -31,7 +31,14 @@ qemu-system-aarch64 -M virt -cpu cortex-a72 -m 256 -nographic \
   -kernel otuken-arm64.img
 ```
 
-### Testler
+### Testler (yalnız geliştirme ağacında)
+
+GitHub'daki **yazılım dağıtımında** sınama takımı YOKTUR: `testler.sh`,
+`tests/`, `umay/sina/`, `us1/sinama/`, `kanitlar/`, `kabuk_testi.py`,
+`donanim_testleri.sh`, `uyum_sinama.sh`, `agir_sinama.sh` dağıtıma
+konmaz. Orada aşağıdaki komutlar ve `bash kur.sh --sina` çalışmaz
+(`kur.sh` bunu söyler ve sınama yapılmadı diye çıkar). Komutlar tam
+geliştirme ağacı içindir:
 
 ```sh
 ./testler.sh            # çekirdek takımı (tanı kipi -smp 1 ve -smp 4 dahil)
@@ -78,14 +85,14 @@ katmanı. Kabuktan `umay <soru>` ile IPC üzerinden konuşulur
 | US1 modeli | d=96, 4 katman, 4 baş, ffn=256, bağlam 96, **459.168 parametre** (464 KB, biçim v1) | `us1/umay.us1` başlığı |
 | Sözlük | 83 **bayt** (bayt düzeyi; harf/alt sözcük değil) | `us1/sozluk.txt` |
 | Konum kodlaması | dağıtılan modelde yok (biçim v1); motor v2/RoPE modelleri de okur | `us1/umay.us1` başlığı, `docs/US1-V2-ROPE.md` |
-| Motor sınırları | d ≤ 96, katman ≤ 4, ffn ≤ 256, sözlük ≤ 128, bağlam ≤ 96 | `us1/c/us1.h` |
+| Motor sınırları | d ≤ 96, katman ≤ 8, ffn ≤ 512, sözlük ≤ 128, bağlam ≤ 96 | `us1/c/us1.h` |
 | Eğitim derlemi | 180 KB (1462 soru-yanıt çifti + düzyazı), 21 doktrin kaydından | `us1/arac/derlem.py` |
 | Sabit sınama kümesi | 85 soru; hiçbir yazım biçimi eğitimde yok | `us1/derlem/sinama_kumesi.tsv` |
 | Model, sınama kümesi | ilk cümle doğru %12, sözcük F1 0,20; alan dışında kendi başına ret %9 | `kanitlar/us1/olcum.json` (`us1/arac/olc.py`) |
 | Kanıt katmanı, sınama kümesi | alan içi doğru dayanakla yanıt %95 (yüklemli soru %81); alan dışı ret ≥ %99,5; yönerge örnekleri 5/5 ret; dağınık kanıt (terimler ayrı kayıtlarda) 398 soruda yanlış kabul 0 | `tests/umay_kanit` |
 | Kanıt eşikleri | kapsama ≥ %85, söz bağlılığı ≥ %60, yüklem ağırlığı 40 | `umay/include/umay_kanit.h` |
-| UMAY ikilisi | 145 KB | `umay/kov/umay` |
-| UMAY mantık sınaması | 279 geçti, 0 kaldı | `make -C umay sina` |
+| UMAY ikilisi | 663 KB | `umay/kov/umay` |
+| UMAY mantık sınaması | 281 geçti, 0 kaldı | `make -C umay sina` |
 | US1 motor sınaması | 15 geçti, 0 kaldı | `us1/us1_sina` |
 
 Model küçüktür ve genellemesi zayıftır: yanıtın doğruluğunu model değil **kanıt katmanı** korur. Soru kütüphanede yeterli kanıtla karşılanmıyorsa motor hiç çağrılmaz ve UMAY "Bunu doğrulayacak yeterli bilgim yok." der; modelin sözü dayanağa bağlı değilse atılır ve kaynaktaki cümle aynen verilir (`docs/UMAY-KANIT.md`).
@@ -181,14 +188,14 @@ boot/        x86_64 önyükleme + kesme + syscall assembly
 src/         çekirdek kaynağı
 include/     başlıklar
 userprog/    kullanıcı programları (kabuk, ulib, hello)
-umay/        UMAY yapay us uygulaması (core, alp, us, ses, gui, port, sina)
+umay/        UMAY yapay us uygulaması (core, alp, us, ses, gui, port; sina/ yalnız geliştirme ağacında)
 us1/         US1 çıkarım motoru (c/, UMAY de bunu derler), eğitici (arac/), model, sözlük
 belge/       ses örnekleri
-kanitlar/    son test koşularının çıktıları (kanıt)
+kanitlar/    son test koşularının çıktıları (kanıt; yalnız geliştirme ağacında)
 docs/        KAYNAK-ANALIZI.md (dosya sınıfları, bağımlılıklar, ölü kod) + kaynak-envanteri.txt
 arm64/       AArch64 portu (ayrı derleme)
 kur.sh       kurulum / derleme / sınama betiği
-testler.sh   otomatik regresyon takımı
+testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
 ```
 
 ## Bilinen sınırlar

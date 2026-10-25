@@ -173,6 +173,20 @@ static void gorev(void) {
         hata |= 8; serial_write("KERVAN-TEST:   kayit hatasinda geri alma eksik\n");
     }
 
+    /* 4c) yükseltme yarıda kalır VE geri alma da yazamaz (2. yazım paket
+     * dosyası, 3. yazım geri almanın ilk dosyası): kurulum "geri yazıldı"
+     * DEMEMELİ, hata bildirmeli. Karışık kalan dosyaları 4) düzeltir. */
+    fat16_sinama_yazim_hatasi = 2;
+    fat16_sinama_yazim_hatasi_b = 3;
+    int r4c = kervan2_kur("K2IYI2.KRV", neden);
+    fat16_sinama_yazim_hatasi = 0; fat16_sinama_yazim_hatasi_b = 0;
+    serial_write("KERVAN-TEST:   geri almasi da yazamayan yukseltme: "); serial_write(neden); serial_write("\n");
+    {
+        const char *a = neden, *b = "GERI ALMA BASARISIZ"; int bulundu = 0;
+        for (; *a && !bulundu; a++) { int k = 0; while (b[k] && a[k] == b[k]) k++; if (!b[k]) bulundu = 1; }
+        if (r4c == 0 || !bulundu) { hata |= 8; serial_write("KERVAN-TEST:   geri alma hatasi gizlendi\n"); }
+    }
+
     /* 4) yükseltme */
     if (kervan2_kur("K2IYI2.KRV", neden) != 0) hata |= 8;
     ih = icerik_denetle('2', &adet);

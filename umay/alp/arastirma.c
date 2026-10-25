@@ -131,13 +131,8 @@ static int ag_rafinda_ara(arastirma_t *a, const char *sorgu, int onek) {
     return n;
 }
 
-static void ag_yanitini_isle(arastirma_t *a, const char *y) {
-    um_kopya(a->ag_not, sizeof a->ag_not, y);
-    if (y[0] != 'T') return;
-    /* "T <adet> ad1 ad2 ..." */
-    const char *p = y + 1;
-    while (*p == ' ') p++;
-    while (*p >= '0' && *p <= '9') p++;
+/* "ad1 ad2 ..." -> rafa yüklenen belge sayısı */
+static int adlari_yukle(const char *p) {
     int yuklenen = 0;
     while (*p) {
         while (*p == ' ') p++;
@@ -149,7 +144,17 @@ static void ag_yanitini_isle(arastirma_t *a, const char *y) {
         um_bicim(yol, sizeof yol, "/KUT/UMAY/AG/%s", ad);
         if (bilgi_belge_ekle(yol) == UM_OLDU) yuklenen++;
     }
-    a->ag_belge = yuklenen;
+    return yuklenen;
+}
+
+static void ag_yanitini_isle(arastirma_t *a, const char *y) {
+    um_kopya(a->ag_not, sizeof a->ag_not, y);
+    if (y[0] != 'T') return;
+    /* "T <adet> ad1 ad2 ..." (5'ten fazlası önceki "E" iletilerindeydi) */
+    const char *p = y + 1;
+    while (*p == ' ') p++;
+    while (*p >= '0' && *p <= '9') p++;
+    a->ag_belge += adlari_yukle(p);
 }
 
 /* Ağ rafı kalıcıdır: ARAYICI bu kez ulaşamasa da önceki bulgular aranır. */
@@ -203,6 +208,11 @@ static int ag_adim(arastirma_t *a) {
             continue;                                  /* geç gelen eski yanıt */
         }
         p++;
+        if (p[0] == 'E' && p[1] == ' ') {              /* ek belge adları: son yanıt gelecek */
+            a->ag_belge += adlari_yukle(p + 2);
+            gun_yaz("ARAŞTIRMA: ağdan ek belgeler (istek %u): %s", k, p + 2);
+            continue;
+        }
         g_ag_sahip = 0;
         gun_yaz("ARAŞTIRMA: ağdan yanıt (istek %u): %s", k, p);
         ag_yanitini_isle(a, p);

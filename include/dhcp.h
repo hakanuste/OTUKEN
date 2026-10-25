@@ -17,7 +17,11 @@ typedef struct {
 
 void dhcp_init(void);
 int  dhcp_discover(void);                 /* DISCOVER yayinlar */
+/* Yalniz etkin alisverise (xid, chaddr, durum, sunucu kimligi) uyan yanit islenir. */
 void dhcp_handle_packet(const uint8_t *payload, uint16_t len);
+/* 1.4.9: kira yenileme (T1/T2), kira bitince birakma, yanitsiz soruyu
+ * yineleme. ag_yokla'dan ag_kilit altinda cagrilir. */
+void dhcp_zamanlayici(void);
 const dhcp_config_t *dhcp_get_config(void);
 
 #endif

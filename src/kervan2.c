@@ -356,12 +356,17 @@ int kervan2_kur_bellek(const uint8_t *v, uint32_t boy, char *neden) {
 
 /* yazılmış ilk n dosyayı geri al: eski sürümde olan yedekten geri yazılır,
  * olmayan silinir */
-static void geri_al(const k2_girdi_t *g, uint32_t n, const uint8_t *yedek, const uint8_t *var,
-                    const uint32_t *ofs, const uint32_t *boy) {
+static int geri_al(const k2_girdi_t *g, uint32_t n, const uint8_t *yedek, const uint8_t *var,
+                   const uint32_t *ofs, const uint32_t *boy) {
+    /* hepsi denenir; biri bile olmazsa -1 (çağıran "geri alındı" DEMEZ) */
+    int r = 0;
     for (uint32_t i = 0; i < n; i++) {
-        if (yedek && var[i]) fat16_write_file(g[i].ad, yedek + ofs[i], boy[i]);
-        else fat16_sil(g[i].ad);
+        int k;
+        if (yedek && var[i]) k = fat16_write_file(g[i].ad, yedek + ofs[i], boy[i]) < 0;
+        else k = fat16_sil(g[i].ad) != 0;
+        if (k) { r = -1; serial_write("KERVAN2: GERI ALMA BASARISIZ: "); serial_write(g[i].ad); serial_write("\n"); }
     }
+    return r;
 }
 
 static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
@@ -432,9 +437,13 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
     if (yazilan != b->girdi) {
         /* yazılamayan dosya (yazilan. sıradaki) yerinde durur: fat16_write_file
          * eski zinciri ancak başarıdan sonra bırakır */
-        geri_al(g, yazilan, yedek, yedek_var, yedek_ofs, yedek_boy);
+        int ga = geri_al(g, yazilan, yedek, yedek_var, yedek_ofs, yedek_boy);
         if (yedek) kfree(yedek);
-        neden_yaz(neden, eski ? "diske yazilamadi; eski surum geri yazildi" : "diske yazilamadi (yer yok?)");
+        if (ga != 0) {
+            log_write(LOG_HATA, "KERVAN", "yukseltme geri alinamadi: dosyalar karisik olabilir");
+            neden_yaz(neden, "yazilamadi; GERI ALMA BASARISIZ, surum karisik (ASENA)");
+        } else
+            neden_yaz(neden, eski ? "diske yazilamadi; eski surum geri yazildi" : "diske yazilamadi (yer yok?)");
         goto son;
     }
     /* kayıt: önce bellekte, sonra /KERVAN.LST. Kayıt yazılamazsa dosyalar ve
@@ -449,9 +458,13 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
     for (uint32_t i = 0; i < b->girdi; i++) kopya(yer->dosyalar[yer->dosya_adet++], 13, g[i].ad);
     if (kayit_yaz() != 0) {
         *yer = onceki;
-        geri_al(g, b->girdi, yedek, yedek_var, yedek_ofs, yedek_boy);
+        int ga = geri_al(g, b->girdi, yedek, yedek_var, yedek_ofs, yedek_boy);
         if (yedek) kfree(yedek);
-        neden_yaz(neden, eski ? "kayit yazilamadi; eski surum geri yazildi" : "kayit yazilamadi; paket geri alindi");
+        if (ga != 0) {
+            log_write(LOG_HATA, "KERVAN", "kayit yazilamadi ve geri alma basarisiz");
+            neden_yaz(neden, "kayit yazilamadi; GERI ALMA BASARISIZ, surum karisik");
+        } else
+            neden_yaz(neden, eski ? "kayit yazilamadi; eski surum geri yazildi" : "kayit yazilamadi; paket geri alindi");
         goto son;
     }
     if (yedek) kfree(yedek);

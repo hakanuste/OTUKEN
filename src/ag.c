@@ -33,6 +33,7 @@ void ag_yokla(void) {
     ozspin_al(&ag_kilit);
     ulak_poll();
     tcp_zamanlayici();
+    dhcp_zamanlayici();
     ozspin_birak(&ag_kilit);
 }
 

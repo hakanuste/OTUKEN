@@ -26,6 +26,7 @@
 #define SYS_WRITE_FILE  25
 #define SYS_MKDIR       27
 #define SYS_DOSYA_EKLE  54
+#define SYS_DOSYA_SIL   55
 
 #define GOVDE_AZAMI   (512 * 1024)
 #define SONUC_AZAMI   8
@@ -267,7 +268,7 @@ static void dizinleri_ac(void) {
 static int var_mi(const char *yol) { int fd = open(yol); if (fd < 0) return 0; close(fd); return 1; }
 
 /* belge yazar; dosya adı (8.3) ad'a */
-static int belge_yaz(const char *url, const char *baslik, const char *cumleler, char ad[16]) {
+static int belge_yaz(const char *url, const char *baslik, const char *cumleler, int kismi, char ad[16]) {
     char h[9]; hex8(h, fnv(url));
     ad[0] = 'W'; for (int i = 0; i < 7; i++) ad[i + 1] = h[i + 1]; ad[8] = 0;
     ekle(ad, 16, ".TXT");
@@ -277,17 +278,26 @@ static int belge_yaz(const char *url, const char *baslik, const char *cumleler, 
     for (int t = 0; t < terim_say; t++) { if (t) ekle(et, sizeof et, ","); ekle(et, sizeof et, terim[t]); }
     char bas[90]; kopya(bas, sizeof bas, baslik[0] ? baslik : url);
     for (int i = 0; bas[i]; i++) if (bas[i] == '\n' || bas[i] == '\r') bas[i] = ' ';
+    /* tampona sığmayan sayfa: kanıt yalnız sayfanın BAŞINDAN; başlıkta söylenir */
+    if (kismi) { if (uzun(bas) > 60) bas[60] = 0; ekle(bas, sizeof bas, " (sayfanin yalniz basi)"); }
     char kay[90]; kopya(kay, sizeof kay, url);
     belge[0] = 0;
     ekle(belge, sizeof belge, "#kategori: ag\n#baslik: "); ekle(belge, sizeof belge, bas);
     ekle(belge, sizeof belge, "\n#etiket: "); ekle(belge, sizeof belge, et);
     ekle(belge, sizeof belge, "\n#kaynak: "); ekle(belge, sizeof belge, kay);
+    if (kismi) ekle(belge, sizeof belge, "\n#kismi: evet");
     ekle(belge, sizeof belge, "\n\n"); ekle(belge, sizeof belge, cumleler);
     int n = uzun(belge); if (n > 4000) n = 4000;
     if (syscall(SYS_WRITE_FILE, (long)yol, (long)belge, n, 0) < 0) { gunluk("belge YAZILAMADI: ", yol); return -1; }
     if (yeni) {
         char s[24]; kopya(s, sizeof s, ad); ekle(s, sizeof s, "\n");
-        syscall(SYS_DOSYA_EKLE, (long)"/KUT/UMAY/AG/DIZIN.TXT", (long)s, uzun(s), 0);
+        if (syscall(SYS_DOSYA_EKLE, (long)"/KUT/UMAY/AG/DIZIN.TXT", (long)s, uzun(s), 0) != uzun(s)) {
+            /* dizine girmeyen belge açılışta yüklenmez; belgeyi geri al ki
+             * aynı adresin sonraki getirilişi onu YENİ sayıp dizini onarsın */
+            gunluk("DIZIN.TXT'e eklenemedi, belge geri alindi: ", yol);
+            syscall(SYS_DOSYA_SIL, (long)yol, 0, 0, 0);
+            return -1;
+        }
     }
     return 0;
 }
@@ -317,6 +327,8 @@ static void ayar_oku(void) {
 }
 
 /* ---------------- bir araştırma ---------------- */
+static char adlar[SONUC_AZAMI][16];
+static int ek_adet;            /* son araştırmada yazılan belge sayısı */
 static void arastir(const char *soru, char *yanit_c, int yn) {
     terimleri_kur(soru);
     if (terim_say == 0) { kopya(yanit_c, yn, "H aranacak terim yok"); return; }
@@ -338,7 +350,7 @@ static void arastir(const char *soru, char *yanit_c, int yn) {
     dizinleri_ac();
     kopya(yanit_c, yn, "T ");
     int adet = 0;
-    static char adlar[SONUC_AZAMI][16];
+    ek_adet = 0;
     for (int r = 0; r < sonuc_say; r++) {
         gunluk("indiriliyor: ", sonuc[r]);
         if (http_al(sonuc[r], &yanit, govde, sizeof govde - 1, 0, 0) != 0) {
@@ -351,18 +363,30 @@ static void arastir(const char *soru, char *yanit_c, int yn) {
         int kk = html_kodlama_ad(yanit.tur);
         if (kk < 0 && html) kk = html_kodlama_bul(govde, yanit.govde_boy);
         html_isle(govde, yanit.govde_boy, kk < 0 ? KK_UTF8 : kk, !html, 200, &sayfa);
-        duz_metin_kur();
+        int mn = duz_metin_kur();
+        int kismi = yanit.kesik;
+        if (kismi) {
+            /* gövde tampona sığmadı: son tam cümleden sonrası (yarım kalan
+             * parça) kanıt olamaz -> kesilir */
+            while (mn > 0 && (metin[mn - 1] == ' ' || metin[mn - 1] == '\n')) mn--;   /* sondaki boşluk */
+            while (mn > 0 && metin[mn - 1] != '.' && metin[mn - 1] != '!' && metin[mn - 1] != '?' &&
+                   metin[mn - 1] != '\n') mn--;                            /* yarım son parça */
+            metin[mn] = 0;
+            gunluk("sayfa tampona sigmadi, yalniz basi kullanildi: ", sonuc[r]);
+        }
         static char cumleler[BELGE_AZAMI];
         int c = cumleleri_sec(cumleler, BELGE_AZAMI - 400);
         if (c == 0) { gunluk("ilgili cumle yok: ", sonuc[r]); continue; }
-        if (belge_yaz(yanit.son_url[0] ? yanit.son_url : sonuc[r], sayfa.baslik, cumleler, adlar[adet]) == 0) {
+        if (belge_yaz(yanit.son_url[0] ? yanit.son_url : sonuc[r], sayfa.baslik, cumleler, kismi, adlar[adet]) == 0) {
             char s[64]; sayi(s, (uint64_u)c); ekle(s, sizeof s, " cumle -> "); ekle(s, sizeof s, adlar[adet]);
             gunluk("belge: ", s);
-            /* yanıt tek IPC iletisi (96 bayt): en çok 5 ad; fazlası rafta/DIZIN.TXT'de */
+            /* son yanıt tek IPC iletisi (96 bayt): en çok 5 ad; 6.-8. adlar
+             * önceden "<kimlik> E ad..." ek iletileriyle gider (arastir sonrası) */
             if (adet < 5) { ekle(yanit_c, yn, adlar[adet]); ekle(yanit_c, yn, " "); }
             adet++;
         }
     }
+    ek_adet = adet;
     if (adet == 0) { kopya(yanit_c, yn, "H ilgili sayfa bulunamadi"); return; }
     /* "T " + adlar -> "T <adet> ad..." */
     char s[96]; kopya(s, sizeof s, "T "); { char t[8]; sayi(t, (uint64_u)adet); ekle(s, sizeof s, t); }
@@ -403,7 +427,17 @@ int main(void) {
         if (uzun(ty) > 95) ty[95] = 0;                    /* tek IPC iletisi */
         gunluk("yanit: ", ty);
         int h = ipc_bul(kime);
-        if (h >= 0) ipc_gonder(h, 0, ty, (uint32_u)uzun(ty));
-        else gunluk("yanit kapisi yok: ", kime);
+        if (h >= 0) {
+            /* 5'ten fazla belge: kalan adlar ÖNCE ek iletilerle ("<kimlik> E ad...");
+             * UMAY bunları canlı rafa yükler, sonra son "T" iletisini işler */
+            for (int i = 5; i < ek_adet; ) {
+                static char ek[112];
+                kopya(ek, sizeof ek, kimlik[0] ? kimlik : "0"); ekle(ek, sizeof ek, " E");
+                for (; i < ek_adet && uzun(ek) + 14 < 95; i++) { ekle(ek, sizeof ek, " "); ekle(ek, sizeof ek, adlar[i]); }
+                gunluk("ek yanit: ", ek);
+                ipc_gonder(h, 0, ek, (uint32_u)uzun(ek));
+            }
+            ipc_gonder(h, 0, ty, (uint32_u)uzun(ty));
+        } else gunluk("yanit kapisi yok: ", kime);
     }
 }

@@ -356,12 +356,17 @@ static void fat16_geri_al(const uint16_t *kumeler, uint32_t adet) {
 /* sınama: >0 ise N. yazım (kök dizin dosyası) başarısız olur. Yalnız
  * çekirdek içi sınamalar ayarlar; syscall yolu yok. */
 volatile int fat16_sinama_yazim_hatasi;
+volatile int fat16_sinama_yazim_hatasi_b;   /* ikinci, bağımsız sayaç (geri alma hatası) */
 
 static int fat16_write_file__ic(const char *name83, const uint8_t *data, uint32_t size) {
     static uint8_t sector[512];
-    if (fat16_sinama_yazim_hatasi > 0 && --fat16_sinama_yazim_hatasi == 0) {
-        serial_write("BITIG(fat16): SINAMA yazim hatasi uretildi\n");
-        return -1;
+    {
+        int a = fat16_sinama_yazim_hatasi > 0 && --fat16_sinama_yazim_hatasi == 0;
+        int b = fat16_sinama_yazim_hatasi_b > 0 && --fat16_sinama_yazim_hatasi_b == 0;
+        if (a || b) {
+            serial_write("BITIG(fat16): SINAMA yazim hatasi uretildi\n");
+            return -1;
+        }
     }
 
     /* DAYANIKLILIK: dosya sistemi BAGLI DEGILSE bytes_per_sector ve

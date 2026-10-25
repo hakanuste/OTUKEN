@@ -15,6 +15,7 @@ typedef struct {
 int      fat16_geometri(fat16_geo_t *g);
 void     fat16_ipucu_sifirla(void);
 extern volatile int fat16_sinama_yazim_hatasi;   /* yalnız çekirdek içi sınama */
+extern volatile int fat16_sinama_yazim_hatasi_b; /* ikinci sayaç: aynı yazımları sayar */
 uint32_t fat16_root_lba(void);
 uint32_t fat16_root_dir_sectors(void);
 uint32_t fat16_sectors_per_cluster(void);

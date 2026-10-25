@@ -352,24 +352,45 @@ static int belge_yukle(const char *yol) {
 
 int bilgi_belge_ekle(const char *yol) { return belge_yukle(yol); }
 
-/* 1.5: ARAYICI'nın rafı (/KUT/UMAY/AG/DIZIN.TXT'de adı geçen belgeler) */
+/* 1.5: ARAYICI'nın rafı (/KUT/UMAY/AG/DIZIN.TXT'de adı geçen belgeler).
+ * Dizin BÜTÜNÜYLE okunur (parça parça; satır parça sınırında bölünebilir);
+ * raf en çok AG_RAF_AZAMI belge tuttuğundan yalnız SON AG_RAF_AZAMI ad
+ * (en yeniler) yüklenir — hepsini sırayla yüklemekle aynı sonuç, daha az okuma. */
 int bilgi_ag_rafi_yukle(void) {
-    static char d[4096];
+    static char d[2048];
+    static char son[AG_RAF_AZAMI][20];
+    int son_bas = 0, son_n = 0;
     up_tut_t t = up_ac("/KUT/UMAY/AG/DIZIN.TXT", UP_OKU);
     if (t < 0) return 0;
-    int64_t n = up_oku(t, d, sizeof d - 1);
+    char ad[20]; int o = 0, tasti = 0;
+    for (;;) {
+        int64_t n = up_oku(t, d, sizeof d);
+        if (n <= 0) break;
+        for (int64_t i = 0; i < n; i++) {
+            char c = d[i];
+            if (c == '\n' || c == '\r') {
+                if (o && !tasti) {
+                    ad[o] = 0;
+                    int yer = (son_bas + son_n) % AG_RAF_AZAMI;
+                    if (son_n < AG_RAF_AZAMI) son_n++; else son_bas = (son_bas + 1) % AG_RAF_AZAMI;
+                    um_kopya(son[yer], sizeof son[yer], ad);
+                }
+                o = 0; tasti = 0;
+            } else if (o < 19) ad[o++] = c;
+            else tasti = 1;                            /* 8.3 adından uzun: geçersiz satır */
+        }
+    }
     up_kapat(t);
-    if (n <= 0) return 0;
-    d[n] = 0;
-    int say = 0;
-    char yol[48], ad[20];
-    for (const char *p = d; *p; ) {
-        int o = 0;
-        while (*p && *p != '\n' && *p != '\r') { if (o < 19) ad[o++] = *p; p++; }
+    if (o && !tasti) {                                 /* son satırda '\n' yoksa */
         ad[o] = 0;
-        while (*p == '\n' || *p == '\r') p++;
-        if (!o) continue;
-        um_bicim(yol, sizeof yol, "/KUT/UMAY/AG/%s", ad);
+        int yer = (son_bas + son_n) % AG_RAF_AZAMI;
+        if (son_n < AG_RAF_AZAMI) son_n++; else son_bas = (son_bas + 1) % AG_RAF_AZAMI;
+        um_kopya(son[yer], sizeof son[yer], ad);
+    }
+    int say = 0;
+    char yol[48];
+    for (int k = 0; k < son_n; k++) {
+        um_bicim(yol, sizeof yol, "/KUT/UMAY/AG/%s", son[(son_bas + k) % AG_RAF_AZAMI]);
         if (belge_yukle(yol) == UM_OLDU) say++;
     }
     gun_yaz("Ağ rafı: %d belge.", say);
