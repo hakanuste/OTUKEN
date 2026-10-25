@@ -362,7 +362,7 @@ static int geri_al(const k2_girdi_t *g, uint32_t n, const uint8_t *yedek, const 
     int r = 0;
     for (uint32_t i = 0; i < n; i++) {
         int k;
-        if (yedek && var[i]) k = fat16_write_file(g[i].ad, yedek + ofs[i], boy[i]) < 0;
+        if (yedek && var[i]) k = fat16_write_file(g[i].ad, yedek + ofs[i], boy[i]) != (int)boy[i];
         else k = fat16_sil(g[i].ad) != 0;
         if (k) { r = -1; serial_write("KERVAN2: GERI ALMA BASARISIZ: "); serial_write(g[i].ad); serial_write("\n"); }
     }
@@ -432,7 +432,8 @@ static int kur_bellek__ic(const uint8_t *v, uint32_t boy, char *neden) {
     /* yaz; hata olursa: yeni dosyalar silinir, eski sürümün dosyaları geri yazılır */
     uint32_t yazilan = 0;
     for (; yazilan < b->girdi; yazilan++) {
-        if (fat16_write_file(g[yazilan].ad, v + g[yazilan].ofset, g[yazilan].boy) < 0) break;
+        /* yazılan bayt = dosya boyu olmalı (kısa yazım da hatadır) */
+        if (fat16_write_file(g[yazilan].ad, v + g[yazilan].ofset, g[yazilan].boy) != (int)g[yazilan].boy) break;
     }
     if (yazilan != b->girdi) {
         /* yazılamayan dosya (yazilan. sıradaki) yerinde durur: fat16_write_file

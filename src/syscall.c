@@ -1220,6 +1220,8 @@ static uint64_t sys_asena_onar_impl(uint64_t tur, uint64_t ad_p, uint64_t cikti,
      * argumanlari 0 olan bir cagri - ISKENCE sinamasi boyle cagirir -
      * hicbir sey yazmamali) */
     if (onay != SYS_ONAY || cikti == 0) return (uint64_t)-1;
+    /* sonuc yeri diske yazmadan ONCE denetlenir (bkz. sys_ergenekon_impl) */
+    if (!kullanici_tampon_yazilabilir(cikti, tur == 0 ? sizeof(asena_rapor_t) : 64)) return (uint64_t)-1;
     if (tur == 0) {
         asena_rapor_t r;
         asena_tara(1, &r);
@@ -1239,6 +1241,9 @@ static uint64_t sys_ergenekon_impl(uint64_t islem, uint64_t cikti, uint64_t onay
     (void)a4;
     if (cikti == 0) return (uint64_t)-1;
     if (islem != 0 && onay != SYS_ONAY) return (uint64_t)-1;   /* yikici islemler onay ister */
+    /* sonuc yeri YIKICI islemden ONCE denetlenir: yazilamaz tamponla
+     * cagri, disk bicimlendikten sonra "basarisiz" donmemeli */
+    if (!kullanici_tampon_yazilabilir(cikti, sizeof(ergenekon_durum_t))) return (uint64_t)-1;
     ergenekon_durum_t d;
     int r;
     switch (islem) {

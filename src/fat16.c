@@ -471,9 +471,14 @@ scan_done:;
     }
 
     /* --- 3) Veriyi kumelere yaz --- */
+    /* Kumeler FAT'tan YENIDEN okunmaz: az once ayrilan liste kullanilir.
+     * Eskiden zincir fat16_next_cluster ile izleniyordu; bir FAT okuma
+     * hatasi EOC dondurunce dongu erken biter, dizin girdisi yine TAM boyla
+     * yazilir ve cagirana KISA bir bayt sayisi donerdi (kirpik dosya
+     * "basarili"). Artik ya hepsi yazilir ya -1. */
     uint32_t written = 0;
-    uint16_t cl = chain_start;
-    while (cl >= 2 && cl < 0xFFF8 && written < size) {
+    for (uint32_t ki = 0; ki < ayrilan_adet && written < size; ki++) {
+        uint16_t cl = ayrilan[ki];
         uint32_t lba = data_start_lba + (uint32_t)(cl - 2) * sectors_per_cluster;
         for (uint32_t s = 0; s < sectors_per_cluster && written < size; s++) {
             for (int i = 0; i < 512; i++) {
@@ -488,7 +493,11 @@ scan_done:;
             uint32_t chunk = (size - written < 512) ? (size - written) : 512;
             written += chunk;
         }
-        cl = fat16_next_cluster(cl);
+    }
+    if (written != size) {                       /* olmamali: savunma */
+        serial_write("BITIG(fat16): veri tam yazilamadi - geri aliniyor\n");
+        fat16_geri_al(ayrilan, ayrilan_adet);
+        return -1;
     }
 
     /* --- 4) Dizin girdisini guncelle/olustur --- */

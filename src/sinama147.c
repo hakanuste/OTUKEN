@@ -30,6 +30,7 @@
 #include "sched.h"
 #include "thread.h"
 #include "vfs.h"
+#include "fat16.h"
 #include "tore.h"
 #include "syscall.h"
 #include "ulgen.h"
@@ -228,6 +229,21 @@ static void politika_gorev(void) {
     d0 = tore_denied_count();
     r = syscall_dispatch(SYS_PROC_LISTE, GECERSIZ_KULLANICI_ADRESI, 0, 0, 0);
     if (r != (uint64_t)-1 || tore_denied_count() != d0 + 1) hata |= 32;
+    /* 6) yikici cagri, yazilamaz sonuc yeriyle: ONCEDEN reddedilmeli; disk
+     *    bicimlenmemeli (nobetci dosya yerinde kalir). Eskiden ERGENEKON
+     *    once sifirdan kurar, sonra tamponu denetleyip -1 donerdi. */
+    {
+        static const uint8_t nobet[] = "ERGENEKON tampon nobetcisi";
+        if (fat16_write_file("ERGNOBET.TXT", nobet, sizeof nobet - 1) != (int)(sizeof nobet - 1)) hata |= 64;
+        tore_set_capabilities(ben->id, KUT_KURTARMA);
+        r = syscall_dispatch(SYS_ERGENEKON, 2, GECERSIZ_KULLANICI_ADRESI, SYS_ONAY, 0);
+        uint64_t boy = 0; int dz = 0;
+        if (r != (uint64_t)-1 || vfs_stat("/ERGNOBET.TXT", &boy, &dz) != 0 || boy != sizeof nobet - 1) hata |= 64;
+        r = syscall_dispatch(SYS_ASENA_ONAR, 0, 0, GECERSIZ_KULLANICI_ADRESI, SYS_ONAY);
+        if (r != (uint64_t)-1) hata |= 64;
+        fat16_sil("ERGNOBET.TXT");
+        tore_set_capabilities(ben->id, 0);
+    }
     pol_sonuc = hata;
     thread_exit();
 }
