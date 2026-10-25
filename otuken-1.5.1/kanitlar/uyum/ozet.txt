@@ -1,0 +1,17 @@
+== KONTROL GRUBU: eski yonlendirmeli UMAY -> KALDI beklenir
+kontrol_eski_yon_t1    smp=4  agir=0 KALDI   sure= 76s en_gecikme_tik=0x00000052  istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000021 hata=0x0000000E cekirdek_maske=0x0000000F
+kontrol_eski_yon_t2    smp=4  agir=0 KALDI   sure= 77s en_gecikme_tik=0x00000051  istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000021 hata=0x0000000E cekirdek_maske=0x0000000F
+KONTROL: sinama eski yonlendirme hatasini YAKALADI (2/2)
+== TABAN: yalniz uyum
+taban_s4_t1            smp=4  agir=0 GECTI   sure= 28s en_gecikme_tik=0x0000009D  istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x0000000F
+taban_s4_t2            smp=4  agir=0 GECTI   sure= 29s en_gecikme_tik=0x00000098  istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x0000000F
+== MATRIS: uyum + AGIR ayni anda (tekrar=2)
+yuk_s1_t1              smp=1  agir=1 GECTI   sure= 38s en_gecikme_tik=0x00000098 AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x00000001
+yuk_s1_t2              smp=1  agir=1 GECTI   sure= 40s en_gecikme_tik=0x00000096 AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x00000001
+yuk_s2_t1              smp=2  agir=1 GECTI   sure= 31s en_gecikme_tik=0x000000A5 AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x00000003
+yuk_s2_t2              smp=2  agir=1 GECTI   sure= 31s en_gecikme_tik=0x000000C3 AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x00000003
+yuk_s4_t1              smp=4  agir=1 GECTI   sure= 60s en_gecikme_tik=0x000000DA AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x0000000F
+yuk_s4_t2              smp=4  agir=1 GECTI   sure= 59s en_gecikme_tik=0x000000CB AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x0000000F
+yuk_s8_t1              smp=8  agir=1 GECTI   sure= 72s en_gecikme_tik=0x0000012F AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x000000DF
+yuk_s8_t2              smp=8  agir=1 GECTI   sure= 71s en_gecikme_tik=0x000000D3 AGIR-SINAMA: GECTI istemci=0x00000003 soru=0x00000024 tam_yanit=0x00000024 hata=0x00000000 cekirdek_maske=0x000000FF
+== TOPLAM kosu=10 gecti=10 kaldi=0 takildi=0

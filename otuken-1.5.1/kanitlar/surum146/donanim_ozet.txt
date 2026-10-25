@@ -1,0 +1,3 @@
+[1m== SONUC ==[0m
+  GECEN: 43   KALAN: 0
+

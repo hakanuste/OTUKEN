@@ -1,0 +1,258 @@
+# OTUKEN 1.4 kaynak envanteri (docs/KAYNAK-ANALIZI.md eki)
+# sinif | kategori | dosya | boyut | makine kaniti | not
+# Siniflar: A=gerekli, B=test icin gerekli, C=asset/fixture, D=gercekten gereksiz, Dok=dokuman
+# "REFERANS YOK" satirlari elle dogrulandi; sonuc "not" sutununda.
+
+A         | ARM64 portu                 | arm64/Makefile                           |       540 | belge | ARM64 portu: arm64/Makefile OBJ
+A         | ARM64 portu                 | arm64/boot/boot.S                        |      1222 | -- REFERANS YOK -- | ARM64 portu: arm64/Makefile OBJ
+A         | ARM64 portu                 | arm64/linker.ld                          |       417 | make:Makefile make:arm64/Makefile | ARM64 portu: arm64/Makefile OBJ
+D*        | ARM64 portu                 | arm64/otuken-arm64.img                   |      2512 | belge betik:testler.sh make:arm64/Makefile | ARM64 portu: arm64/Makefile OBJ
+A         | ARM64 portu                 | arm64/src/cekirdek.c                     |      4891 | -- REFERANS YOK -- | ARM64 portu: arm64/Makefile OBJ
+D         | ARM64 portu                 | arm64/src/kernel_arm64.c                 |      1876 | -- REFERANS YOK -- | baglanamaz: uart_write tanimsiz, Makefile OBJ disi, boot.S cekirdek_ana cagirir
+A         | ARM64 portu                 | arm64/src/uart.c                         |       978 | -- REFERANS YOK -- | ARM64 portu: arm64/Makefile OBJ
+C         | Asset (ses)                 | belge/dede-korkut-konusma.wav            |    537170 | -- REFERANS YOK -- | ses ornegi (kod referansi yok; QEMU'da ses duyulmadigi icin tek duyulabilir kanit)
+C         | Asset (ses)                 | belge/dede-korkut-sesi.wav               |    131924 | -- REFERANS YOK -- | ses ornegi (kod referansi yok; QEMU'da ses duyulmadigi icin tek duyulabilir kanit)
+A         | Boot                        | boot/ap_trampoline.asm                   |      2342 | belge make:Makefile
+A         | Boot                        | boot/boot.asm                            |     10932 | betik:kur.sh make:Makefile
+A         | Boot                        | boot/idt_flush.asm                       |       529 | make:Makefile
+A         | Boot                        | boot/interrupt.asm                       |      4169 | make:Makefile
+A         | Boot                        | boot/ring3_entry.asm                     |      1599 | make:Makefile
+A         | Boot                        | boot/ring3_test.asm                      |      1450 | make:Makefile
+A         | Boot                        | boot/switch.asm                          |      2353 | make:Makefile
+A         | Boot                        | boot/syscall_entry.asm                   |      4007 | make:Makefile
+A         | Build                       | .gitignore                               |        76 | make:Makefile
+A         | Build                       | Makefile                                 |      3745 | belge
+A         | Build                       | elf_blob_yap.py                          |       596 | make:Makefile
+A-arac    | Build                       | gen_font.py                              |      9052 | -- REFERANS YOK -- | include/font8x8.h'i bayt bayt ayni uretir
+A         | Build                       | grub.cfg                                 |       106 | betik:uefi_iso_yap.sh make:Makefile
+A         | Build                       | kur.sh                                   |      7080 | belge betik:us1_sina.c make:Makefile
+A         | Build                       | linker.ld                                |      1347 | make:Makefile make:arm64/Makefile
+A         | Build                       | uefi_iso_yap.sh                          |       431 | belge betik:donanim_testleri.sh
+Dok       | Dokuman                     | DEVIR-PROMPTU.md                         |     16204 | -- REFERANS YOK --
+Dok       | Dokuman                     | README.md                                |      7886 | -- REFERANS YOK --
+A         | Fixture/disk                | diskfiles.img                            |  16777216 | belge betik:donanim_testleri.sh betik:kabuk_testi.py betik:kur.sh betik:testler.sh make:Makefile | CALISMA ZAMANI: UMAY.ELF, UMAY.US1, SOZLUK.TXT, belgeler
+C         | Fixture/disk                | diskfiles/NOTLAR.TXT                     |       210 | disk-imaji | diskfiles.img icindeki metinlerin kaynagi (bayt bayt ayni)
+C         | Fixture/disk                | diskfiles/OTUKEN.TXT                     |       303 | disk-imaji | diskfiles.img icindeki metinlerin kaynagi (bayt bayt ayni)
+C/B       | Fixture/disk                | fat32test.img                            |  67108864 | betik:kur.sh betik:testler.sh | FAT32 fixture: testler.sh ikinci disk, vfs-fat32-test
+A         | IPC                         | include/ipc2.h                           |      1473 | include:6
+A         | IPC                         | include/msgqueue.h                       |      1261 | include:3
+A         | IPC                         | include/pipe.h                           |      1102 | include:2
+A         | IPC                         | include/shm.h                            |       828 | include:2
+A         | IPC                         | src/ipc2.c                               |      5223 | make:Makefile
+A         | IPC                         | src/msgqueue.c                           |      2361 | make:Makefile
+A         | IPC                         | src/pipe.c                               |      2993 | make:Makefile
+A         | IPC                         | src/shm.c                                |      2986 | make:Makefile
+A         | Kernel                      | include/atomic.h                         |      1267 | include:1
+A         | Kernel                      | include/driver.h                         |      1557 | include:2
+A         | Kernel                      | include/elf.h                            |      2391 | include:3
+A         | Kernel                      | include/heap.h                           |       634 | include:10
+A         | Kernel                      | include/idt.h                            |       780 | include:6
+A         | Kernel                      | include/io.h                             |       975 | include:12
+A         | Kernel                      | include/kararlilik.h                     |       867 | include:2
+A         | Kernel                      | include/kervan.h                         |      1593 | include:2
+A         | Kernel                      | include/keyboard.h                       |       324 | include:3
+A         | Kernel                      | include/log.h                            |      1288 | include:22
+A         | Kernel                      | include/mouse.h                          |       245 | include:4
+A         | Kernel                      | include/multiboot.h                      |      1380 | include:4
+A         | Kernel                      | include/multiboot2.h                     |      1610 | include:4
+A         | Kernel                      | include/mutex.h                          |      1208 | include:5
+A         | Kernel                      | include/otukenconf.h                     |      1290 | include:1
+A         | Kernel                      | include/pci.h                            |      1159 | include:8
+A         | Kernel                      | include/pic.h                            |       164 | include:3
+A         | Kernel                      | include/pmm.h                            |       643 | include:17
+A         | Kernel                      | include/process.h                        |      1051 | include:3
+A         | Kernel                      | include/ring3.h                          |       696 | include:2
+A         | Kernel                      | include/sched.h                          |      4743 | include:17
+A         | Kernel                      | include/serial.h                         |       401 | include:52
+A         | Kernel                      | include/servis.h                         |      1611 | include:3
+A         | Kernel                      | include/spinlock.h                       |      2615 | include:21
+A         | Kernel                      | include/surum.h                          |       553 | include:1
+A         | Kernel                      | include/thread.h                         |       628 | include:5
+A         | Kernel                      | include/timer.h                          |       152 | include:12
+A         | Kernel                      | include/tss.h                            |      1083 | include:4
+A         | Kernel                      | include/uhci.h                           |       669 | include:2
+A         | Kernel                      | include/usb.h                            |      1345 | include:2
+A         | Kernel                      | include/vmm.h                            |      1698 | include:18
+A         | Kernel                      | src/driver.c                             |      2689 | make:Makefile
+A         | Kernel                      | src/elf.c                                |      9188 | make:Makefile
+A         | Kernel                      | src/heap.c                               |     10991 | make:Makefile
+A         | Kernel                      | src/idt.c                                |     11164 | make:Makefile
+A         | Kernel                      | src/kararlilik.c                         |      4023 | make:Makefile
+A         | Kernel                      | src/kernel.c                             |     96924 | belge make:Makefile
+A         | Kernel                      | src/kervan.c                             |      4331 | make:Makefile
+A         | Kernel                      | src/keyboard.c                           |      2927 | make:Makefile
+A         | Kernel                      | src/log.c                                |      4033 | make:Makefile
+A         | Kernel                      | src/mouse.c                              |      2816 | make:Makefile
+A         | Kernel                      | src/multiboot2.c                         |      4719 | belge make:Makefile
+A         | Kernel                      | src/mutex.c                              |      3651 | belge make:Makefile
+A         | Kernel                      | src/pci.c                                |      4536 | make:Makefile
+A         | Kernel                      | src/pic.c                                |      1557 | make:Makefile
+A         | Kernel                      | src/pmm.c                                |     12947 | make:Makefile
+A         | Kernel                      | src/process.c                            |      5165 | make:Makefile
+A         | Kernel                      | src/ring3.c                              |      9767 | make:Makefile
+A         | Kernel                      | src/sched.c                              |     16749 | make:Makefile
+A         | Kernel                      | src/serial.c                             |      3431 | make:Makefile
+A         | Kernel                      | src/servis.c                             |      7016 | make:Makefile
+A         | Kernel                      | src/spinlock.c                           |      1787 | belge make:Makefile
+A         | Kernel                      | src/thread.c                             |       551 | make:Makefile
+A         | Kernel                      | src/timer.c                              |       846 | make:Makefile
+A         | Kernel                      | src/tss.c                                |      3714 | make:Makefile
+A         | Kernel                      | src/uhci.c                               |     11071 | make:Makefile
+A         | Kernel                      | src/usb.c                                |      5658 | make:Makefile
+A         | Kernel                      | src/vmm.c                                |     14826 | make:Makefile
+A         | Ring3                       | userprog/crt0.c                          |       318 | -- REFERANS YOK -- | kabuk: kok Makefile userprog/%.uo desen kurali
+B         | Ring3                       | userprog/hello.c                         |      1149 | -- REFERANS YOK -- | hello: Ring3ELF gorevi (uretimde) ELF+Ring3 kaniti; .text/.rodata hello.c ile bayt bayt ayni
+A         | Ring3                       | userprog/shell.c                         |     10451 | -- REFERANS YOK -- | kabuk: kok Makefile userprog/%.uo desen kurali
+A         | Ring3                       | userprog/shell.ld                        |      1102 | make:Makefile | kabuk: kok Makefile userprog/%.uo desen kurali
+A         | Ring3                       | userprog/ulib.c                          |      6697 | -- REFERANS YOK -- | kabuk: kok Makefile userprog/%.uo desen kurali
+A         | Ring3                       | userprog/ulib.h                          |      3816 | belge include:3 make:Makefile | kabuk: kok Makefile userprog/%.uo desen kurali
+B         | Ring3                       | userprog/user.ld                         |      1102 | -- REFERANS YOK -- | hello: Ring3ELF gorevi (uretimde) ELF+Ring3 kaniti; .text/.rodata hello.c ile bayt bayt ayni
+B         | Ring3 (gomulu hello)        | src/user_elf_blob.c                      |     32232 | belge make:Makefile | hello: Ring3ELF gorevi (uretimde) ELF+Ring3 kaniti; .text/.rodata hello.c ile bayt bayt ayni
+A         | Ring3 (gomulu kabuk)        | src/shell_elf_blob.c                     |    124647 | belge make:Makefile
+A         | SES                         | include/dede.h                           |       958 | include:3
+C         | SES                         | include/ezgi.h                           |       720 | include:1 | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A         | SES                         | include/ozan_ses.h                       |       561 | include:2
+A         | SES                         | include/ses.h                            |      1193 | include:5
+A         | SES                         | include/ses_kilit.h                      |       404 | include:4
+A         | SES                         | src/dede.c                               |     11753 | make:Makefile
+C         | SES                         | src/ezgi.c                               |      5788 | make:Makefile | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A         | SES                         | src/ozan_ses.c                           |      5239 | make:Makefile
+A         | SES                         | src/ses.c                                |      8578 | belge make:Makefile
+A         | SMP/APIC/ACPI               | include/cpu.h                            |      2933 | include:10
+A         | SMP/APIC/ACPI               | include/gecikme.h                        |       377 | include:3
+A         | SMP/APIC/ACPI               | include/smp.h                            |      1581 | include:7
+A         | SMP/APIC/ACPI               | src/cpu.c                                |      1928 | belge make:Makefile
+A         | SMP/APIC/ACPI               | src/gecikme.c                            |      1350 | belge make:Makefile
+A         | SMP/APIC/ACPI               | src/smp.c                                |     23629 | belge make:Makefile
+A         | Surucu                      | include/ahci.h                           |      1360 | include:2
+A         | Surucu                      | include/nvme.h                           |       786 | include:2
+A         | Surucu                      | src/ahci.c                               |     12095 | make:Makefile
+A         | Surucu                      | src/nvme.c                               |      2795 | make:Makefile
+A         | Syscall                     | include/syscall.h                        |      4726 | belge include:5
+A         | Syscall                     | src/syscall.c                            |     35204 | belge make:Makefile
+A         | TORE/KUT/TIMUR              | include/kut.h                            |      1209 | include:3
+A         | TORE/KUT/TIMUR              | include/timur.h                          |       833 | include:4
+A         | TORE/KUT/TIMUR              | include/tore.h                           |      1347 | include:6
+A         | TORE/KUT/TIMUR              | src/kut.c                                |      4041 | make:Makefile
+A         | TORE/KUT/TIMUR              | src/timur.c                              |      3668 | make:Makefile
+A         | TORE/KUT/TIMUR              | src/tore.c                               |      3378 | make:Makefile
+B         | Test                        | asama_dogrula.py                         |      3005 | belge betik:testler.sh | test altyapisi
+B         | Test                        | buyukdisk_hazirla.sh                     |       319 | betik:donanim_testleri.sh | test altyapisi
+B         | Test                        | donanim_testleri.sh                      |      7731 | belge betik:kur.sh | test altyapisi
+B         | Test                        | gpt_disk_hazirla.sh                      |       308 | betik:donanim_testleri.sh | test altyapisi
+B         | Test                        | kabuk_testi.py                           |      2481 | belge betik:kur.sh | test altyapisi
+B         | Test                        | testler.sh                               |     12394 | belge betik:kur.sh | test altyapisi
+B         | Test (cekirdek ici)         | include/iskence.h                        |       972 | include:2 | yalniz TANI kipinde (iskence_tumu); testler.sh 12 kontrol
+B         | Test (cekirdek ici)         | src/iskence.c                            |     15352 | make:Makefile | yalniz TANI kipinde (iskence_tumu); testler.sh 12 kontrol
+B         | Test fixture (gomulu)       | src/kervan_ornek.c                       |      4576 | make:Makefile | ornek_paket: kernel.c KERVAN sinamasi (uretimde de); testler.sh "paket kuruldu"
+B         | Test kaniti                 | kanitlar/cekirdek-testleri.txt           |      3692 | -- REFERANS YOK -- | son test kosularinin kanitlari
+B         | Test kaniti                 | kanitlar/donanim-testleri.txt            |      2134 | -- REFERANS YOK -- | son test kosularinin kanitlari
+B         | Test kaniti                 | kanitlar/kabuk-oturumu.txt               |      1281 | -- REFERANS YOK -- | son test kosularinin kanitlari
+B         | Test kaniti                 | kanitlar/smp-yaris.txt                   |      1441 | -- REFERANS YOK -- | son test kosularinin kanitlari
+B         | Test kaniti                 | kanitlar/umay-sinamasi.txt               |     20131 | -- REFERANS YOK -- | son test kosularinin kanitlari
+B         | Test kaniti                 | kanitlar/us1-sinamasi.txt                |       640 | -- REFERANS YOK -- | son test kosularinin kanitlari
+A         | ULAK                        | include/aghizmet.h                       |       743 | include:2
+A         | ULAK                        | include/dhcp.h                           |       611 | include:3
+A         | ULAK                        | include/dns.h                            |       407 | include:3
+A         | ULAK                        | include/socket.h                         |      1643 | include:6
+A         | ULAK                        | include/tcp.h                            |      1849 | include:4
+A         | ULAK                        | include/ulak.h                           |      1337 | include:9
+A         | ULAK                        | src/aghizmet.c                           |      4128 | make:Makefile
+A         | ULAK                        | src/dhcp.c                               |      5455 | make:Makefile
+A         | ULAK                        | src/dns.c                                |      3756 | make:Makefile
+A         | ULAK                        | src/socket.c                             |      4531 | make:Makefile
+A         | ULAK                        | src/tcp.c                                |      9380 | make:Makefile
+A         | ULAK                        | src/ulak.c                               |     21139 | make:Makefile
+A         | ULGEN                       | include/fb.h                             |       729 | include:13
+A         | ULGEN                       | include/font8x8.h                        |     19206 | betik:gen_font.py include:2
+A         | ULGEN                       | include/gorsel_kilit.h                   |       405 | include:2
+A         | ULGEN                       | include/gui.h                            |       413 | include:3
+A         | ULGEN                       | include/ulgen.h                          |      2633 | include:3
+A         | ULGEN                       | src/fb.c                                 |      5799 | make:Makefile
+A         | ULGEN                       | src/gui.c                                |     15219 | make:Makefile
+A         | ULGEN                       | src/ulgen.c                              |     12112 | make:Makefile
+C         | ULGEN (UMAY tema)           | include/duvar.h                          |       962 | include:2 | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+C         | ULGEN (UMAY tema)           | include/orbitron.h                       |      1231 | include:2 | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+C         | ULGEN (UMAY tema)           | include/simge.h                          |      1049 | include:2 | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A/C       | ULGEN (UMAY tema)           | include/tamga.h                          |      3518 | include:4 | SYS_TEMA canli (tema_uygula, tamga_onbellek_bosalt); geri kalani tema ile olu
+C         | ULGEN (UMAY tema)           | include/tamga_gorsel.h                   |      1359 | include:2 | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A/C       | ULGEN (UMAY tema)           | include/tema.h                           |      2328 | include:4 | SYS_TEMA canli (tema_uygula, tamga_onbellek_bosalt); geri kalani tema ile olu
+C         | ULGEN (UMAY tema)           | include/ulgen_theme.h                    |      1320 | include:1 | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+C         | ULGEN (UMAY tema)           | src/duvar.c                              |   7960411 | make:Makefile | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+C         | ULGEN (UMAY tema)           | src/orbitron.c                           |     66522 | make:Makefile | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+C         | ULGEN (UMAY tema)           | src/simge.c                              |    140017 | make:Makefile | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A/C       | ULGEN (UMAY tema)           | src/tamga.c                              |     94680 | make:Makefile | SYS_TEMA canli (tema_uygula, tamga_onbellek_bosalt); geri kalani tema ile olu
+C         | ULGEN (UMAY tema)           | src/tamga_gorsel.c                       |   1937340 | make:Makefile | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A/C       | ULGEN (UMAY tema)           | src/tema.c                               |      3905 | make:Makefile | SYS_TEMA canli (tema_uygula, tamga_onbellek_bosalt); geri kalani tema ile olu
+C         | ULGEN (UMAY tema)           | src/ulgen_theme.c                        |     12780 | make:Makefile | UMAY tema/WAV: derlenir+baglanir, calisma aninda ULASILAMAZ (iki kipte --gc-sections)
+A         | UMAY                        | umay/Makefile                            |      2362 | belge
+A         | UMAY                        | umay/alp/alp_bilge.c                     |      2684 | make:umay/Makefile
+A         | UMAY                        | umay/alp/alp_gozcu.c                     |      2703 | make:umay/Makefile
+A         | UMAY                        | umay/alp/alp_onarici.c                   |      3145 | make:umay/Makefile
+A         | UMAY                        | umay/alp/alp_uzman.c                     |      9375 | make:umay/Makefile
+A         | UMAY                        | umay/alp/alp_yazman.c                    |      2206 | make:umay/Makefile
+A         | UMAY                        | umay/alp/otag.c                          |     18962 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_bengi.c                   |      6251 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_bilgi.c                   |     24116 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_kanal.c                   |      4141 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_main.c                    |     10099 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_onay.c                    |      2181 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_ortak.c                   |      5491 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_ozan.c                    |     12677 | make:umay/Makefile
+A         | UMAY                        | umay/core/umay_str.c                     |      5930 | make:umay/Makefile
+A         | UMAY                        | umay/gui/umay_ulgen.c                    |      7554 | make:umay/Makefile
+A         | UMAY                        | umay/include/umay.h                      |      3199 | include:16 make:umay/Makefile
+A         | UMAY                        | umay/include/umay_alp.h                  |      7122 | include:10
+A         | UMAY                        | umay/include/umay_bengi.h                |      1595 | include:5
+A         | UMAY                        | umay/include/umay_bilgi.h                |      3363 | include:7
+A         | UMAY                        | umay/include/umay_gui.h                  |       613 | include:2
+A         | UMAY                        | umay/include/umay_kanal.h                |       675 | include:2
+A         | UMAY                        | umay/include/umay_onay.h                 |       885 | include:6
+A         | UMAY                        | umay/include/umay_ortak.h                |       749 | include:15
+A         | UMAY                        | umay/include/umay_ozan.h                 |       726 | include:5
+A         | UMAY                        | umay/include/umay_port.h                 |      3509 | include:21
+A         | UMAY                        | umay/include/umay_ses.h                  |      1061 | include:3
+A         | UMAY                        | umay/include/umay_str.h                  |      1308 | include:23
+A         | UMAY                        | umay/include/umay_us.h                   |      4942 | include:10
+D*        | UMAY                        | umay/kov/umay                            |    109040 | belge betik:egit.py betik:kabuk_testi.py betik:kur.sh betik:referans.py betik:testler.sh betik:us1_sina.c make:Makefile make:umay/Makefile | derleme ciktisi git'te izleniyor (arsive girmiyordu); izleme birakilir
+A         | UMAY                        | umay/port/umay_port_otuken.c             |     11505 | belge
+A         | UMAY                        | umay/ses/umay_ses.c                      |      2947 | make:umay/Makefile
+A         | UMAY                        | umay/umay.ld                             |      1102 | make:umay/Makefile
+A         | UMAY                        | umay/us/umay_us.c                        |     11640 | make:umay/Makefile
+A         | UMAY                        | umay/us/umay_us_ipc.c                    |      3775 | make:umay/Makefile
+A         | UMAY                        | umay/us/umay_us_yerel.c                  |      5176 | make:umay/Makefile
+A         | UMAY                        | umay/us/us_stub.c                        |      2073 | make:umay/Makefile
+B         | UMAY (cekirdek barindirici) | include/umay.h                           |      2977 | include:16 | ESKI cekirdek-ici UMAY barindiricisi (8/15 islev olu); UMAY-TEST sinamalari kullanir
+B         | UMAY (cekirdek barindirici) | src/umay.c                               |      7871 | make:Makefile | ESKI cekirdek-ici UMAY barindiricisi (8/15 islev olu); UMAY-TEST sinamalari kullanir
+B         | UMAY test                   | umay/port/umay_port_host.c               |      5063 | make:umay/Makefile | UMAY ana makine sinamasi (202 kontrol)
+B         | UMAY test                   | umay/sina/sina.c                         |     37206 | make:umay/Makefile | UMAY ana makine sinamasi (202 kontrol)
+A-egitim  | US1 egitim araci            | us1/arac/egit.py                         |      6872 | belge | US1 egitim/referans/model bicimi (us1.py import edilir)
+A-egitim  | US1 egitim araci            | us1/arac/referans.py                     |       899 | belge betik:us1_sina.c | US1 egitim/referans/model bicimi (us1.py import edilir)
+A-egitim  | US1 egitim araci            | us1/arac/us1.py                          |      5356 | -- REFERANS YOK -- | US1 egitim/referans/model bicimi (us1.py import edilir)
+A         | US1 model/asset             | us1/sozluk.txt                           |        53 | belge betik:egit.py betik:kur.sh disk-imaji make:Makefile
+A         | US1 model/asset             | us1/umay.us1                             |    112404 | belge betik:egit.py betik:kur.sh betik:referans.py betik:us1_sina.c disk-imaji make:Makefile
+D*        | US1 model/asset             | us1/us1_sina                             |     21136 | belge betik:kur.sh | derleme ciktisi git'te izleniyor (arsive girmiyordu); izleme birakilir
+A         | US1 motor                   | us1/c/us1.c                              |      9668 | belge betik:kur.sh
+A         | US1 motor                   | us1/c/us1.h                              |      2317 | belge betik:us1_sina.c include:2
+B         | US1 test/fixture            | us1/sinama/referans_imler.txt            |         7 | betik:referans.py betik:us1_sina.c | US1 referans sinamasi (10 kontrol)
+B         | US1 test/fixture            | us1/sinama/referans_mantik.txt           |      1717 | betik:referans.py betik:us1_sina.c | US1 referans sinamasi (10 kontrol)
+B         | US1 test/fixture            | us1/sinama/us1_sina.c                    |      3233 | betik:kur.sh | US1 referans sinamasi (10 kontrol)
+A         | VFS/BITIG                   | include/depo_kilit.h                     |       685 | include:9
+A         | VFS/BITIG                   | include/disk.h                           |      1164 | include:6
+A         | VFS/BITIG                   | include/disk_cache.h                     |       751 | include:5
+A         | VFS/BITIG                   | include/fat16.h                          |      1331 | include:9
+A         | VFS/BITIG                   | include/fat16_ic.h                       |      1048 | include:4
+A         | VFS/BITIG                   | include/fat32.h                          |       412 | include:3
+A         | VFS/BITIG                   | include/gpt.h                            |      1130 | include:2
+A         | VFS/BITIG                   | include/vfs.h                            |      1570 | include:9
+A         | VFS/BITIG                   | include/vfs_fat16.h                      |       271 | include:2
+A         | VFS/BITIG                   | include/vfs_fat32.h                      |       111 | include:1
+A         | VFS/BITIG                   | src/disk.c                               |     11010 | make:Makefile
+A         | VFS/BITIG                   | src/disk_cache.c                         |      3184 | make:Makefile
+A         | VFS/BITIG                   | src/fat16.c                              |     19860 | make:Makefile
+A         | VFS/BITIG                   | src/fat16_dizin.c                        |     10244 | make:Makefile
+A         | VFS/BITIG                   | src/fat32.c                              |      6618 | make:Makefile
+A         | VFS/BITIG                   | src/gpt.c                                |      6726 | make:Makefile
+A         | VFS/BITIG                   | src/vfs.c                                |      7697 | make:Makefile
+A         | VFS/BITIG                   | src/vfs_fat16.c                          |      3095 | make:Makefile
+A         | VFS/BITIG                   | src/vfs_fat32.c                          |      2265 | make:Makefile
