@@ -44,6 +44,7 @@
 #define T_E_AKTAR  32
 #define T_E_KOMUT  33
 #define T_E_PORT   34
+#define T_SLOT_KAPA 10
 
 #define HALKA 256                         /* bir sayfa: 256 x 16 bayt */
 
@@ -74,7 +75,8 @@ typedef struct {
     int bekliyor;                         /* rapor TRB'si kuyrukta */
 } aygit_t;
 static aygit_t ayg[AYGIT_AZAMI];
-static int ayg_sayi;
+static int ayg_sayi;                    /* kullanilmis girdi sayisi (en yuksek) */
+static uint32_t bekleyen_port;          /* 1.4.9: islenmemis port degisimleri (bit = port) */
 
 static uint32_t r32(uint64_t a) { return *(volatile uint32_t *)(uintptr_t)a; }
 static void w32(uint64_t a, uint32_t v) { *(volatile uint32_t *)(uintptr_t)a = v; }
@@ -100,6 +102,14 @@ static int halka_kur(halka_t *h) {
     trb_t *l = &h->t[HALKA - 1];          /* son girdi: başa bağ, döngü biti çevrilir */
     l->p = h->fiz; l->s = 0; l->c = (T_LINK << 10) | 2u;
     return 0;
+}
+
+/* var olan halkayi bastan kullanima hazirlar (yeniden takilan aygit) */
+static void halka_sifirla(halka_t *h) {
+    for (int i = 0; i < HALKA; i++) { h->t[i].p = 0; h->t[i].s = 0; h->t[i].c = 0; }
+    h->i = 0; h->dongu = 1;
+    trb_t *l = &h->t[HALKA - 1];
+    l->p = h->fiz; l->s = 0; l->c = (T_LINK << 10) | 2u;
 }
 
 /* TRB'yi halkaya koyar; konduğu fiziksel adresi döner */
@@ -147,6 +157,7 @@ static int olay_bekle(int tur, uint64_t trb_adr, uint32_t yuva, trb_t *sonuc, ui
                 return (int)(e.s >> 24);
             }
             if (et == T_E_AKTAR) aktarim_olayi(&e);
+            else if (et == T_E_PORT) bekleyen_port |= 1u << (((e.p >> 24) & 0xFF) - 1u);
         }
         pit2_bekle_us(100);
     }
@@ -251,18 +262,29 @@ static uint32_t aralik_kodu(int hiz, uint8_t b) {
 
 
 static int aygit_kur(int port, int hiz) {
-    if (ayg_sayi >= AYGIT_AZAMI) return -1;
-    aygit_t *a = &ayg[ayg_sayi];
+    int j = 0;
+    while (j < AYGIT_AZAMI && ayg[j].var) j++;            /* bos (ya da cikarilmis) girdi */
+    if (j >= AYGIT_AZAMI) return -1;
+    aygit_t *a = &ayg[j];
+    /* yeniden kullanilan girdinin DMA sayfalari korunur (sizinti yok) */
+    uint8_t *gi = a->giris, *ci = a->cikis, *ta = a->tampon;
+    uint64_t gif = a->giris_fiz, cif = a->cikis_fiz, taf = a->tampon_fiz;
+    halka_t e0h = a->ep0, eih = a->ep_in;
     for (unsigned i = 0; i < sizeof *a; i++) ((uint8_t *)a)[i] = 0;
     a->port = port; a->hiz = hiz;
+    if (gi) { a->giris = gi; a->giris_fiz = gif; for (int i = 0; i < 4096; i++) gi[i] = 0; }
+    if (ci) { a->cikis = ci; a->cikis_fiz = cif; for (int i = 0; i < 4096; i++) ci[i] = 0; }
+    if (ta) { a->tampon = ta; a->tampon_fiz = taf; }
     trb_t sn;
     if (komut_ver(0, 0, T_SLOT_AC << 10, &sn) != 0) return -1;
     a->yuva = (int)((sn.c >> 24) & 0xFF);
     if (a->yuva <= 0 || (uint32_t)a->yuva > maks_yuva) return -1;
-    a->giris = (uint8_t *)dma_sayfa(&a->giris_fiz);
-    a->cikis = (uint8_t *)dma_sayfa(&a->cikis_fiz);
-    a->tampon = (uint8_t *)dma_sayfa(&a->tampon_fiz);
-    if (!a->giris || !a->cikis || !a->tampon || halka_kur(&a->ep0) != 0) return -1;
+    if (!a->giris) a->giris = (uint8_t *)dma_sayfa(&a->giris_fiz);
+    if (!a->cikis) a->cikis = (uint8_t *)dma_sayfa(&a->cikis_fiz);
+    if (!a->tampon) a->tampon = (uint8_t *)dma_sayfa(&a->tampon_fiz);
+    if (!a->giris || !a->cikis || !a->tampon) return -1;
+    if (e0h.t) { a->ep0 = e0h; halka_sifirla(&a->ep0); } else if (halka_kur(&a->ep0) != 0) return -1;
+    a->ep_in = eih;
     dcbaa[a->yuva] = a->cikis_fiz;
     a->mps0 = mps_hiz(hiz);
 
@@ -325,7 +347,7 @@ static int aygit_kur(int port, int hiz) {
     a->dci = (uint32_t)(ep & 0x0F) * 2u + 1u;
 
     /* Configure Endpoint: kesme IN */
-    if (halka_kur(&a->ep_in) != 0) return -1;
+    if (a->ep_in.t) halka_sifirla(&a->ep_in); else if (halka_kur(&a->ep_in) != 0) return -1;
     for (unsigned i = 0; i < 33u * bglm_boy && i < 4096; i++) a->giris[i] = 0;
     dn = giris_bglm(a, 0); dn[0] = 0; dn[1] = 1u | (1u << a->dci);
     y = giris_bglm(a, 1);
@@ -339,7 +361,7 @@ static int aygit_kur(int port, int hiz) {
     if (komut_ver(a->giris_fiz, 0, (T_YAPILAN << 10) | ((uint32_t)a->yuva << 24), 0) != 0) return -1;
 
     a->var = 1;
-    ayg_sayi++;
+    if (j + 1 > ayg_sayi) ayg_sayi = j + 1;
     serial_write(a->tur == 1 ? "xhci: USB klavye hazir (port=" : "xhci: USB fare/tablet hazir (port=");
     serial_write_hex((uint32_t)port + 1);
     serial_write(" yuva="); serial_write_hex((uint32_t)a->yuva);
@@ -472,7 +494,38 @@ int xhci_init(void) {
 }
 
 int xhci_hazir(void) { return hazir; }
-int xhci_aygit_sayisi(void) { return ayg_sayi; }
+int xhci_aygit_sayisi(void) {
+    int n = 0;
+    for (int i = 0; i < ayg_sayi; i++) if (ayg[i].var) n++;
+    return n;
+}
+
+/* 1.4.9: sonradan takilan / cikarilan aygit. Port durum degisimi olayinda
+ * port okunur: bagliysa ve uzerinde aygit yoksa numaralandirilir; bagli
+ * degilse o porttaki aygit kapatilir (yuva birakilir, basili tuslar
+ * birakilir). */
+static void port_degisti(int p) {
+    if (p < 0 || (uint32_t)p >= maks_port) return;
+    uint64_t ps = op + 0x400 + 0x10u * (uint32_t)p;
+    uint32_t v = r32(ps);
+    const uint32_t KORU = ~((1u << 1) | (0x7Fu << 17));
+    w32(ps, (v & KORU) | (v & (0x7Fu << 17)));                /* degisim bitlerini temizle */
+    int var_olan = -1;
+    for (int i = 0; i < ayg_sayi; i++) if (ayg[i].var && ayg[i].port == p) var_olan = i;
+    if (v & 1) {
+        if (var_olan < 0) {
+            serial_write("xhci: porta aygit takildi (port="); serial_write_hex((uint32_t)p + 1); serial_write(")\n");
+            port_hazirla(p);
+        }
+    } else if (var_olan >= 0) {
+        aygit_t *a = &ayg[var_olan];
+        a->var = 0;
+        if (a->tur == 1) { static const uint8_t bos[8]; hid_klavye_rapor(var_olan, bos, 8); }
+        komut_ver(0, 0, (T_SLOT_KAPA << 10) | ((uint32_t)a->yuva << 24), 0);
+        dcbaa[a->yuva] = 0;
+        serial_write("xhci: aygit cikarildi (port="); serial_write_hex((uint32_t)p + 1); serial_write(")\n");
+    }
+}
 
 void xhci_yokla(void) {
     if (!hazir) return;
@@ -480,6 +533,12 @@ void xhci_yokla(void) {
     while (olay_al(&e)) {
         int et = (int)((e.c >> 10) & 0x3F);
         if (et == T_E_AKTAR) aktarim_olayi(&e);
+        else if (et == T_E_PORT) bekleyen_port |= 1u << (((e.p >> 24) & 0xFF) - 1u);
+    }
+    while (bekleyen_port) {
+        int p = __builtin_ctz(bekleyen_port);
+        bekleyen_port &= ~(1u << p);
+        port_degisti(p);
     }
     hid_tik();
 }

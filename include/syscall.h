@@ -155,6 +155,7 @@ typedef union {
 /* 1.4.9 SYS_TAMGA_BILGI turleri */
 #define TB_ANAHTAR   0   /* sira 0 uretim, 1 sinama: acik anahtar + gecerli mi */
 #define TB_CEKIRDEK  1   /* cekirdek .text+.rodata SHA-256 */
+#define TB_ERGENEKON 2   /* 1.4.9: dizge imaji durumu (salt okunur): cikti ergenekon_durum_t, 128 bayt */
 typedef struct {
     uint8_t  ozet[32];      /* anahtar: acik anahtarin SHA-256 parmak izi; cekirdek: ozet */
     uint8_t  anahtar[65];   /* sikistirilmamis nokta (TB_ANAHTAR) */

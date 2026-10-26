@@ -72,6 +72,7 @@ iso: $(KERNEL) $(ISO_ERGENEKON)
 
 clean:
 	rm -f $(OBJ) $(OBJ:.o=.d) $(KERNEL) $(ISO) userprog/*.uo userprog/bearssl.a
+	rm -rf cekirdek_br userprog/bearssl     # BearSSL nesneleri: bayrak/baslik degisince bayat kalmasin
 	rm -rf iso/boot/otukenos-mini.elf iso/boot/grub/grub.cfg iso/boot/ergenekon.krv ergenekon.krv ergenekon_kaynak
 
 # --- Kullanici programlari (Ring3) ---
