@@ -286,7 +286,7 @@ void uhci_yokla(void) {
 
     /* 1.4.9: rapor ortak HID ceviricisine (TR-Q, Shift/AltGr, ozel tuslar,
      * birakma, yineleme); eskiden yalniz harf/rakam ve son tus tutuluyordu */
-    hid_klavye_rapor(&veri[128], 8);
+    hid_klavye_rapor(7, &veri[128], 8);   /* UHCI klavyesi: kaynak 7 (XHCI 0..) */
 }
 
 /* 1.4.9: tuslar artik hid_klavye_rapor ile dogrudan klavye kuyruguna girer */

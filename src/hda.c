@@ -77,9 +77,17 @@ static void w16(uint32_t o, uint16_t v) { *(volatile uint16_t *)(uintptr_t)(m + 
 static void w32(uint32_t o, uint32_t v) { *(volatile uint32_t *)(uintptr_t)(m + o) = v; }
 static void bekle_ms(uint32_t ms) { while (ms--) pit2_bekle_us(1000); }
 
+static int dma64;                     /* GCAP.64OK: denetleyici 64 bit adres verebilir */
+static uint32_t corb_maske = 0xFF, rirb_maske = 0xFF;   /* halka girdi sayısı - 1 */
+
+/* DMA sayfası. Denetleyici 64 bit adresleyemiyorsa (GCAP.64OK = 0) 4 GB'ın
+ * altında olmalı: üstteki çerçeveler geri verilip yenisi istenir. */
 static void *dma_sayfa(uint64_t *fiz) {
-    uint64_t f = pmm_alloc_frame();
-    if (!f) return 0;
+    uint64_t f = pmm_alloc_frame(), red[32]; int rn = 0;
+    while (f && !dma64 && f >= 0x100000000ULL && rn < 32) { red[rn++] = f; f = pmm_alloc_frame(); }
+    for (int i = 0; i < rn; i++) pmm_free_frame(red[i]);
+    if (f && !dma64 && f >= 0x100000000ULL) { pmm_free_frame(f); f = 0; }
+    if (!f) { serial_write("HDA: DMA sayfasi yok (32 bit adres siniri)\n"); return 0; }
     uint64_t v = sonraki_virt; sonraki_virt += 4096;
     if (vmm_map_page(v, f, VMM_PRESENT | VMM_WRITABLE | (1ULL << 4)) != 0) { pmm_free_frame(f); return 0; }
     uint8_t *p = (uint8_t *)(uintptr_t)v;
@@ -90,14 +98,14 @@ static void *dma_sayfa(uint64_t *fiz) {
 
 /* Kodeğe komut (fiil) gönderir, yanıtı döner. Zaman aşımında 0xFFFFFFFF. */
 static uint32_t fiil(uint32_t ham) {
-    corb_wp = (uint16_t)((corb_wp + 1) & 0xFF);
+    corb_wp = (uint16_t)((corb_wp + 1) & corb_maske);
     corb[corb_wp] = ham;
     __asm__ volatile ("mfence" ::: "memory");
     w16(CORBWP, corb_wp);
     for (int i = 0; i < 20000; i++) {
-        uint16_t wp = r16(RIRBWP) & 0xFF;
+        uint16_t wp = (uint16_t)(r16(RIRBWP) & rirb_maske);
         if (wp != rirb_rp) {
-            rirb_rp = (uint16_t)((rirb_rp + 1) & 0xFF);
+            rirb_rp = (uint16_t)((rirb_rp + 1) & rirb_maske);
             uint32_t yanit = (uint32_t)rirb[rirb_rp];
             w8(RIRBSTS, 0x05);
             return yanit;
@@ -214,6 +222,7 @@ int hda_init(void) {
     if (!(r32(GCTL) & 1)) { serial_write("HDA: sifirlama bitmedi\n"); return -1; }
     bekle_ms(2);                                              /* kodekler kendini bildirsin */
     uint16_t kodekler = r16(STATESTS);
+    dma64 = r16(GCAP) & 1;
     w32(INTCTL, 0);
 
     /* CORB / RIRB (256 girdi) */
@@ -225,19 +234,29 @@ int hda_init(void) {
     w8(CORBCTL, 0); w8(RIRBCTL, 0);
     bekle_ms(1);
     w32(CORBLBASE, (uint32_t)corb_fiz); w32(CORBUBASE, (uint32_t)(corb_fiz >> 32));
-    w8(CORBSIZE, (uint8_t)((r8(CORBSIZE) & ~3u) | 2u));
+    /* halka boyu: denetleyicinin BİLDİRDİĞİ en büyük (SZCAP bit 6/5/4 =
+     * 256/16/2 girdi); hiçbiri yoksa sürücü kurulmaz */
+    {
+        uint8_t sc = r8(CORBSIZE), rc = r8(RIRBSIZE);
+        int ck = (sc & 0x40) ? 2 : (sc & 0x20) ? 1 : (sc & 0x10) ? 0 : -1;
+        int rk = (rc & 0x40) ? 2 : (rc & 0x20) ? 1 : (rc & 0x10) ? 0 : -1;
+        if (ck < 0 || rk < 0) { serial_write("HDA: CORB/RIRB boyu bildirilmiyor\n"); return -1; }
+        static const uint32_t MASKE[3] = { 1, 15, 255 };
+        corb_maske = MASKE[ck]; rirb_maske = MASKE[rk];
+        w8(CORBSIZE, (uint8_t)((sc & ~3u) | (uint8_t)ck));
+        w8(RIRBSIZE, (uint8_t)((rc & ~3u) | (uint8_t)rk));
+    }
     w16(CORBRP, 0x8000);
     for (int i = 0; i < 100 && !(r16(CORBRP) & 0x8000); i++) bekle_ms(1);
     w16(CORBRP, 0);
     for (int i = 0; i < 100 && (r16(CORBRP) & 0x8000); i++) bekle_ms(1);
     w16(CORBWP, 0); corb_wp = 0;
     w32(RIRBLBASE, (uint32_t)rirb_fiz); w32(RIRBUBASE, (uint32_t)(rirb_fiz >> 32));
-    w8(RIRBSIZE, (uint8_t)((r8(RIRBSIZE) & ~3u) | 2u));
     w16(RIRBWP, 0x8000); rirb_rp = 0;
     /* RINTCNT yanıtında denetleyici (QEMU dahil) yanıt kesme bayrağını
      * kurup durur; bayrak RIRBSTS'e 1 yazınca kalkar. Bayrağın kurulması
      * için RINTCTL açık olmalı (genel kesme INTCTL kapalı: kesme gelmez). */
-    w16(RINTCNT, 0xFF);
+    w16(RINTCNT, (uint16_t)(rirb_maske ? rirb_maske : 1));
     w8(CORBCTL, 2); w8(RIRBCTL, 3);                           /* DMA çalıştır + yanıt bayrağı */
     bekle_ms(1);
 
