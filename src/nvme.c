@@ -27,7 +27,7 @@
 #define NVME_REG_ACQ   0x30  /* yonetim tamamlama kuyrugu (64-bit) */
 
 #define NVME_VIRT_BASE 0xA10000000ULL
-#define NVME_YAPI_VIRT 0xA30000000ULL   /* kuyruklar + DMA sayfasi */
+#define NVME_YAPI_VIRT 0xA50000000ULL   /* kuyruklar + DMA sayfasi (UHCI 0xA30000000 ile cakisiyordu) */
 #define NVME_MMIO_SAYFA 4               /* 16 KB: kayitlar + kapi zilleri */
 
 #define KUYRUK 16                        /* her kuyrukta 16 girdi */

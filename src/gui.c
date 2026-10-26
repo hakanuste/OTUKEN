@@ -265,10 +265,10 @@ static void draw_window(int idx) {
             u32_to_dec_str((uint32_t)file_count, t);
             str_copy(bilgi, t, sizeof bilgi); int u = str_len(bilgi);
             str_copy(bilgi + u, " girdi · tıkla: aç", (int)sizeof bilgi - u);
-            fb_draw_string(cx, alt, fm_bas > 0 ? "◂ önceki" : "        ", COL_TEXTFG, COL_WINBG);
+            fb_draw_string(cx, alt, fm_bas > 0 ? "<< önceki" : "         ", COL_TEXTFG, COL_WINBG);
             fb_draw_string(cx + 11 * FB_YAZI_EN, alt, bilgi, COL_TEXTFG, COL_WINBG);
             int sonraki_var = fm_bas + (sigan - (fm_kokte() ? 0 : 1)) < file_count;
-            if (sonraki_var) fb_draw_string(cx + w->w - 12 - 12 * FB_YAZI_EN, alt, "sonraki ▸", COL_TEXTFG, COL_WINBG);
+            if (sonraki_var) fb_draw_string(cx + w->w - 12 - 12 * FB_YAZI_EN, alt, "sonraki >>", COL_TEXTFG, COL_WINBG);
         }
     } else if (idx == WIN_VIEWER) {
         for (int r = 0; r < VIEWER_ROWS; r++)

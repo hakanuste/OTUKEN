@@ -183,6 +183,11 @@ void ses_bitir(void) {
     }
     uint64_t t0 = timer_get_ticks(), hz = timer_hz() ? timer_hz() : 100;
     while (akis_basladi && !ses_bosaldi() && timer_get_ticks() - t0 < 3 * hz) thread_sleep(1);
+    /* DCH: DMA son tamponu OKUDU; kodek FIFO'su henuz caliyor olabilir.
+     * Hemen sifirlamak sozun son milisaniyelerini keser (QEMU kaydinda
+     * ~6 ms eksik cikti). Kisa bir sure bekleyip durdur. */
+    uint64_t t1 = timer_get_ticks();
+    while (timer_get_ticks() - t1 < hz * 15 / 100 + 1) thread_sleep(1);
     ses_dur();
 }
 
