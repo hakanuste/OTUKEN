@@ -200,11 +200,18 @@ testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
 
 ## Bilinen sınırlar
 
-- USB: UHCI aktarım katmanı çalışır (HID klavye numaralandırılır ve
-  okunur). XHCI/EHCI yalnızca tespit edilir; aktarım UHCI ile sınırlı
-- AHCI: gerçek DMA okuma çalışır (READ DMA EXT). Yazma yok.
-  NVMe: yalnızca denetleyici tanınır, veri yolu yok
-- FAT: yazma yalnızca kök dizinde, 8.3 dosya adı
+- **USB:** XHCI (USB 3) aktarım katmanı çalışır: kök portlardaki HID
+  klavye (TR-Q, Shift/AltGr, tuş yinelemesi), fare (göreli) ve tablet
+  (mutlak; rapor tanımlayıcısı ayrıştırılır). UHCI'de HID klavye. PS/2'siz
+  makinede (QEMU `i8042=off`) sınandı. **Yok:** hub arkasındaki aygıtlar
+  (dizüstülerin iç klavyesi çoğu zaman bir iç hub'dadır), toplu (bulk)
+  aktarım ve USB bellek, EHCI/OHCI aktarımı.
+- **Depolama:** ATA (IDE), AHCI (SATA: okuma + WRITE DMA EXT + FLUSH) ve
+  NVMe (yönetim + G/Ç kuyruğu, okuma/yazma + FLUSH). Kök disk sırasıyla
+  ATA, SATA, NVMe'den bağlanır. NVMe yalnız 512 baytlık blok biçimini
+  kabul eder (4 KB biçimli ad alanı reddedilir); kesme yok, yoklama.
+- FAT16: kökte ve alt dizinlerde okuma/yazma, yalnız 8.3 dosya adı (uzun ad
+  yok). FAT32 (ikinci disk) yalnız okunur.
 - **ARM64: TEMEL port.** Çalışan: önyükleme, PL011 seri çıktı, bitmap
   bellek yöneticisi, yığın, 64-bit aritmetik. **Yok:** GIC (kesme
   denetleyicisi), zamanlayıcı, MMU/sayfalama, görev değiştirme,
@@ -222,9 +229,6 @@ testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
   bölümündeki tabloda, koddan üretilir). Görülmemiş soru biçimlerinde
   doğru yanıt oranı düşüktür; UMAY'ı uydurmaktan model değil kanıt katmanı
   alıkoyar. Konum kodlaması yoktur, sözlük bayt düzeyindedir.
-- **BENGİ (kalıcı hafıza) diske yazamaz:** UMAY'ın disk yazma yetkisi
-  yok ve FAT16'da alt dizine (`/kut/umay/...`) dosya yazımı yok.
-  `SYS_WRITE_FILE` yalnız kök dizine yazar.
 - **Masaüstü teması (1.4.8'de bağlandı):** duvar kâğıdı, masaüstü simgeleri,
   üst çubuk ve 7 tamgalı rıhtım çizilir. Rıhtımda UMAY, BİTİG (dosyalar),
   ORKUN (kabuk), ÜLGEN (**Görünüm**: tema seçici), TULPAR (**ağ
@@ -233,7 +237,10 @@ testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
   "Sistem" **Sistem** izleyicisini, "Görünüm" tema seçiciyi açar;
   **"Uygulamalar" (1.4.9)** 15 tamganın hepsini listeleyen açılır menüdür:
   15'inin de uygulaması var.
-  "Dosya", "Düzen", "Yardım" eylem tanımlamaz. Uygulama ızgarası çizilmez.
+  "Dosya" Dosya Yöneticisi'ni (alt dizinler, sayfalı liste) açar, "Düzen"
+  pencereleri yerleştirir, "Yardım" kısa kılavuzu gösterir. Pencereye
+  tıklamak klavyeyi o pencereye verir; görev çubuğu açık uygulama
+  pencerelerini gösterir. Uygulama ızgarası çizilmez.
 - **ULAK, DEDE KORKUT, TÖRE, TİMUR, KUT (1.4.9):** "Uygulamalar"
   menüsünden açılan Ring3 pencereleri, her biri en az yetkiyle:
   **ULAK** ağ durumu (kart, DHCP adresi, ağ geçidi, DNS, sayaçlar, açık TCP
@@ -242,8 +249,8 @@ testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
   ses kartı yoksa bunu yazar. **TÖRE** görevlerin yetkilerini ve her sistem
   çağrısının istediği yetkiyi gösterir (salt okunur; politika buradan
   değiştirilmez). **TİMUR** korumaların durumunu gösterir: NX ve W^X açık,
-  **SMEP/SMAP kapalı** (işlemci desteklese de çekirdek açmıyor) — kapalı
-  olan kapalı yazılır. **KUT** kullanıcıları, rolleri ve süreç bağlarını
+  SMEP/SMAP işlemci destekliyorsa açılır — desteklenmeyen ya da kapalı
+  olan "kapalı" yazılır. **KUT** kullanıcıları, rolleri ve süreç bağlarını
   gösterir; masaüstü uygulamaları bugün kullanıcı kimliğiyle değil TÖRE
   profiliyle koşar.
 - **ASENA, ERGENEKON, TAMGA (1.4.9):**
@@ -269,8 +276,8 @@ testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
   süreç olarak, yalnız kendi TÖRE profiliyle (disk/ağ/IPC/heap yok)
   Ring3'te başlatır; açıksa yenisini açmaz, penceresini öne getirir.
   Sistem izleyicisi süreç listesini göstermez (o çağrı SÜREÇ yetkisine
-  bağlı, verilmedi). Temalar arasındaki fark küçüktür (duvar kâğıdı
-  aynı; değişen çubuk ve çerçeve renkleri).
+  bağlı, verilmedi). Tema çubuk ve çerçeve renklerini ve duvar kâğıdının
+  renk paletini değiştirir (resim aynı).
 - **Ağ ve TULPAR (1.4.9):** TCP artık gerçek istemci TCP'si (alma halkası,
   pencere, yeniden gönderme, sıra dışı saklama, sağlama denetimi, düzgün
   kapanış); alt ağ dışına ağ geçidi üzerinden çıkılır. Ring3 programları
@@ -287,14 +294,20 @@ testler.sh   otomatik regresyon takımı (yalnız geliştirme ağacında)
 - **KERVAN (1.4.9):** paketler `.KRV`, ECDSA P-256 ile imzalı; çekirdek
   imzayı ve her dosyanın SHA-256'sını doğrulamadan diske yazmaz. Dizge
   dosyalarının ve başka paketin dosyalarının üzerine yazılmaz; kayıt
-  `/KERVAN.LST`. Paketler yalnız kök dizine kurulur (FAT16'da alt dizine
-  yazım yok), paket başına en çok 16 dosya ve 2 MB. Ağdan paket indirme ve
-  kurulan uygulamanın menüye eklenmesi henüz yok. Üretim imza anahtarının
+  `/KERVAN.LST`. Paketler kök dizine kurulur, paket başına en çok 16 dosya
+  ve 2 MB. KERVAN penceresinden ağdan (http/https) paket indirilip
+  kurulabilir; kurulan uygulamalar Uygulamalar menüsünde görünür (sığmazsa
+  sayfalanır). Üretim imza anahtarının
   özel yarısı depoda DEĞİLDİR (`anahtarlar/`, git dışı).
 - **Üst çubuk saati (1.4.9):** CMOS RTC'den gerçek tarih ve saat, UTC+3
   (`OTUKEN_ZAMAN_DILIMI_DK`; Türkiye yaz saati uygulamaz). RTC okunamazsa
   çalışma süresi gösterilir.
-- **Ses (1.4.9'da bağlandı):** AC'97 sürücüsü artık açılışta başlatılıyor
+- **Ses (1.4.9):** AC'97 ve **Intel HDA** (AC'97 yoksa; günümüz bilgisayarları
+  ve VirtualBox'ın varsayılanı). HDA: CORB/RIRB, kodekte çıkış iğnesinden
+  DAC'a yol bulunur (hat çıkışı > hoparlör > kulaklık), 48 kHz/16 bit/stereo
+  döngüsel akış. QEMU'da (intel-hda + hda-output) bilinen kare dalga WAV
+  kaydında örnek örnek doğrulandı; gerçek kodeklerde (ör. Realtek, Cirrus)
+  denenmedi. AC'97 sürücüsü artık açılışta başlatılıyor
   (önceden `ses_init` hiç çağrılmıyordu, ses yolu tümüyle etkisizdi) ve
   akan çıkış yapıyor: 32 tamponluk halka, ardışık çağrılar birbirini
   kesmez, konuşma sonunda kuyruk boşalınca durur. QEMU'da çıkış WAV'a
