@@ -174,10 +174,11 @@ void ses_bitir(void) {
         uint64_t t0 = timer_get_ticks(), hz = timer_hz() ? timer_hz() : 100;
         while (!hda_bosaldi() && timer_get_ticks() - t0 < 3 * hz) thread_sleep(1);
         /* LPIB DMA'nin OKUDUGU yerdir; kart FIFO'su ve DAC henuz caliyor
-         * olabilir: hemen durdurmak sozun son ~25 ms'sini keser. Akis
-         * 150 ms daha (sessizlik) calar, sonra durur. */
+         * olabilir: hemen durdurmak sozun sonunu keser. Akis 400 ms daha
+         * (sessizlik) calar, sonra durur. (QEMU'nun ses arka ucu yuk altinda
+         * 150 ms'den fazla geride kalabildi: kayitta son ~40 ms eksikti.) */
         uint64_t t1 = timer_get_ticks();
-        while (timer_get_ticks() - t1 < hz * 15 / 100 + 1) { hda_bosaldi(); thread_sleep(1); }
+        while (timer_get_ticks() - t1 < hz * 40 / 100 + 1) { hda_bosaldi(); thread_sleep(1); }
         hda_dur(); d.caliyor = 0;
         return;
     }

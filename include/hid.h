@@ -4,7 +4,7 @@
 /* 1.4.9: USB HID raporlari -> klavye kuyrugu ve fare durumu (src/hid.c) */
 
 /* Onyukleme (boot) klavye raporu, 8 bayt */
-void     hid_klavye_rapor(const uint8_t *r, int n);
+void     hid_klavye_rapor(int kaynak, const uint8_t *r, int n);   /* kaynak: klavye 0..7 */
 void     hid_tik(void);                 /* tus yinelemesi; ana dongu her tik */
 uint32_t hid_klavye_rapor_sayisi(void);
 

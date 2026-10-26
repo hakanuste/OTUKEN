@@ -46,7 +46,13 @@ static void gonder(uint16_t k, int birakma) {
     keyboard_tarama_kodu((uint8_t)((k & 0x7F) | (birakma ? 0x80 : 0)));
 }
 
-static uint8_t onceki[8];
+/* Her klavyenin (kaynak) son raporu ayrı tutulur; olaylar TÜM klavyelerin
+ * birleşik durumundan üretilir. Eskiden tek ortak "önceki rapor" vardı:
+ * B klavyesinin boş raporu A'da hâlâ basılı tuşa bırakma üretiyordu. */
+#define HID_KAYNAK 8
+static uint8_t kaynak_rapor[HID_KAYNAK][8];
+static uint8_t onceki_mod;               /* birleşik değiştiriciler */
+static uint8_t onceki_bas[0x66];         /* birleşik basılı tuşlar (kullanım kodu) */
 static uint8_t yinelenen;               /* basılı tutulan son tuş (kullanım kodu) */
 static uint64_t yineleme_ms;            /* sonraki yineleme zamanı */
 static uint32_t rapor_sayisi;
@@ -56,33 +62,34 @@ static uint64_t simdi_ms(void) {
     return timer_get_ticks() * 1000u / hz;
 }
 
-static int icinde(const uint8_t *r, uint8_t k) {
-    for (int i = 2; i < 8; i++) if (r[i] == k) return 1;
-    return 0;
-}
-
-void hid_klavye_rapor(const uint8_t *r, int n) {
-    if (n < 8) return;
+void hid_klavye_rapor(int kaynak, const uint8_t *r, int n) {
+    if (n < 8 || kaynak < 0 || kaynak >= HID_KAYNAK) return;
     if (r[2] == 0x01) return;                     /* ErrorRollOver: çok tuş, rapor geçersiz */
     rapor_sayisi++;
-    uint8_t m = r[0], mo = onceki[0];
+    for (int i = 0; i < 8; i++) kaynak_rapor[kaynak][i] = r[i];
+    uint8_t m = 0, bas[0x66];
+    for (int k = 0; k < 0x66; k++) bas[k] = 0;
+    for (int s = 0; s < HID_KAYNAK; s++) {
+        m |= kaynak_rapor[s][0];
+        for (int i = 2; i < 8; i++) { uint8_t k = kaynak_rapor[s][i]; if (k >= 0x04 && k < 0x66) bas[k] = 1; }
+    }
     for (int b = 0; b < 8; b++) {                 /* önce değiştiriciler */
-        int simdi = (m >> b) & 1, once = (mo >> b) & 1;
+        int simdi = (m >> b) & 1, once = (onceki_mod >> b) & 1;
         if (simdi && !once) gonder(DEGISTIRICI[b], 0);
         if (!simdi && once) gonder(DEGISTIRICI[b], 1);
     }
-    for (int i = 2; i < 8; i++) {                 /* bırakılanlar */
-        uint8_t k = onceki[i];
-        if (k >= 0x04 && k < 0x66 && !icinde(r, k)) { gonder(KOD[k], 1); if (k == yinelenen) yinelenen = 0; }
-    }
-    for (int i = 2; i < 8; i++) {                 /* yeni basılanlar */
+    for (int k = 0x04; k < 0x66; k++)             /* bırakılanlar */
+        if (onceki_bas[k] && !bas[k]) { gonder(KOD[k], 1); if (k == yinelenen) yinelenen = 0; }
+    for (int i = 2; i < 8; i++) {                 /* yeni basılanlar (raporun sırasıyla) */
         uint8_t k = r[i];
-        if (k >= 0x04 && k < 0x66 && !icinde(onceki, k)) {
+        if (k >= 0x04 && k < 0x66 && bas[k] && !onceki_bas[k]) {
             gonder(KOD[k], 0);
             yinelenen = k; yineleme_ms = simdi_ms() + 500;
+            onceki_bas[k] = 1;
         }
     }
-    for (int i = 0; i < 8; i++) onceki[i] = r[i];
+    onceki_mod = m;
+    for (int k = 0; k < 0x66; k++) onceki_bas[k] = bas[k];
 }
 
 void hid_tik(void) {

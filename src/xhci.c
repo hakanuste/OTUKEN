@@ -207,7 +207,7 @@ static void aktarim_olayi(const trb_t *e) {
             int n = (int)a->ep_mps - (int)(e->s & 0xFFFFFF);
             if (n < 0) n = 0;
             const uint8_t *r = a->tampon + 512;
-            if (a->tur == 1) hid_klavye_rapor(r, n);
+            if (a->tur == 1) hid_klavye_rapor(i, r, n);
             else hid_fare_rapor(&a->fare, r, n);
         }
         rapor_iste(a);
