@@ -1263,6 +1263,15 @@ static uint64_t sys_ergenekon_impl(uint64_t islem, uint64_t cikti, uint64_t onay
 extern const char cekirdek_metin_bas[], cekirdek_metin_son[], cekirdek_salt_bas[], cekirdek_salt_son[];
 static uint64_t sys_tamga_bilgi_impl(uint64_t tur, uint64_t sira, uint64_t cikti, uint64_t a4) {
     (void)a4;
+    if (tur == TB_ERGENEKON) {
+        /* salt okunur durum: KURTARMA yetkisi gerekmez (TAMGA gosterir).
+         * Imaj dogrulanir ama diske hicbir sey yazilmaz. */
+        ergenekon_durum_t d;
+        for (unsigned i = 0; i < sizeof d; i++) ((uint8_t *)&d)[i] = 0;
+        int r = ergenekon_durum(&d);
+        if (kullaniciya_atomik_yaz(cikti, &d, sizeof d) != 0) return (uint64_t)-1;
+        return (uint64_t)(int64_t)r;
+    }
     sys_tamga_t t;
     for (unsigned i = 0; i < sizeof t; i++) ((uint8_t *)&t)[i] = 0;
     br_sha256_context h;

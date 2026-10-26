@@ -69,8 +69,13 @@ static void ciz(void) {
               tb.gecerli ? (k == 0 ? "bu yapıda geçerli" : "bu yapıda GEÇERLİ (tanı yapısı)") : "bu yapıda geçersiz: bu anahtarla imzalı paket reddedilir");
     }
     ergenekon_u e;
+    for (unsigned i = 0; i < sizeof e; i++) ((char *)&e)[i] = 0;   /* cagri basarisizsa "yok" */
     s[0] = 0;
-    if (syscall(SYS_ERGENEKON, 0, (long)&e, 0, 0) == 0 && e.var) {
+    /* 1.4.9: salt okunur durum TAMGA_BILGI ile (SYS_ERGENEKON KURTARMA ister,
+     * TAMGA'da yok: eskiden cagri reddediliyor, e ilklendirilmeden okunuyordu) */
+    long er = syscall(SYS_TAMGA_BILGI, 2, 0, (long)&e, 0);
+    if (er < 0) for (unsigned i = 0; i < sizeof e; i++) ((char *)&e)[i] = 0;
+    if (e.var) {
         if (e.gecerli) {
             dize_ekle(s, sizeof s, e.ad); dize_ekle(s, sizeof s, " "); dize_ekle(s, sizeof s, e.surum);
             dize_ekle(s, sizeof s, e.anahtar_no == 0 ? " · üretim anahtarıyla imzalı" : " · sınama anahtarıyla imzalı");
