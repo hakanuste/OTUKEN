@@ -63,6 +63,7 @@ static syscall_fn_t syscall_table[SYS_MAX];
  * Ilk kullanimda ayrilir, reap'te serbest birakilir.
  * ===================================================================== */
 #define SC_TAMPON_BOYUT 4096
+#define SC_DIZIN_AZAMI  64       /* listdir: 64 x 48 bayt = 3 KB, gorev tamponuna sigar */
 static uint8_t sc_onyukleme_tamponu[SC_TAMPON_BOYUT];   /* zamanlayici oncesi (tek akis) */
 
 static void *gorev_tamponu(void) {
@@ -470,6 +471,7 @@ static uint64_t sys_readkey_impl(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t
     return (uint64_t)(uint8_t)keyboard_pop_for(KLAVYE_ODAK_KABUK);
 }
 
+_Static_assert(SC_DIZIN_AZAMI * sizeof(sys_dirent_t) <= SC_TAMPON_BOYUT, "listdir gorev tamponuna sigmali");
 static uint64_t sys_listdir_impl(uint64_t path_ptr, uint64_t out_ptr, uint64_t max, uint64_t a4) {
     (void)a4;
     char yol2[VFS_MAX_PATH];
@@ -477,21 +479,21 @@ static uint64_t sys_listdir_impl(uint64_t path_ptr, uint64_t out_ptr, uint64_t m
         log_write(LOG_UYARI, "SYSCALL", "listdir: gecersiz yol isaretcisi");
         return (uint64_t)-1;
     }
-    if (max > 16) max = 16;
+    if (max > SC_DIZIN_AZAMI) max = SC_DIZIN_AZAMI;   /* 1.4.9: 16 idi */
     if (!kullanici_tampon_yazilabilir(out_ptr, max * sizeof(sys_dirent_t))) {
         log_write(LOG_UYARI, "SYSCALL", "listdir: gecersiz cikti tamponu");
         return (uint64_t)-1;
     }
     const char *path = yol2;
 
-    vfs_dirent_t tmp[16];
-    int cap = (max < 16) ? (int)max : 16;
-    int n = vfs_list_dir(path, tmp, cap);
-    if (n < 0) return (uint64_t)-1;
+    vfs_dirent_t *tmp = (vfs_dirent_t *)kmalloc(SC_DIZIN_AZAMI * sizeof(vfs_dirent_t));
+    if (!tmp) return (uint64_t)-1;
+    int n = vfs_list_dir(path, tmp, (int)max);
+    if (n < 0) { kfree(tmp); return (uint64_t)-1; }
 
     /* TOCTOU: once CEKIRDEK tamponunda kur, sonra atomik kopyala. */
     sys_dirent_t *ara_dizin = (sys_dirent_t *)gorev_tamponu();
-    if (!ara_dizin) return (uint64_t)-1;
+    if (!ara_dizin) { kfree(tmp); return (uint64_t)-1; }
     sys_dirent_t *out = ara_dizin;
 
     for (int i = 0; i < n; i++) {
@@ -502,6 +504,7 @@ static uint64_t sys_listdir_impl(uint64_t path_ptr, uint64_t out_ptr, uint64_t m
         out[i].is_dir = (uint32_t)tmp[i].is_dir;
         out[i].reserved = 0;
     }
+    kfree(tmp);
 
     if (n > 0 && kullaniciya_atomik_yaz(out_ptr, ara_dizin,
                                          (uint64_t)n * sizeof(sys_dirent_t)) != 0) {
@@ -712,7 +715,7 @@ static uint64_t sys_sistem_bil_impl(uint64_t alan, uint64_t a2,
         case SYSBIL_GOREV_SAYISI:  return (uint64_t)scheduler_task_count();
         case SYSBIL_TIK:           return timer_get_ticks();
         case SYSBIL_TIK_HZ:        return timer_hz();
-        case SYSBIL_SES_VAR:       { const ses_denetleyici_t *d = ses_durum(); return d && d->var; }
+        case SYSBIL_SES_VAR:       { const ses_denetleyici_t *d = ses_durum(); return d && d->var ? (d->hda ? 2 : 1) : 0; }
         case SYSBIL_DEDE_MESGUL:   return (uint64_t)dede_mesgul();
         default:                   return 0;
     }

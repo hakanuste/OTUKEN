@@ -4,10 +4,8 @@
 #include <stdint.h>
 
 /* NVMe (Non-Volatile Memory Express) hazirligi.
- * Bu asamada: denetleyiciyi PCI uzerinden bulur, MMIO tabanini
- * haritalar, yetenek/surum/durum kayitlarini okur. TAM veri okuma
- * (admin/IO kuyruk cifti kurulumu, PRP listeleri) sonraki asamaya
- * birakildi. */
+ * Denetleyiciyi bulur, sifirlar, yonetim ve G/C kuyruk ciftlerini kurar
+ * (bkz. src/nvme.c). */
 
 typedef struct {
     int      present;
@@ -23,5 +21,12 @@ typedef struct {
 
 int nvme_init(void);
 const nvme_controller_t *nvme_get_controller(void);
+
+/* 1.4.9: veri yolu. Ad alani 1, 512 baytlik sektor, istek basina en cok 8
+ * sektor. 0 basari, -1 hata. Yazma FLUSH ile biter. */
+int      nvme_hazir(void);
+uint64_t nvme_sektor_sayisi(void);
+int      nvme_oku(uint64_t lba, uint32_t sayi, void *tampon);
+int      nvme_yaz(uint64_t lba, uint32_t sayi, const void *tampon);
 
 #endif

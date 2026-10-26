@@ -64841,14 +64841,39 @@ const uint8_t duvar_veri[DUVAR_EN * DUVAR_BOY] = {
     176,182,95,52,100,255,255,255,248,200,195,196,203,245,249,250,255,255,212,255,184,178,176,174,174,178,212,255,255,255,255,255,
 };
 #include "fb.h"
+#include "tema.h"
 
 /* 1.4.8: kaynak görüntünün sol kenarında eski bir basılı arayüzün
  * kalıntısı (logo parçası ve "OS / İYETİ / DA" yazısı) var; veri elle
  * düzenlenmez, o şerit ölçeklemede KIRPILIR. */
 #define DUVAR_SOL_KIRP 64
 
+/* 1.4.9: tema duvar kagidina da yansir (eskiden yalniz cubuk ve cerceve
+ * renkleri degisiyordu, ekran neredeyse aynı kaliyordu). Palet temaya gore
+ * bir kez donusturulur: "gece" koyu ve soguk, "bozkir" sicak toprak tonu. */
+static const uint32_t *tema_paleti(void) {
+    static uint32_t p[256];
+    static const tema_t *son = 0;
+    const tema_t *t = tema_simdiki();
+    if (!t || (t->ad[0] == 'o')) return duvar_palet;          /* otuken: ozgun */
+    if (t == son) return p;
+    for (int i = 0; i < 256; i++) {
+        uint32_t c = duvar_palet[i];
+        int r = (int)(c >> 16) & 0xFF, g = (int)(c >> 8) & 0xFF, b = (int)c & 0xFF;
+        int l = (r * 30 + g * 59 + b * 11) / 100;
+        if (t->ad[0] == 'g') { r = r * 40 / 100; g = g * 48 / 100; b = b * 68 / 100; }
+        else { r = l * 105 / 100 + 24; g = l * 84 / 100 + 12; b = l * 58 / 100; }
+        if (r > 255) r = 255;
+        if (g > 255) g = 255;
+        p[i] = ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+    }
+    son = t;
+    return p;
+}
+
 void duvar_ciz(int x, int y, int en, int boy) {
     if (en <= 0 || boy <= 0) return;
+    const uint32_t *palet = tema_paleti();
     /* En yakın komşu ölçekleme: tamsayı, bölme satır başına bir kez.
      * Çerçeve arabelleği 32 bit olduğundan palet doğrudan yazılır. */
     static uint32_t gecici[2048];
@@ -64858,7 +64883,7 @@ void duvar_ciz(int x, int y, int en, int boy) {
         const uint8_t *satir = &duvar_veri[(size_t)sy * DUVAR_EN];
         for (int i = 0; i < en; i++) {
             int sx = DUVAR_SOL_KIRP + (int)(((int64_t)i * (DUVAR_EN - DUVAR_SOL_KIRP)) / en);
-            gecici[i] = duvar_palet[satir[sx]];
+            gecici[i] = palet[satir[sx]];
         }
         fb_satir_yaz(x, y + j, gecici, en);
     }

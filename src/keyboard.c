@@ -1,4 +1,5 @@
 #include "keyboard.h"
+#include "ulgen_theme.h"
 #include "serial.h"
 #include "spinlock.h"
 #include "idt.h"
@@ -91,7 +92,14 @@ static volatile int odak_bildir = 0;
 int  klavye_odak(void) { return odak; }
 void klavye_odak_ata(int o) { odak = o; odak_bildir = 1; }
 
+/* Esc acik menuyu kapatir ve uygulamaya GITMEZ (eskiden Uygulamalar menusu
+ * acikken basilan Esc odaktaki pencereye "?" olarak dusuyordu). Kesmede
+ * gorsel kilit alinmaz: istek bayragi ana dongude (masaustu_tur) islenir. */
+static volatile int menu_kapat_istegi = 0;
+int klavye_menu_kapat_istegi_al(void) { return __atomic_exchange_n(&menu_kapat_istegi, 0, __ATOMIC_ACQ_REL); }
+
 static void kbuf_push(char c) {
+    if (c == 27 && ulgen_theme_uyg_menu_acik()) { menu_kapat_istegi = 1; return; }
     if (c == '\t') {                  /* odak degistir; kuyruga girmez */
         odak = (odak == KLAVYE_ODAK_KABUK) ? KLAVYE_ODAK_PENCERE : KLAVYE_ODAK_KABUK;
         odak_bildir = 1;              /* IRQ'da yazmayiz; gorev baglaminda bildirilir */
@@ -144,10 +152,9 @@ char keyboard_pop_for(int tuketici) {
     return c;
 }
 
-static void keyboard_handler(struct regs *r) {
-    (void)r;
-    uint8_t sc = inb(KBD_DATA_PORT);
-
+/* Set-1 tarama kodu isleyicisi: PS/2 kesmesi ve USB HID ceviricisi
+ * (src/hid.c) AYNI yoldan gecer; TR-Q, AltGr, Ctrl+L, genis tuslar tek yerde. */
+static void tarama_kodu_isle(uint8_t sc) {
     if (sc == 0xE0) { e0_onek = 1; return; }
     int genis = e0_onek;
     e0_onek = 0;
@@ -180,6 +187,19 @@ static void keyboard_handler(struct regs *r) {
         else c = shift_down ? scancode_ascii_shift[sc] : scancode_ascii[sc];
         if (c) kbuf_push((char)c);
     }
+}
+
+static void keyboard_handler(struct regs *r) {
+    (void)r;
+    tarama_kodu_isle(inb(KBD_DATA_PORT));
+}
+
+/* USB klavye (ana dongu): kesmeyle yarismasin diye IF kapali islenir */
+void keyboard_tarama_kodu(uint8_t sc) {
+    uint64_t f;
+    __asm__ volatile ("pushfq; pop %0; cli" : "=r"(f) :: "memory");
+    tarama_kodu_isle(sc);
+    __asm__ volatile ("push %0; popfq" :: "r"(f) : "memory", "cc");
 }
 
 void keyboard_install(void) {

@@ -3,7 +3,10 @@
 #include "fat16_ic.h"
 #include "serial.h"
 
-#define ADAPTER_MAX_FILES 16
+/* 1.4.9: 16 idi: kok dizinde 16 dosyadan fazlasi HIC listelenmiyordu (kabuk,
+ * Dosya Yoneticisi, SYS_LISTDIR). Tampon duragan: vfs_list_dir depo_kilit
+ * altinda cagirir (tek yazar). FAT16 kok dizini en cok 512 girdi. */
+#define ADAPTER_MAX_FILES 512
 
 /* FAT dosya adlari TASARIM GEREGI buyuk/kucuk harf DUYARSIZDIR.
  * Duyarli karsilastirma, kullanicinin "notlar.txt" yazip dosyayi
@@ -25,7 +28,7 @@ static int fat16_vfs_list_dir(const char *path, vfs_dirent_t *out, int max, void
     (void)ctx;
     /* Asama 42: alt dizinler destekleniyor. Kok icin eski yol,
      * digerleri icin yol cozumlemeli listeleme kullanilir. */
-    fat16_dirent_t tmp[ADAPTER_MAX_FILES];
+    static fat16_dirent_t tmp[ADAPTER_MAX_FILES];
     int cap = (max < ADAPTER_MAX_FILES) ? max : ADAPTER_MAX_FILES;
     int alt = !(path[0] == '/' && path[1] == 0);
     int n = alt ? fat16_listele_yol(path, tmp, cap)
@@ -56,7 +59,7 @@ static int find_dirent_yol(const char *tam_yol, fat16_dirent_t *out) {
 }
 
 static int find_dirent(const char *filename, fat16_dirent_t *out) {
-    fat16_dirent_t tmp[ADAPTER_MAX_FILES];
+    static fat16_dirent_t tmp[ADAPTER_MAX_FILES];   /* depo_kilit altinda */
     int n = fat16_list_root(tmp, ADAPTER_MAX_FILES);
     for (int i = 0; i < n; i++) {
         if (str_eq(tmp[i].name, filename)) {

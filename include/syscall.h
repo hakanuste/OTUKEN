@@ -171,7 +171,7 @@ _Static_assert(sizeof(sys_tamga_t) == 128, "tamga");
 #define SYSBIL_GOREV_SAYISI  2
 #define SYSBIL_TIK           3
 #define SYSBIL_TIK_HZ        4   /* tik frekansi (Hz); eski cekirdek 0 dondurur */
-#define SYSBIL_SES_VAR       5   /* 1.4.9: ses denetleyicisi (AC'97) bulundu mu */
+#define SYSBIL_SES_VAR       5   /* 1.4.9: ses denetleyicisi: 0 yok, 1 AC'97, 2 Intel HDA */
 #define SYSBIL_DEDE_MESGUL   6   /* 1.4.9: DEDE sirasinda/soylenmekte metin var mi */
 
 

@@ -40,8 +40,8 @@ static void cmd_yardim(void) {
 }
 
 static void cmd_listele(const char *path) {
-    dirent_u entries[16];
-    int n = listdir(path, entries, 16);
+    static dirent_u entries[64];          /* cekirdek en cok 64 girdi verir */
+    int n = listdir(path, entries, 64);
     satir_u s;
     if (n < 0) {
         s_bas(&s); s_ekle(&s, "HATA: dizin okunamadi: "); s_ekle(&s, path); s_ekle(&s, "\n"); s_yaz(&s);

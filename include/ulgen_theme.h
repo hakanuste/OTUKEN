@@ -46,6 +46,9 @@ int  ulgen_theme_uyg_var(int id);
 void ulgen_theme_uyg_menu_kutu(int *x, int *y, int *w, int *h);
 int  ulgen_theme_uyg_menu_hit(int x, int y);   /* tamga / -2 içeride boş / -1 dışarıda */
 void ulgen_theme_uyg_menu_ciz(void);
+#define ULGEN_MENU_DOSYA   0
+#define ULGEN_MENU_DUZEN   1
+#define ULGEN_MENU_YARDIM  5
 #define ULGEN_MENU_GORUNUM 2
 #define ULGEN_MENU_SISTEM  4
 int         ulgen_theme_menu_hit(int x, int y);

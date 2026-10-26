@@ -40,6 +40,7 @@
 #include "usb.h"
 #include "gpt.h"
 #include "uhci.h"
+#include "xhci.h"
 #include "ahci.h"
 #include "nvme.h"
 #include "ulak.h"
@@ -1180,14 +1181,19 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         /* --- 2. test: mevcut 2MB kimlik haritasi icindeki bir adresi
          * FARKLI bir fiziksel cerceveye yeniden haritalamak - bu,
          * split_2mb_if_needed yolunu (riskli kisim) calistirir. */
-        uint64_t scratch_virt = 0x700000ULL; /* 7MB - kernelin disinda, bos */
+        /* 1.4.9: kazinti adresi SABIT 0x700000 idi ("cekirdegin disinda,
+         * bos"). Cekirdek buyuyunce (kernel_end ~0x6FD000) PMM'in o bolgeden
+         * verdigi sayfa tablosu cercevesi tam bu adrese denk geldi; yeniden
+         * haritalama sayfa tablosunu gizledi, #GP panigi. Artik kazinti da
+         * PMM'den alinir: o cerceveyi baska hicbir sey kullanmaz. Kimlik
+         * haritasindaki (2MB) bir adres oldugu icin bolme yolu yine calisir. */
+        uint64_t scratch_virt = pmm_alloc_frame();
         uint64_t new_phys = pmm_alloc_frame();
-        if (new_phys == 0) {
+        if (new_phys == 0 || scratch_virt == 0) {
             serial_write("vmm-split-test: PMM'den cerceve alinamadi, atlaniyor\n");
-        } else if (new_phys == scratch_virt) {
-            /* cok dusuk ihtimal ama ayni cikarsa test anlamsizlasir */
-            serial_write("vmm-split-test: sansa - ayni cerceve cikti, atlaniyor\n");
-            pmm_free_frame(new_phys);
+            if (new_phys) pmm_free_frame(new_phys);
+            if (scratch_virt) pmm_free_frame(scratch_virt);
+            scratch_virt = 0;
         } else {
             volatile uint32_t *before = (volatile uint32_t *)scratch_virt;
             uint32_t original_identity_value = *before; /* bolmeden once oku */
@@ -1202,8 +1208,8 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
                 volatile uint32_t *direct_new_phys = (volatile uint32_t *)new_phys;
                 uint32_t via_new_phys = *direct_new_phys;
 
-                serial_write("vmm-split-test: scratch_virt=0x00700000 (eskiden 2MB kimlik "
-                             "haritaliydi) simdi fiziksel="); serial_write_hex((uint32_t)new_phys);
+                serial_write("vmm-split-test: scratch_virt="); serial_write_hex((uint32_t)scratch_virt);
+                serial_write(" (2MB kimlik haritasindaydi) simdi fiziksel="); serial_write_hex((uint32_t)new_phys);
                 serial_write(" degerine yonlendirildi\n");
                 serial_write("vmm-split-test: virt uzerinden yazilan=0xCAFEF00D; "
                              "yeni fiziksel adresten DOGRUDAN okunan=");
@@ -1222,6 +1228,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
                 if (*before != original_identity_value)
                     serial_write("vmm-split-test: [HATA] kimlik haritasi geri donmedi\n");
             }
+            pmm_free_frame(scratch_virt);
         }
     }
 
@@ -1375,6 +1382,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     nvme_init();
     usb_init();     /* Asama 28: USB denetleyicileri */
     uhci_init();    /* USB aktarim katmani + klavye numaralandirma */
+    xhci_init();    /* 1.4.9: XHCI aktarim + USB HID klavye/fare/tablet */
 
     /* --- GPT BOLUM TABLOSU TARAMASI ---
      * 2 TB ustu diskler MBR ile bolumlenemez; buyuk SSD'ler GPT
@@ -1441,9 +1449,7 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
     {
         const ahci_controller_t *ac = ahci_get_controller();
         if (ac && ac->active_port_count > 0) {
-            int p = -1;
-            for (int i = 0; i < AHCI_MAX_PORTS; i++)
-                if (ac->active_ports[i]) { p = i; break; }
+            int p = ahci_disk_portu();      /* SATAPI/CD degil, disk */
             if (p >= 0) {
                 static uint8_t sek[512];
                 if (ahci_oku(p, 0, 1, sek) == 0) {
@@ -2450,13 +2456,12 @@ void kernel_main(uint32_t magic, multiboot_info_t *mbi) {
         /* USB klavye: periyodik yokla ve tuslari PS/2 ile AYNI kuyruga
          * besle - boylece kabuk hangi klavyenin kullanildigini
          * BILMEK ZORUNDA DEGILDIR. */
-        if (uhci_klavye_var()) {
+        if (uhci_klavye_var() || xhci_hazir()) {
             static uint64_t son_usb = 0;
             uint64_t simdi_u = timer_get_ticks();
             if (simdi_u != son_usb) {
-                uhci_yokla();
-                uint8_t ut = uhci_klavye_oku();
-                if (ut) keyboard_push_char((char)ut);
+                if (uhci_klavye_var()) uhci_yokla();   /* raporlar hid_klavye_rapor'a */
+                xhci_yokla();                          /* + tus yinelemesi */
                 son_usb = simdi_u;
             }
         }

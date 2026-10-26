@@ -21,6 +21,7 @@
 #define AHCI_VIRT_BASE 0xA00000000ULL
 
 static ahci_controller_t ctrl;
+static uint32_t port_imza[AHCI_MAX_PORTS];   /* 0x101 SATA disk, 0xEB140101 SATAPI */
 
 static uint32_t mmio_read32(uint64_t base, uint32_t offset) {
     return *(volatile uint32_t *)(uintptr_t)(base + offset);
@@ -38,6 +39,12 @@ int ahci_init(void) {
 
     /* ABAR = BAR5 (AHCI spesifikasyonu geregi). Alt bitler bayrak,
      * temizlenmeli. */
+    /* bellek alani + VERI YOLU HAKIMIYETI (bus master): DMA icin sart.
+     * BIOS bunu acik birakmayabilir (QEMU birakir). */
+    {
+        uint32_t cmd = pci_config_read32(dev->bus, dev->slot, dev->func, 0x04);
+        pci_config_write32(dev->bus, dev->slot, dev->func, 0x04, (cmd & 0xFFFF) | (1u << 2) | (1u << 1));
+    }
     uint64_t abar_phys = (uint64_t)(dev->bar[5] & 0xFFFFFFF0);
     if (abar_phys == 0) {
         serial_write("ahci: BAR5 (ABAR) bos - denetleyici yapilandirilmamis\n");
@@ -57,6 +64,9 @@ int ahci_init(void) {
     }
 
     ctrl.abar             = AHCI_VIRT_BASE;
+    /* AHCI kipini ac (GHC.AE, bit 31): gercek donanimda BIOS denetleyiciyi
+     * eski IDE kipinde birakabilir; QEMU'da zaten aciktir. */
+    *(volatile uint32_t *)(uintptr_t)(AHCI_VIRT_BASE + AHCI_REG_GHC) |= (1u << 31);
     ctrl.capabilities     = mmio_read32(AHCI_VIRT_BASE, AHCI_REG_CAP);
     ctrl.global_host_ctrl = mmio_read32(AHCI_VIRT_BASE, AHCI_REG_GHC);
     ctrl.ports_implemented= mmio_read32(AHCI_VIRT_BASE, AHCI_REG_PI);
@@ -84,6 +94,7 @@ int ahci_init(void) {
         if (det == 3 && ipm == 1) {
             uint32_t sig = mmio_read32(AHCI_VIRT_BASE, (uint32_t)(AHCI_PORT_BASE(p) + AHCI_PORT_SIG));
             ctrl.active_ports[p] = 1;
+            port_imza[p] = sig;
             ctrl.active_port_count++;
             ctrl.present = 1;          /* hazirlama icin gerekli */
             ahci_port_hazirla(p);      /* komut yapilarini kur */
@@ -258,11 +269,19 @@ int ahci_port_hazirla(int port) {
     return 0;
 }
 
-static int ahci_oku__ic(int port, uint64_t lba, uint32_t sayi, void *tampon) {
+/* Tek komut: okuma (READ DMA EXT), yazma (WRITE DMA EXT), kimlik
+ * (IDENTIFY DEVICE, 1 sektor) ya da onbellek bosaltma (FLUSH CACHE EXT,
+ * veri yok). En cok 8 sektor (port basina tek 4 KB DMA sayfasi). */
+#define ATA_CMD_WRITE_DMA_EX 0x35
+#define ATA_CMD_IDENTIFY_DEV 0xEC
+#define ATA_CMD_FLUSH_EX     0xEA
+static int ahci_komut__ic(int port, uint8_t komut, uint64_t lba, uint32_t sayi, void *tampon) {
     if (port < 0 || port >= AHCI_MAX_PORTS) return -1;
-    if (sayi == 0 || sayi > 8) return -1;          /* tek sayfa siniri */
+    int veri_yok = (komut == ATA_CMD_FLUSH_EX);
+    if (!veri_yok && (sayi == 0 || sayi > 8)) return -1;   /* tek sayfa siniri */
     const ahci_controller_t *c = ahci_get_controller();
     if (!c || !port_yapi[port].hazir) return -1;
+    int yazma = (komut == ATA_CMD_WRITE_DMA_EX);
 
     ahci_port_yapi_t *y = &port_yapi[port];
     uint64_t pbase = c->abar + (uint64_t)AHCI_PORT_BASE(port);
@@ -274,12 +293,16 @@ static int ahci_oku__ic(int port, uint64_t lba, uint32_t sayi, void *tampon) {
     }
 
     mw32(pbase, PORT_IS, 0xFFFFFFFF);
+    if (yazma) {                                   /* veri once DMA sayfasina */
+        const uint8_t *girdi = (const uint8_t *)tampon;
+        for (uint32_t i = 0; i < sayi * 512; i++) y->veri[i] = girdi[i];
+    }
 
     /* --- Komut basligini kur (yuva 0) --- */
     ahci_cmd_header_t *h = &y->clb[0];
-    h->cfl_a_w_p = 5;               /* H2D FIS = 5 dword, W=0 (okuma) */
+    h->cfl_a_w_p = (uint8_t)(5 | (yazma ? (1u << 6) : 0));   /* H2D FIS = 5 dword, W */
     h->r_p_c_b_r_pmp = 0;
-    h->prdtl = 1;
+    h->prdtl = veri_yok ? 0 : 1;
     h->prdbc = 0;
     h->ctba  = (uint32_t)(y->ctb_fiz & 0xFFFFFFFF);
     h->ctbau = (uint32_t)(y->ctb_fiz >> 32);
@@ -290,21 +313,23 @@ static int ahci_oku__ic(int port, uint64_t lba, uint32_t sayi, void *tampon) {
     t->prdt[0].dba   = (uint32_t)(y->veri_fiz & 0xFFFFFFFF);
     t->prdt[0].dbau  = (uint32_t)(y->veri_fiz >> 32);
     t->prdt[0].rsv   = 0;
-    t->prdt[0].dbc_i = (sayi * 512) - 1;      /* bayt sayisi - 1 */
+    t->prdt[0].dbc_i = veri_yok ? 0 : (sayi * 512) - 1;      /* bayt sayisi - 1 */
 
     uint8_t *f = t->cfis;
     f[0] = 0x27;                     /* FIS turu: Register H2D */
     f[1] = 0x80;                     /* C biti: komut */
-    f[2] = ATA_CMD_READ_DMA_EX;
-    f[4] = (uint8_t)(lba & 0xFF);
-    f[5] = (uint8_t)((lba >> 8) & 0xFF);
-    f[6] = (uint8_t)((lba >> 16) & 0xFF);
-    f[7] = 1 << 6;                   /* LBA modu */
-    f[8] = (uint8_t)((lba >> 24) & 0xFF);
-    f[9] = (uint8_t)((lba >> 32) & 0xFF);
-    f[10]= (uint8_t)((lba >> 40) & 0xFF);
-    f[12]= (uint8_t)(sayi & 0xFF);
-    f[13]= (uint8_t)((sayi >> 8) & 0xFF);
+    f[2] = komut;
+    if (komut != ATA_CMD_IDENTIFY_DEV && !veri_yok) {
+        f[4] = (uint8_t)(lba & 0xFF);
+        f[5] = (uint8_t)((lba >> 8) & 0xFF);
+        f[6] = (uint8_t)((lba >> 16) & 0xFF);
+        f[7] = 1 << 6;               /* LBA modu */
+        f[8] = (uint8_t)((lba >> 24) & 0xFF);
+        f[9] = (uint8_t)((lba >> 32) & 0xFF);
+        f[10]= (uint8_t)((lba >> 40) & 0xFF);
+        f[12]= (uint8_t)(sayi & 0xFF);
+        f[13]= (uint8_t)((sayi >> 8) & 0xFF);
+    }
 
     /* --- Komutu ver --- */
     mw32(pbase, PORT_CI, 1u);
@@ -318,14 +343,16 @@ static int ahci_oku__ic(int port, uint64_t lba, uint32_t sayi, void *tampon) {
             return -1;
         }
     }
-    if (zamanasimi) { serial_write("ahci: okuma zaman asimi\n"); return -1; }
+    if (zamanasimi) { serial_write("ahci: komut zaman asimi\n"); return -1; }
     if (mr32p(pbase, PORT_TFD) & TFD_ERR) {
         serial_write("ahci: surucu hata bildirdi\n");
         return -1;
     }
 
-    uint8_t *cikti = (uint8_t *)tampon;
-    for (uint32_t i = 0; i < sayi * 512; i++) cikti[i] = y->veri[i];
+    if (!yazma && !veri_yok) {
+        uint8_t *cikti = (uint8_t *)tampon;
+        for (uint32_t i = 0; i < sayi * 512; i++) cikti[i] = y->veri[i];
+    }
     return 0;
 }
 
@@ -334,7 +361,38 @@ static int ahci_oku__ic(int port, uint64_t lba, uint32_t sayi, void *tampon) {
  * kilidi sizdiramaz. Ozyinelemeli: ic ice katmanlar guvenle cagirir. */
 int ahci_oku(int port, uint64_t lba, uint32_t sayi, void *tampon) {
     ozkilit_al(&depo_kilit);
-    int r = ahci_oku__ic(port, lba, sayi, tampon);
+    int r = ahci_komut__ic(port, 0x25 /* READ DMA EXT */, lba, sayi, tampon);
     ozkilit_birak(&depo_kilit);
     return r;
+}
+
+/* 1.4.9: yazma. Her yazimdan sonra FLUSH CACHE EXT: surucu kendi
+ * onbelleginde tutmasin (ATA yolundaki FLUSH ile ayni guvence; FAT
+ * yazma sirasi kesintiye dayaniklilik icin buna dayanir). */
+int ahci_yaz(int port, uint64_t lba, uint32_t sayi, const void *tampon) {
+    ozkilit_al(&depo_kilit);
+    int r = ahci_komut__ic(port, ATA_CMD_WRITE_DMA_EX, lba, sayi, (void *)(uintptr_t)tampon);
+    if (r == 0) r = ahci_komut__ic(port, ATA_CMD_FLUSH_EX, 0, 0, 0);
+    ozkilit_birak(&depo_kilit);
+    return r;
+}
+
+/* IDENTIFY DEVICE: toplam sektor (LBA48 sayisi; yoksa 28 bit). 0 = bilinmiyor */
+uint64_t ahci_sektor_sayisi(int port) {
+    static uint16_t k[256];
+    ozkilit_al(&depo_kilit);
+    int r = ahci_komut__ic(port, ATA_CMD_IDENTIFY_DEV, 0, 1, k);
+    ozkilit_birak(&depo_kilit);
+    if (r != 0) return 0;
+    if (k[83] & (1u << 10))
+        return (uint64_t)k[100] | ((uint64_t)k[101] << 16) | ((uint64_t)k[102] << 32) | ((uint64_t)k[103] << 48);
+    return (uint64_t)k[60] | ((uint64_t)k[61] << 16);
+}
+
+/* ilk SATA DISK portu (imza 0x101; SATAPI/CD degil). -1 = yok */
+int ahci_disk_portu(void) {
+    if (!ctrl.present) return -1;
+    for (int p = 0; p < AHCI_MAX_PORTS; p++)
+        if (ctrl.active_ports[p] && port_imza[p] == 0x00000101 && port_yapi[p].hazir) return p;
+    return -1;
 }

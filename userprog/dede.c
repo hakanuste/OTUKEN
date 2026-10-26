@@ -38,7 +38,7 @@ static void ciz(void) {
     pencere_doldur(pen, R_ARKA);
     pencere_dikdortgen(pen, 0, 0, GEN, 30, R_PANO);
     pencere_yazi(pen, 14, 7, "DEDE KORKUT — Söz", R_VURGU);
-    pencere_yazi(pen, 14, 40, ses_var ? "Ses kartı: var (AC'97)" : "Ses kartı: YOK — seslendirilemez", ses_var ? R_VURGU : R_UYARI);
+    pencere_yazi(pen, 14, 40, ses_var == 2 ? "Ses kartı: var (HDA)" : ses_var ? "Ses kartı: var (AC'97)" : "Ses kartı: YOK — seslendirilemez", ses_var ? R_VURGU : R_UYARI);
     for (int i = 0; i < SOZ_SAYI; i++) {
         int y = LY + i * LA;
         if (i == secili) pencere_dikdortgen(pen, 8, y - 4, GEN - 16, LA - 4, 0x24424Cu);

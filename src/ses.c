@@ -9,6 +9,7 @@
 #include "timer.h"
 
 #include "ses_kilit.h"
+#include "hda.h"
 ozkilit_t ses_kilit;   /* bkz. include/ses_kilit.h */
 
 /* --- NAM (karistirici) kayitlari, nam_taban'a gore --- */
@@ -89,7 +90,13 @@ int ses_init(void) {
     /* PCI sinifi 0x04 (multimedya), alt sinif 0x01 (ses) */
     const pci_device_t *p = pci_find_by_class(0x04, 0x01);
     if (!p) {
-        log_write(LOG_BILGI, "SES", "AC97 ses denetleyicisi bulunamadi");
+        /* 1.4.9: AC'97 yoksa Intel HDA (gunumuz bilgisayarlari, VirtualBox) */
+        if (hda_init() == 0) {
+            d.var = 1; d.hda = 1;
+            d.vendor_id = hda_vendor(); d.device_id = hda_aygit();
+            return 0;
+        }
+        log_write(LOG_BILGI, "SES", "AC97 ya da HDA ses denetleyicisi bulunamadi");
         return -1;
     }
 
@@ -163,6 +170,17 @@ const ses_denetleyici_t *ses_durum(void) { return &d; }
  * son ~0,7 saniyeyi kesiyordu. En cok 3 saniye bekler. */
 void ses_bitir(void) {
     if (!d.var) return;
+    if (d.hda) {
+        uint64_t t0 = timer_get_ticks(), hz = timer_hz() ? timer_hz() : 100;
+        while (!hda_bosaldi() && timer_get_ticks() - t0 < 3 * hz) thread_sleep(1);
+        /* LPIB DMA'nin OKUDUGU yerdir; kart FIFO'su ve DAC henuz caliyor
+         * olabilir: hemen durdurmak sozun son ~25 ms'sini keser. Akis
+         * 150 ms daha (sessizlik) calar, sonra durur. */
+        uint64_t t1 = timer_get_ticks();
+        while (timer_get_ticks() - t1 < hz * 15 / 100 + 1) { hda_bosaldi(); thread_sleep(1); }
+        hda_dur(); d.caliyor = 0;
+        return;
+    }
     uint64_t t0 = timer_get_ticks(), hz = timer_hz() ? timer_hz() : 100;
     while (akis_basladi && !ses_bosaldi() && timer_get_ticks() - t0 < 3 * hz) thread_sleep(1);
     ses_dur();
@@ -171,6 +189,7 @@ void ses_bitir(void) {
 /* 1.4.9 sinama: kuyruktaki her sey calindi mi (denetleyici son girisi
  * bitirip durdu). Kart yoksa 1. */
 int ses_bosaldi(void) {
+    if (d.var && d.hda) return hda_bosaldi();
     if (!d.var || !akis_basladi) return 1;
     uint8_t sr = inb(d.nabm_taban + NABM_PO_SR);
     uint8_t civ = (uint8_t)(inb(d.nabm_taban + NABM_PO_CIV) & 31);
@@ -179,6 +198,7 @@ int ses_bosaldi(void) {
 
 void ses_seviye(uint8_t yuzde) {
     if (!d.var) return;
+    if (d.hda) { hda_seviye(yuzde); return; }
     if (yuzde > 100) yuzde = 100;
     /* AC'97: 0=en yuksek, 63=en dusuk (6 bit azaltma), her kanal ayri */
     uint8_t azalt = (uint8_t)(63 - (yuzde * 63) / 100);
@@ -189,6 +209,7 @@ void ses_seviye(uint8_t yuzde) {
 
 void ses_dur(void) {
     if (!d.var) return;
+    if (d.hda) { hda_dur(); d.caliyor = 0; return; }
     outb(d.nabm_taban + NABM_PO_CR, 0);
     bekle_kisa(100000);
     outb(d.nabm_taban + NABM_PO_CR, CR_RR);
@@ -215,6 +236,11 @@ static int halka_bekle(uint32_t giris) {
 
 static int ses_cal__ic(const int16_t *pcm, uint32_t kare_sayisi) {
     if (!d.var || kare_sayisi == 0) return -1;
+    if (d.hda) {
+        int r = hda_cal(pcm, kare_sayisi);
+        if (r == 0) { d.caliyor = 1; d.calinan_ornek += kare_sayisi; }
+        return r;
+    }
     uint32_t yazilan = 0, giris_sayisi = 0;
     while (yazilan < kare_sayisi) {
         uint32_t bu_kare = kare_sayisi - yazilan;
@@ -258,6 +284,11 @@ static int ses_cal__ic(const int16_t *pcm, uint32_t kare_sayisi) {
  * durdurmadan sesi besler; cekirdekte uyuyarak beklenmez. */
 static int ses_cal_dene__ic(const int16_t *pcm, uint32_t kare_sayisi) {
     if (!d.var) return -1;
+    if (d.hda) {
+        int r = hda_cal_dene(pcm, kare_sayisi);
+        if (r > 0) { d.caliyor = 1; d.calinan_ornek += (uint32_t)r; }
+        return r;
+    }
     uint32_t yazilan = 0;
     while (yazilan < kare_sayisi) {
         uint32_t bu_kare = kare_sayisi - yazilan;

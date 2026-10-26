@@ -34,6 +34,10 @@ int ahci_oku(int port, uint64_t lba, uint32_t sayi, void *tampon);
 /* Portu komut almaya hazirlar (komut listesi + FIS alani ayirir).
  * ahci_init icinde aktif portlar icin otomatik cagrilir. */
 int ahci_port_hazirla(int port);
+/* 1.4.9: yazma (WRITE DMA EXT + FLUSH), kapasite, ilk SATA disk portu */
+int ahci_yaz(int port, uint64_t lba, uint32_t sayi, const void *tampon);
+uint64_t ahci_sektor_sayisi(int port);
+int ahci_disk_portu(void);
 const ahci_controller_t *ahci_get_controller(void);
 
 #endif

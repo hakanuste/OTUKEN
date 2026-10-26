@@ -461,10 +461,17 @@ static int fat16_yol_yaz__ic(const char *yol, const uint8_t *veri, uint32_t boy,
         uint32_t kalan = boy - ilk_parca;
         uint16_t ek = 0;
         if (kalan) {
+            /* Kesintiye dayanıklı sıra: yeni kümeler dosyaya BAĞLANMADAN
+             * ayrılır ve veri yazılır; bağ (tek FAT girdisi) ve boy (dizin
+             * girdisi) en sonda, art arda yazılır. Eskiden kümeler önce
+             * bağlanıyordu: veri yazılırken kesilen makinede zincir boydan
+             * uzun kalıyordu (fsck: "cluster chain length is >"). Şimdi
+             * yazım sırasında kesinti en çok sahipsiz küme bırakır. */
             uint32_t n = (kalan + kb - 1) / kb;
-            ek = zincir_ayir(n, son);
+            ek = zincir_ayir(n, 0);
             if (!ek) return -1;
-            if (veri_yaz(ek, 0, veri + ilk_parca, kalan) != 0) { zincir_bosalt(ek); fat16_kume_yaz(son, 0xFFFF); return -1; }
+            if (veri_yaz(ek, 0, veri + ilk_parca, kalan) != 0) { zincir_bosalt(ek); return -1; }
+            if (fat16_kume_yaz(son, ek) != 0) { zincir_bosalt(ek); fat16_kume_yaz(son, 0xFFFF); return -1; }
         }
         if (girdi_yaz(lba, indeks, ad, 0x20, eski.first_cluster, eski.size + boy) != 0) {
             /* boy güncellenemedi: eklenen kümeler ayrılıp bırakılır (eski

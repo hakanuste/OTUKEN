@@ -5,6 +5,7 @@
 #include "io.h"
 #include "log.h"
 #include "serial.h"
+#include "hid.h"
 
 /* --- UHCI I/O kayitlari (taban + ofset) --- */
 #define UHCI_USBCMD     0x00
@@ -70,8 +71,6 @@ static uint64_t   td_fiz;
 static uint8_t   *veri;                 /* DMA veri tamponu */
 static uint64_t   veri_fiz;
 
-static uint8_t son_tus = 0;
-static uint8_t onceki_rapor[8];
 
 static uint64_t sonraki_virt = UHCI_VIRT;
 
@@ -274,29 +273,6 @@ int uhci_init(void) {
 int uhci_var(void)         { return hazir; }
 int uhci_klavye_var(void)  { return klavye_hazir; }
 
-/* HID kullanim kodu -> ISO-8859-9 (TR-Q yerlesimiyle uyumlu) */
-static char hid_karakter(uint8_t k, int shift) {
-    if (k >= 0x04 && k <= 0x1D) {                 /* a..z */
-        static const char harf[] = "abcdefghijklmnopqrstuvwxyz";
-        char c = harf[k - 0x04];
-        /* TR-Q: QWERTY 'i' konumu -> 'i' (USB HID mantiksal harf verir) */
-        if (shift && c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
-        return c;
-    }
-    if (k >= 0x1E && k <= 0x27) {                 /* 1..0 */
-        static const char rakam[] = "1234567890";
-        return rakam[k - 0x1E];
-    }
-    switch (k) {
-        case 0x28: return 13;    /* Enter */
-        case 0x2A: return 8;     /* Backspace */
-        case 0x2C: return ' ';
-        case 0x2D: return '-';
-        case 0x37: return '.';
-        default:   return 0;
-    }
-}
-
 void uhci_yokla(void) {
     if (!klavye_hazir) return;
 
@@ -308,25 +284,10 @@ void uhci_yokla(void) {
     if (zinciri_calistir(0) != 0) return;
     toggle ^= 1;
 
-    uint8_t *rapor = &veri[128];
-    int shift = (rapor[0] & 0x22) ? 1 : 0;
-
-    /* Yeni basilan tuslari bul (onceki raporda olmayanlar) */
-    for (int i = 2; i < 8; i++) {
-        uint8_t k = rapor[i];
-        if (k == 0) continue;
-        int eskiydi = 0;
-        for (int j = 2; j < 8; j++) if (onceki_rapor[j] == k) eskiydi = 1;
-        if (!eskiydi) {
-            char c = hid_karakter(k, shift);
-            if (c) son_tus = (uint8_t)c;
-        }
-    }
-    for (int i = 0; i < 8; i++) onceki_rapor[i] = rapor[i];
+    /* 1.4.9: rapor ortak HID ceviricisine (TR-Q, Shift/AltGr, ozel tuslar,
+     * birakma, yineleme); eskiden yalniz harf/rakam ve son tus tutuluyordu */
+    hid_klavye_rapor(&veri[128], 8);
 }
 
-uint8_t uhci_klavye_oku(void) {
-    uint8_t t = son_tus;
-    son_tus = 0;
-    return t;
-}
+/* 1.4.9: tuslar artik hid_klavye_rapor ile dogrudan klavye kuyruguna girer */
+uint8_t uhci_klavye_oku(void) { return 0; }

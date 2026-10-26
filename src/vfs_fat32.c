@@ -2,7 +2,7 @@
 #include "vfs_fat32.h"
 #include "vfs.h"
 #include "serial.h"
-#define ADAPTER_MAX_FILES 16
+#define ADAPTER_MAX_FILES 512   /* 1.4.9: 16 idi (bkz. vfs_fat16.c) */
 /* FAT dosya adlari TASARIM GEREGI buyuk/kucuk harf DUYARSIZDIR.
  * Duyarli karsilastirma, kullanicinin "notlar.txt" yazip dosyayi
  * bulamamasina yol aciyordu (gercek kullanim testinde bulundu). */
@@ -21,7 +21,7 @@ static int str_eq(const char *a, const char *b) {
 static int fat32_vfs_list_dir(const char *path, vfs_dirent_t *out, int max, void *ctx) {
     (void)ctx;
     if (!(path[0] == '/' && path[1] == 0)) return -1;
-    fat32_dirent_t tmp[ADAPTER_MAX_FILES];
+    static fat32_dirent_t tmp[ADAPTER_MAX_FILES];
     int cap = (max < ADAPTER_MAX_FILES) ? max : ADAPTER_MAX_FILES;
     int n = fat32_list_root(tmp, cap);
     for (int i = 0; i < n; i++) {
@@ -34,7 +34,7 @@ static int fat32_vfs_list_dir(const char *path, vfs_dirent_t *out, int max, void
     return n;
 }
 static int find_dirent32(const char *filename, fat32_dirent_t *out) {
-    fat32_dirent_t tmp[ADAPTER_MAX_FILES];
+    static fat32_dirent_t tmp[ADAPTER_MAX_FILES];
     int n = fat32_list_root(tmp, ADAPTER_MAX_FILES);
     for (int i = 0; i < n; i++) if (str_eq(tmp[i].name, filename)) { *out = tmp[i]; return 0; }
     return -1;

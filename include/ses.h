@@ -19,6 +19,7 @@ typedef struct {
     uint16_t device_id;
     uint32_t calinan_ornek;
     int      caliyor;
+    int      hda;            /* 1.4.9: 1 = Intel HDA (AC'97 yok) */
 } ses_denetleyici_t;
 
 int  ses_init(void);

@@ -131,7 +131,7 @@ static int anahtar(const hedef_t *t, int id, uint32_t hz, char *oku, int on) {
     }
     case UYG_DEDE: {
         int sv = ses_var();
-        ek(bek, sizeof bek, sv ? "Ses kartı: var (AC'97)" : "Ses kartı: YOK — seslendirilemez");
+        ek(bek, sizeof bek, !sv ? "Ses kartı: YOK — seslendirilemez" : ses_durum()->hda ? "Ses kartı: var (HDA)" : "Ses kartı: var (AC'97)");
         BEKLE((sinama_satir_ocr(id, 14, 40, 40, sv ? R_VURGU : R_UYARI, R_ARKA, oku, on), esit(oku, bek)), 3 * hz);
         ok = esit(oku, bek);
         /* ilk soze tikla: ses varsa "Söylendi.", yoksa durumu soyler */
@@ -157,6 +157,16 @@ static int anahtar(const hedef_t *t, int id, uint32_t hz, char *oku, int on) {
                        kare > (uint64_t)(birim + 4) * SES_ORNEK_HIZ * 180 / 1000 ||
                        dede_son_birim() != (uint32_t)birim || !bosaldi)) ok = 0;
             if (!sv && kare != 0) ok = 0;
+            /* 1.4.9: bilinen dalga (1000 Hz kare, +-8000, 300 ms = 14400 kare);
+             * ana makine WAV kaydinda ORNEK ORNEK arar (AC'97 ve HDA) */
+            if (sv) {
+                int r = ses_ton(1000, 300);
+                BEKLE(ses_bosaldi(), 5 * hz);
+                serial_write("SES-TON-TEST: 1000 Hz 300 ms kare=14400 sonuc="); yaz_sayi((uint64_t)(r == 0));
+                serial_write(" bosaldi="); yaz_sayi((uint64_t)ses_bosaldi()); serial_write("\n");
+                if (r != 0 || !ses_bosaldi()) ok = 0;
+                ses_bitir();
+            }
         }
         break;
     }

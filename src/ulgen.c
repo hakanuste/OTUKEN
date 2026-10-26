@@ -7,6 +7,7 @@
 
 #include "gorsel_kilit.h"
 #include "ekran.h"
+#include "gui.h"
 ozkilit_t gorsel_kilit;   /* bkz. include/gorsel_kilit.h */
 
 #define ULGEN_MASAUSTU_RENK 0x123B4A
@@ -27,6 +28,14 @@ void ulgen_init(void) {
     for (int i = 0; i < ULGEN_MAX_YUZEY; i++) yuzeyler[i].used = 0;
     birlestirme_sayisi = 0;
     log_write(LOG_BILGI, "ULGEN", "compositor baslatildi");
+}
+
+
+/* 1.4.9: gorev cubugu acik pencereleri gosterir: yuzey acilinca, kapaninca,
+ * one gelince ya da gizlenince cubuk yeniden cizilmeli. */
+static void gorev_cubugu_hasar(void) {
+    int sw = fb_width(), sh = fb_height();
+    if (sw > 0 && sh > 0) ekran_hasar(0, sh - GUI_GOREV_CUBUGU_H, sw, GUI_GOREV_CUBUGU_H);
 }
 
 static int ulgen_yuzey_olustur__ic(const char *baslik, int x, int y, int w, int h) {
@@ -71,6 +80,7 @@ static int ulgen_yuzey_olustur__ic(const char *baslik, int x, int y, int w, int 
 
         for (size_t p = 0; p < piksel; p++) s->tampon[p] = 0xE8E4DA;   /* size_t: isaretli tasma yok */
 
+        gorev_cubugu_hasar();
         serial_write("ULGEN: yuzey olusturuldu '");
         serial_write(s->baslik);
         serial_write("' kimlik=");
@@ -82,6 +92,7 @@ static int ulgen_yuzey_olustur__ic(const char *baslik, int x, int y, int w, int 
 }
 
 static int ulgen_yuzey_yoket__ic(int id) {
+    gorev_cubugu_hasar();
     if (id < 0 || id >= ULGEN_MAX_YUZEY || !yuzeyler[id].used) return -1;
     int hx, hy, hw, hh;
     if (ulgen_cerceve(id, &hx, &hy, &hw, &hh) == 0) ekran_hasar(hx, hy, hw, hh);   /* arkasi acildi */
@@ -166,12 +177,14 @@ static void ulgen_tasi__ic(int id, int x, int y) {
 }
 
 static void ulgen_one_getir__ic(int id) {
+    gorev_cubugu_hasar();
     if (!gecerli(id)) return;
     yuzeyler[id].z = ulgen_z_ver();
     yuzeyler[id].kirli = 1;
 }
 
 static void ulgen_gorunurluk__ic(int id, int gorunur) {
+    gorev_cubugu_hasar();
     if (!gecerli(id)) return;
     yuzeyler[id].gorunur = gorunur;
     yuzeyler[id].kirli = 1;

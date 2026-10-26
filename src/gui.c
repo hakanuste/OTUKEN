@@ -12,6 +12,7 @@
 #include "ulgen_theme.h"
 #include "tema.h"
 #include "timer.h"
+#include "vfs.h"
 
 /* --- Renkler --- */
 #define COL_DESKTOP        0x123B4A
@@ -65,11 +66,17 @@ static int  term_row = 0, term_col = 0;
 static uint32_t u8_kod;
 static int      u8_kalan, u8_bas;
 
-/* --- Dosya Yoneticisi durumu --- */
-#define MAX_FILES 16
-static fat16_dirent_t file_list[MAX_FILES];
+/* --- Dosya Yoneticisi durumu ---
+ * 1.4.9: VFS yoluyla listelenir (alt dizinler ve /fat32 dahil), pencere
+ * her acilista tazelenir, sigmayan liste sayfalanir. Eskiden kok dizinin
+ * ilk 16 girdisi ACILISTA bir kez okunuyor, pencere ilk ~10'unu
+ * gosteriyordu; sonradan yazilan dosyalar ve alt dizinler hic gorunmuyordu. */
+#define MAX_FILES 96
+static vfs_dirent_t file_list[MAX_FILES];
 static int file_count = 0;
 static int fat16_ok = 0;
+static char fm_yol[VFS_MAX_PATH] = "/";
+static int fm_bas = 0;                   /* ilk gosterilen girdi */
 
 /* --- Goruntuleyici durumu --- */
 #define VIEWER_COLS 50
@@ -120,10 +127,16 @@ static void viewer_clear(void) {
     }
 }
 
-static void viewer_load(const fat16_dirent_t *entry) {
+static void viewer_load(const char *yol, const char *ad) {
     static uint8_t filebuf[4096];
-    int n = fat16_read_file(entry, filebuf, sizeof(filebuf) - 1);
-    if (n < 0) n = 0;
+    int n = 0;
+    int fd = vfs_open(yol);
+    if (fd >= 0) {
+        int r;
+        while (n < (int)sizeof(filebuf) - 1 &&
+               (r = vfs_read(fd, filebuf + n, sizeof(filebuf) - 1 - (uint64_t)n)) > 0) n += r;
+        vfs_close(fd);
+    }
     filebuf[n] = 0;
 
     viewer_clear();
@@ -151,8 +164,33 @@ static void viewer_load(const fat16_dirent_t *entry) {
 
     str_copy(windows[WIN_VIEWER].title, "Görüntüleyici: ", sizeof(windows[WIN_VIEWER].title));
     int base = str_len(windows[WIN_VIEWER].title);
-    str_copy(windows[WIN_VIEWER].title + base, entry->name,
+    str_copy(windows[WIN_VIEWER].title + base, ad,
              (int)sizeof(windows[WIN_VIEWER].title) - base);
+}
+
+/* Dosya yoneticisi: gecerli dizini yeniden listeler */
+static void fm_yenile(void) {
+    int n = vfs_list_dir(fm_yol, file_list, MAX_FILES);
+    if (n < 0 && !(fm_yol[0] == '/' && fm_yol[1] == 0)) {      /* dizin gitti: koke don */
+        fm_yol[0] = '/'; fm_yol[1] = 0;
+        n = vfs_list_dir(fm_yol, file_list, MAX_FILES);
+    }
+    file_count = 0;
+    for (int i = 0; i < n; i++) {                 /* "." ve ".." girdileri gosterilmez */
+        const char *a = file_list[i].name;
+        if (a[0] == '.' && (a[1] == 0 || (a[1] == '.' && a[2] == 0))) continue;
+        if (i != file_count) file_list[file_count] = file_list[i];
+        file_count++;
+    }
+    fat16_ok = n >= 0;
+    if (fm_bas >= file_count) fm_bas = 0;
+}
+static int fm_kokte(void) { return fm_yol[0] == '/' && fm_yol[1] == 0; }
+/* yerlesim: satir 0 = yol; sonra (kok degilse) ".." ve girdiler; en alt
+ * satir sayfa dugmeleri. Cizim ve tiklama AYNI hesabi kullanir. */
+static int fm_sigan(const window_t *w) {
+    int s = (w->h - TITLEBAR_H - 12) / FB_SATIR_YUK - 3;   /* yol + bos + sayfa satiri */
+    return s < 1 ? 1 : s;
 }
 
 static void bring_to_front(int idx) {
@@ -202,19 +240,35 @@ static void draw_window(int idx) {
     } else if (idx == WIN_FILEMGR) {
         if (!fat16_ok) {
             fb_draw_string(cx, cy, "Disk bulunamadı", COL_TEXTFG, COL_WINBG);
-        } else if (file_count == 0) {
-            fb_draw_string(cx, cy, "Dosya yok", COL_TEXTFG, COL_WINBG);
         } else {
-            int sigan = (w->h - TITLEBAR_H - 12) / FB_SATIR_YUK - 2;   /* ipucu satiri icin yer */
-            int gosterilen = file_count < sigan ? file_count : sigan;
-            for (int i = 0; i < gosterilen; i++) {
-                fb_draw_string(cx, cy + i * FB_SATIR_YUK, file_list[i].name, COL_TEXTFG, COL_WINBG);
-                char sizebuf[12];
-                u32_to_dec_str(file_list[i].size, sizebuf);
-                fb_draw_string(cx + 15 * FB_YAZI_EN, cy + i * FB_SATIR_YUK, sizebuf, COL_TEXTFG, COL_WINBG);
+            fb_draw_string(cx, cy, fm_yol, COL_TEXTFG, COL_WINBG);
+            int sigan = fm_sigan(w), satir = 1;
+            if (!fm_kokte() && satir <= sigan)
+                fb_draw_string(cx, cy + (satir++) * FB_SATIR_YUK, "[..]  üst dizin", COL_TEXTFG, COL_WINBG);
+            if (file_count == 0)
+                fb_draw_string(cx, cy + satir * FB_SATIR_YUK, "(boş dizin)", COL_TEXTFG, COL_WINBG);
+            for (int i = fm_bas; i < file_count && satir <= sigan; i++, satir++) {
+                char ad[VFS_MAX_NAME + 4];
+                if (file_list[i].is_dir) { ad[0] = '['; str_copy(ad + 1, file_list[i].name, VFS_MAX_NAME); int u = str_len(ad); ad[u] = ']'; ad[u + 1] = 0; }
+                else str_copy(ad, file_list[i].name, sizeof ad);
+                fb_draw_string(cx, cy + satir * FB_SATIR_YUK, ad, COL_TEXTFG, COL_WINBG);
+                if (!file_list[i].is_dir) {
+                    char sizebuf[12];
+                    u32_to_dec_str((uint32_t)file_list[i].size, sizebuf);
+                    fb_draw_string(cx + 17 * FB_YAZI_EN, cy + satir * FB_SATIR_YUK, sizebuf, COL_TEXTFG, COL_WINBG);
+                }
             }
-            fb_draw_string(cx, cy + (gosterilen + 1) * FB_SATIR_YUK,
-                            "(bir satıra tıklayıp aç)", COL_TEXTFG, COL_WINBG);
+            /* sayfa satiri: sol yari "onceki", sag yari "sonraki" */
+            int alt = cy + (sigan + 2) * FB_SATIR_YUK;
+            char bilgi[48]; char t[12];
+            str_copy(bilgi, "", sizeof bilgi);
+            u32_to_dec_str((uint32_t)file_count, t);
+            str_copy(bilgi, t, sizeof bilgi); int u = str_len(bilgi);
+            str_copy(bilgi + u, " girdi · tıkla: aç", (int)sizeof bilgi - u);
+            fb_draw_string(cx, alt, fm_bas > 0 ? "◂ önceki" : "        ", COL_TEXTFG, COL_WINBG);
+            fb_draw_string(cx + 11 * FB_YAZI_EN, alt, bilgi, COL_TEXTFG, COL_WINBG);
+            int sonraki_var = fm_bas + (sigan - (fm_kokte() ? 0 : 1)) < file_count;
+            if (sonraki_var) fb_draw_string(cx + w->w - 12 - 12 * FB_YAZI_EN, alt, "sonraki ▸", COL_TEXTFG, COL_WINBG);
         }
     } else if (idx == WIN_VIEWER) {
         for (int r = 0; r < VIEWER_ROWS; r++)
@@ -263,6 +317,25 @@ int gui_pencere_z(int idx) {
     return (idx >= 0 && idx < MAX_WINDOWS) ? windows[idx].z : 0;
 }
 
+#define YUZEY_BTN_W 96
+/* Gorev cubugu etiketi: basligin " — " oncesi (ornegin "TULPAR"), en cok
+ * 10 harf; cok baytli harf ortadan bolunmez. */
+static void gorev_adi(char *o, int n, const char *baslik) {
+    int i = 0, harf = 0;
+    while (baslik[i] && i < n - 1 && harf < 10) {
+        if ((uint8_t)baslik[i] == 0xE2 && (uint8_t)baslik[i + 1] == 0x80) break;   /* — */
+        if (baslik[i] == ' ' && baslik[i + 1] == '-') break;
+        int u = 1;
+        uint8_t c = (uint8_t)baslik[i];
+        if (c >= 0xF0) u = 4; else if (c >= 0xE0) u = 3; else if (c >= 0xC0) u = 2;
+        if (i + u > n - 1) break;
+        for (int k = 0; k < u; k++) o[i + k] = baslik[i + k];
+        i += u; harf++;
+    }
+    while (i > 0 && o[i - 1] == ' ') i--;
+    o[i] = 0;
+}
+
 static void draw_taskbar(void) {
     int sw = fb_width();
     int sh = fb_height();
@@ -283,7 +356,23 @@ static void draw_taskbar(void) {
         fb_draw_string(bx + 6, sh - TASKBAR_H + 3 + 3, labels[i], COL_TASKFG, bg);
     }
 
+    /* 1.4.9: acik uygulama pencereleri (ULGEN yuzeyleri) de gorev
+     * cubugunda; tiklama one getirir ve klavyeyi ona verir. */
     const char *tag = "ÖTÜKEN · 64-bit";
+    int sinir = sw - 16 - fb_yazi_en(tag);
+    int bx = 8 + MAX_WINDOWS * (TASKBTN_W + 6);
+    int odak = ulgen_odak_yuzey();
+    for (int id = 0; id < ULGEN_MAX_YUZEY; id++) {
+        const ulgen_yuzey_t *y = ulgen_yuzey_al(id);
+        if (!y || !y->used || !y->gorunur) continue;
+        if (bx + YUZEY_BTN_W > sinir) break;
+        char ad[ULGEN_BASLIK_LEN];
+        gorev_adi(ad, sizeof ad, y->baslik);
+        uint32_t bg = (id == odak && klavye_odak() == KLAVYE_ODAK_PENCERE) ? COL_TASKBTN_ACTIVE : COL_TASKBTN;
+        fb_fill_rect(bx, sh - TASKBAR_H + 3, YUZEY_BTN_W, TASKBAR_H - 6, bg);
+        fb_draw_string(bx + 6, sh - TASKBAR_H + 3 + 3, ad, COL_TASKFG, bg);
+        bx += YUZEY_BTN_W + 6;
+    }
     fb_draw_string(sw - 8 - fb_yazi_en(tag), sh - TASKBAR_H + 6, tag, COL_TASKFG, COL_TASKBAR);
 }
 
@@ -332,18 +421,46 @@ static void redraw_all(void) {
 }
 
 static void handle_taskbar_click(int mx) {
+    {   /* uygulama pencereleri (draw_taskbar ile ayni yerlesim) */
+        int sw = fb_width();
+        int sinir = sw - 16 - fb_yazi_en("ÖTÜKEN · 64-bit");
+        int bx = 8 + MAX_WINDOWS * (TASKBTN_W + 6);
+        for (int id = 0; id < ULGEN_MAX_YUZEY; id++) {
+            const ulgen_yuzey_t *y = ulgen_yuzey_al(id);
+            if (!y || !y->used || !y->gorunur) continue;
+            if (bx + YUZEY_BTN_W > sinir) break;
+            if (mx >= bx && mx < bx + YUZEY_BTN_W) {
+                ulgen_one_getir(id);
+                klavye_odak_ata(KLAVYE_ODAK_PENCERE);
+                return;
+            }
+            bx += YUZEY_BTN_W + 6;
+        }
+    }
     for (int i = 0; i < MAX_WINDOWS; i++) {
         int bx = 8 + i * (TASKBTN_W + 6);
         if (mx >= bx && mx < bx + TASKBTN_W) {
             if (windows[i].visible && zorder[MAX_WINDOWS - 1] == i) {
                 windows[i].visible = 0;
             } else {
+                if (i == WIN_FILEMGR) fm_yenile();
                 windows[i].visible = 1;
                 bring_to_front(i);
             }
             return;
         }
     }
+}
+
+static void varsayilan_yerlesim(void) {
+    windows[WIN_TERMINAL].x = 126; windows[WIN_TERMINAL].y = ULGEN_UST_BAR + 8;
+    windows[WIN_TERMINAL].w = 318; windows[WIN_TERMINAL].h = 352;
+    windows[WIN_FILEMGR].x = 160; windows[WIN_FILEMGR].y = 110;
+    windows[WIN_FILEMGR].w = 460; windows[WIN_FILEMGR].h = 360;
+    windows[WIN_VIEWER].x = 260; windows[WIN_VIEWER].y = 170;
+    windows[WIN_VIEWER].w = 460; windows[WIN_VIEWER].h = 260;
+    windows[WIN_LOG].x = 126; windows[WIN_LOG].y = 410;
+    windows[WIN_LOG].w = 886; windows[WIN_LOG].h = 300;
 }
 
 void gui_init(void) {
@@ -354,23 +471,16 @@ void gui_init(void) {
     /* 1.4.8 duzen: terminal solda, UMAY penceresi (ULGEN) sagda,
      * gunluk altta; dosya yoneticisi ve goruntuleyici gorev cubugundan
      * acilir. Pencereler birbirinin ustune binmez. */
-    windows[WIN_TERMINAL].x = 126; windows[WIN_TERMINAL].y = ULGEN_UST_BAR + 8;
-    windows[WIN_TERMINAL].w = 318; windows[WIN_TERMINAL].h = 352;
+    varsayilan_yerlesim();
     str_copy(windows[WIN_TERMINAL].title, "Terminal", sizeof(windows[WIN_TERMINAL].title));
     windows[WIN_TERMINAL].visible = 1;
 
-    windows[WIN_FILEMGR].x = 160; windows[WIN_FILEMGR].y = 110;
-    windows[WIN_FILEMGR].w = 420; windows[WIN_FILEMGR].h = 240;
     str_copy(windows[WIN_FILEMGR].title, "Dosya Yöneticisi", sizeof(windows[WIN_FILEMGR].title));
     windows[WIN_FILEMGR].visible = 0;     /* gorev cubugundan acilir */
 
-    windows[WIN_VIEWER].x = 260; windows[WIN_VIEWER].y = 170;
-    windows[WIN_VIEWER].w = 460; windows[WIN_VIEWER].h = 260;
     str_copy(windows[WIN_VIEWER].title, "Görüntüleyici (boş)", sizeof(windows[WIN_VIEWER].title));
     windows[WIN_VIEWER].visible = 0;      /* dosya acilinca gorunur */
 
-    windows[WIN_LOG].x = 126; windows[WIN_LOG].y = 410;
-    windows[WIN_LOG].w = 886; windows[WIN_LOG].h = 300;
     str_copy(windows[WIN_LOG].title, "Çekirdek günlüğü (canlı)",
              sizeof(windows[WIN_LOG].title));
     windows[WIN_LOG].visible = 0;         /* gorev cubugundan acilir; rihtim gorunsun */
@@ -388,11 +498,8 @@ void gui_init(void) {
     ekran_masaustu_hazirla();          /* duvar kagidi + simgeler + rihtim */
 
     fat16_ok = (fat16_mount() == 0);
-    if (fat16_ok) {
-        file_count = fat16_list_root(file_list, MAX_FILES);
-    } else {
-        file_count = 0;
-    }
+    if (fat16_ok) fm_yenile();
+    else file_count = 0;
 
     redraw_all();
 }
@@ -475,8 +582,54 @@ static void gui_type_char__ic(char c) {
 
 /* --- 1.4.8: masaustu tiklamalari (rihtim ve simgeler) --- */
 static void pencere_ac(int idx) {
+    if (idx == WIN_FILEMGR) fm_yenile();          /* her acilista guncel liste */
     windows[idx].visible = 1;
     bring_to_front(idx);
+}
+
+/* Yardim: Goruntuleyicide yerlesik kisa kilavuz */
+static void yardim_goster(void) {
+    static const char *SATIR[VIEWER_ROWS] = {
+        "ÖTÜKEN — kısa kılavuz",
+        "Rıhtım: tamgaya tıkla, açılır.",
+        "Uygulamalar: 15 tamganın hepsi.",
+        "Pencereye tıkla: klavye ona geçer.",
+        "Tab: klavye kabuk <-> pencere.",
+        "Esc: menüyü ya da uygulamayı kapatır.",
+        "Görev çubuğu: açık pencereler.",
+        "Dosya: Dosya Yöneticisi açılır.",
+        "Düzen: pencereleri yerlerine dizer.",
+        "Kabuk: 'yardim' yaz. Klavye Türkçe-Q.",
+        "Günlük: görev çubuğunda 'Günlük'."
+    };
+    viewer_clear();
+    for (int r = 0; r < VIEWER_ROWS; r++) {
+        int k = 0;
+        while (SATIR[r][k] && k < VIEWER_COLS) { viewer_lines[r][k] = SATIR[r][k]; k++; }
+    }
+    str_copy(windows[WIN_VIEWER].title, "Yardım", sizeof(windows[WIN_VIEWER].title));
+    windows[WIN_VIEWER].visible = 1;
+    bring_to_front(WIN_VIEWER);
+}
+
+static void varsayilan_yerlesim(void);
+/* Duzen: GUI pencereleri ilk yerlerine, uygulama pencereleri basamakli */
+static void yerlesimi_duzenle(void) {
+    varsayilan_yerlesim();
+    int n = 0;
+    for (int id = 0; id < ULGEN_MAX_YUZEY; id++) {
+        const ulgen_yuzey_t *y = ulgen_yuzey_al(id);
+        if (!y || !y->used || !y->gorunur) continue;
+        int x = 160 + n * 28, yy = ULGEN_UST_BAR + 40 + n * 28;
+        int azx = fb_width() - y->w - 8, azy = fb_height() - TASKBAR_H - y->h - 8;
+        if (x > azx) x = azx;                          /* ekranda kalsin */
+        if (yy > azy) yy = azy;
+        if (x < 8) x = 8;
+        if (yy < ULGEN_UST_BAR + 24) yy = ULGEN_UST_BAR + 24;   /* baslik cubugu ust cubugun altinda */
+        ulgen_tasi(id, x, yy);
+        n++;
+    }
+    ulgen_tam_yenile();
 }
 
 static int yuzey_bul(const char *onek) {
@@ -561,7 +714,10 @@ static void gui_fare_isle__ic(int mx, int my, int buttons) {
              * dizge izleyicisini, "Gorunum" tema seciciyi acar; diger
              * menuler henuz eylem tanimlamaz. */
             int m = ulgen_theme_menu_hit(mx, my);
-            if (m == ULGEN_MENU_TAMGA || m == ULGEN_MENU_SISTEM) uygulama_ac(UYG_SISTEM);
+            if (m == ULGEN_MENU_DOSYA) pencere_ac(WIN_FILEMGR);
+            else if (m == ULGEN_MENU_DUZEN) yerlesimi_duzenle();
+            else if (m == ULGEN_MENU_YARDIM) yardim_goster();
+            else if (m == ULGEN_MENU_TAMGA || m == ULGEN_MENU_SISTEM) uygulama_ac(UYG_SISTEM);
             else if (m == ULGEN_MENU_GORUNUM) uygulama_ac(UYG_GORUNUM);
             else if (m == ULGEN_MENU_UYGULAMALAR) {
                 int ux, uy, uw, uh;
@@ -614,10 +770,38 @@ static void gui_fare_isle__ic(int mx, int my, int buttons) {
                     } else if (idx == WIN_FILEMGR && fat16_ok) {
                         int cy = w->y + TITLEBAR_H + 6;
                         int row = (my - cy) / FB_SATIR_YUK;
-                        if (row >= 0 && row < file_count) {
-                            viewer_load(&file_list[row]);
-                            windows[WIN_VIEWER].visible = 1;
-                            bring_to_front(WIN_VIEWER);
+                        int sigan = fm_sigan(w);
+                        int gorunen = sigan - (fm_kokte() ? 0 : 1);   /* girdi satiri sayisi */
+                        if (row == sigan + 2) {                        /* sayfa satiri */
+                            if (mx < w->x + w->w / 2) { if (fm_bas > 0) fm_bas -= gorunen; if (fm_bas < 0) fm_bas = 0; }
+                            else if (fm_bas + gorunen < file_count) fm_bas += gorunen;
+                        } else if (row >= 1 && row <= sigan) {
+                            int r = row - 1;
+                            if (!fm_kokte()) {
+                                if (r == 0) {                          /* ".." */
+                                    int u = str_len(fm_yol);
+                                    while (u > 1 && fm_yol[u - 1] != '/') u--;
+                                    fm_yol[u > 1 ? u - 1 : 1] = 0;
+                                    fm_bas = 0; fm_yenile();
+                                    r = -1;
+                                } else r--;
+                            }
+                            int gi = fm_bas + r;
+                            if (r >= 0 && gi < file_count) {
+                                char yol[VFS_MAX_PATH];
+                                str_copy(yol, fm_yol, sizeof yol);
+                                int u = str_len(yol);
+                                if (!(u == 1 && yol[0] == '/') && u < (int)sizeof yol - 1) { yol[u++] = '/'; yol[u] = 0; }
+                                str_copy(yol + u, file_list[gi].name, (int)sizeof yol - u);
+                                if (file_list[gi].is_dir) {
+                                    str_copy(fm_yol, yol, sizeof fm_yol);
+                                    fm_bas = 0; fm_yenile();
+                                } else {
+                                    viewer_load(yol, file_list[gi].name);
+                                    windows[WIN_VIEWER].visible = 1;
+                                    bring_to_front(WIN_VIEWER);
+                                }
+                            }
                         }
                     }
                     break;
@@ -721,6 +905,17 @@ void gui_terminal_temizle(void) {
 /* Ana dongunun ekran adimi. Cekirdek ana dongusu ve ekran sinamasi
  * AYNI islevi cagirir (sinama baska bir yol izlemez). */
 void masaustu_tur(int periyodik) {
+    if (klavye_menu_kapat_istegi_al()) {               /* Esc: acik menu kapanir */
+        ozkilit_al(&gorsel_kilit);
+        if (ulgen_theme_uyg_menu_acik()) {
+            int ux, uy, uw, uh;
+            ulgen_theme_uyg_menu_kutu(&ux, &uy, &uw, &uh);
+            ulgen_theme_uyg_menu_ata(0);
+            ekran_hasar(ux, uy, uw, uh);
+            redraw_all();
+        }
+        ozkilit_birak(&gorsel_kilit);
+    }
     {   /* ust cubuktaki calisma suresi saniyede bir */
         static uint64_t son_sn = (uint64_t)-1;
         uint64_t hz = timer_hz() ? timer_hz() : 100;   /* 1.4.8: 50 Hz idi, /100 yarim sayiyordu */
@@ -729,6 +924,7 @@ void masaustu_tur(int periyodik) {
             son_sn = sn;
             ozkilit_al(&gorsel_kilit);
             ekran_hasar(0, 0, fb_width(), ULGEN_UST_BAR);
+            ekran_hasar(0, fb_height() - TASKBAR_H, fb_width(), TASKBAR_H);   /* odak rengi (Tab) */
             ekran_isle();
             ozkilit_birak(&gorsel_kilit);
         }

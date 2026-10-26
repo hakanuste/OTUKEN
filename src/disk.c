@@ -3,6 +3,8 @@
 #include "io.h"
 #include "serial.h"
 #include "gecikme.h"
+#include "ahci.h"
+#include "nvme.h"
 
 /* Birincil ATA kanali, master surucu, PIO mod, LBA28 adresleme.
  * Bu, herhangi bir gercek IDE/SATA (AHCI uyumluluk modu) veya QEMU'nun
@@ -179,9 +181,63 @@ int disk_init(void) {
     return 0;
 }
 
+/* 1.4.9: KOK DISK ARKA UCU. ATA (IDE) birincil master yoksa ilk SATA disk
+ * (AHCI) kok disk olur: VirtualBox'in varsayilan SATA denetleyicisi, q35
+ * ve gercek bilgisayarlar. Eskiden disk yalniz ATA/IDE yoluyla okunuyordu;
+ * SATA'ya takili diskte UMAY "program diskte bulunamadi" diyordu. */
+static int kok_ahci = -2;                  /* -2 henuz secilmedi, -1 yok, >=0 port */
+static int kok_nvme = 0;                   /* 1: kok disk NVMe ad alani 1 */
+static int kok_ahci_portu(void) {
+    if (surucu[0].var) return -1;          /* ATA varsa o */
+    if (kok_ahci == -2 || kok_ahci == -1) {
+        int p = ahci_disk_portu();         /* ahci_init oncesi -1: sonra yeniden denenir */
+        if (p >= 0) {
+            kok_ahci = p;
+            surucu[0].sektor_sayisi = ahci_sektor_sayisi(p);
+            surucu[0].lba48 = 1;
+            serial_write("disk: kok disk AHCI portu ");
+            serial_write_hex((uint32_t)p);
+            serial_write(" (ATA birincil master yok)\n");
+        } else kok_ahci = -1;
+    }
+    return kok_ahci;
+}
+int disk_kok_ahci_mi(void) { return kok_ahci_portu() >= 0; }
+/* ATA ve SATA disk yoksa NVMe (ad alani 1) kok disk olur */
+static int kok_nvme_mi(void) {
+    if (surucu[0].var || kok_ahci_portu() >= 0) return 0;
+    if (!kok_nvme && nvme_hazir()) {
+        kok_nvme = 1;
+        surucu[0].sektor_sayisi = nvme_sektor_sayisi();
+        surucu[0].lba48 = 1;
+        serial_write("disk: kok disk NVMe ad alani 1 (ATA ve SATA disk yok)\n");
+    }
+    return kok_nvme;
+}
+int disk_kok_nvme_mi(void) { return kok_nvme_mi(); }
+
 static int disk_read_sectors__ic(uint64_t lba, uint8_t count, void *buf) {
     uint16_t *out = (uint16_t *)buf;
     if (count == 0) return -1;
+    {
+        int ap = kok_ahci_portu();
+        if (ap >= 0) {
+            for (uint32_t i = 0; i < count; ) {
+                uint32_t n = count - i < 8 ? count - i : 8;
+                if (ahci_oku(ap, lba + i, n, (uint8_t *)buf + (uint64_t)i * 512) != 0) return -1;
+                i += n;
+            }
+            return 0;
+        }
+        if (kok_nvme_mi()) {
+            for (uint32_t i = 0; i < count; ) {
+                uint32_t n = count - i < 8 ? count - i : 8;
+                if (nvme_oku(lba + i, n, (uint8_t *)buf + (uint64_t)i * 512) != 0) return -1;
+                i += n;
+            }
+            return 0;
+        }
+    }
 
     /* LBA48 destekleniyorsa ONU kullan: 128 GB tavani kalkar.
      * Desteklenmiyorsa (cok eski surucu) LBA28'e dus ve 128 GB
@@ -270,6 +326,25 @@ static int disk2_read_sectors__ic(uint64_t lba, uint8_t count, void *buf) {
 static int disk_write_sectors__ic(uint64_t lba, uint8_t count, const void *buf) {
     const uint16_t *in = (const uint16_t *)buf;
     if (count == 0) return -1;
+    {
+        int ap = kok_ahci_portu();
+        if (ap >= 0) {
+            for (uint32_t i = 0; i < count; ) {
+                uint32_t n = count - i < 8 ? count - i : 8;
+                if (ahci_yaz(ap, lba + i, n, (const uint8_t *)buf + (uint64_t)i * 512) != 0) return -1;
+                i += n;
+            }
+            return 0;
+        }
+        if (kok_nvme_mi()) {
+            for (uint32_t i = 0; i < count; ) {
+                uint32_t n = count - i < 8 ? count - i : 8;
+                if (nvme_yaz(lba + i, n, (const uint8_t *)buf + (uint64_t)i * 512) != 0) return -1;
+                i += n;
+            }
+            return 0;
+        }
+    }
 
     if (surucu[0].lba48) {
         lba48_yaz(0xE0, lba, count);

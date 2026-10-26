@@ -31,4 +31,8 @@ uint64_t disk_sektor_sayisi(int disk_id);
 /* Surucu LBA48 destekliyor mu (IDENTIFY'dan). */
 int disk_lba48_var(int disk_id);
 
+/* 1.4.9: kok disk AHCI (SATA) uzerinden mi (ATA birincil master yoksa) */
+int disk_kok_ahci_mi(void);
+int disk_kok_nvme_mi(void);   /* ATA ve SATA disk yoksa NVMe */
+
 #endif

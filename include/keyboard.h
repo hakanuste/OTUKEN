@@ -9,6 +9,9 @@ char keyboard_pop_char(void);
 
 /* Harici bir klavye kaynagindan (USB) karakter enjekte eder. */
 void keyboard_push_char(char c);
+/* USB HID: set-1 tarama kodu enjekte eder (0xE0 onekli, 0x80 birakma). PS/2
+ * ile ayni cevirici (TR-Q, AltGr, Shift, Ctrl) kullanilir. */
+void keyboard_tarama_kodu(uint8_t sc);
 
 /* KLAVYE ODAGI (1.4.4): kuyrugun iki tuketicisi var - kabuk (SYS_READKEY)
  * ve ULGEN penceresi (SYS_PEN_OLAY). Eskiden ikisi de ayni kuyruktan
@@ -18,6 +21,8 @@ void keyboard_push_char(char c);
  * (Tab kuyruga girmez). Varsayilan: kabuk. */
 #define KLAVYE_ODAK_KABUK   0
 #define KLAVYE_ODAK_PENCERE 1
+/* Esc acik menuyu kapatmak istedi mi (bir kez dogru doner) */
+int klavye_menu_kapat_istegi_al(void);
 int  klavye_odak(void);
 void klavye_odak_ata(int odak);
 /* Cagiran odak sahibi degilse 0 doner ve kuyruga DOKUNMAZ. */
