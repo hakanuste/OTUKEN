@@ -23,3 +23,9 @@ for K in tablet fare; do
   d "[$K] USB fare/tablet tiklamasi rihtimdaki ULGEN'i acti (GORUNUM.ELF)" "grep -aq 'GORUNUM.ELF Ring3' '$L'"
   d "[$K] PS/2 yok: i8042 kapali iken panik yok" "! grep -aq 'PANIGI\|PAGE FAULT' '$L'"
 done
+# sicak takma: acilista USB yok; usb-kbd takilir, cikarilir, yeniden takilir
+mkdir -p "$D/takma"; cp "$KOK/diskfiles.img" "$D/takma/d.img"
+timeout 300 python3 "$KOK/tests/xhci/takma.py" "$ISO" "$D/takma/d.img" "$D/takma" >/dev/null
+L="$D/takma/seri.log"
+d "[takma] acildiktan sonra takilan klavye numaralandirildi, tus kabuga ulasti" "grep -aq 'porta aygit takildi' '$L' && grep -aq 'Bilinmeyen komut: tak ' '$L'"
+d "[takma] cikarilan aygit kapatildi, yeniden takilan yine calisti" "grep -aq 'aygit cikarildi' '$L' && LC_ALL=C grep -aq \$'Bilinmeyen komut: \\xfdk\\xfd ' '$L'"
